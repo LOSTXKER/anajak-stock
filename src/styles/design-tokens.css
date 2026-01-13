@@ -1,0 +1,242 @@
+/**
+ * Design Tokens - Modern Minimal Theme (Blue)
+ * 
+ * A clean, modern design system with blue accent colors
+ * Supports both Light and Dark modes
+ * 
+ * Fonts are loaded via next/font in layout.tsx for optimal performance
+ */
+
+:root {
+  /* ==================== Colors - Light Mode ==================== */
+  
+  /* Background colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-active: #e2e8f0;
+  --bg-input: #ffffff;
+  
+  /* Text colors */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-inverse: #ffffff;
+  --text-link: #2563eb;
+  
+  /* Border colors */
+  --border-default: #e2e8f0;
+  --border-hover: #cbd5e1;
+  --border-focus: #3b82f6;
+  --border-light: #f1f5f9;
+  --border-input: #e2e8f0;
+  
+  /* Blue accent palette */
+  --accent-50: #eff6ff;
+  --accent-100: #dbeafe;
+  --accent-200: #bfdbfe;
+  --accent-300: #93c5fd;
+  --accent-400: #60a5fa;
+  --accent-500: #3b82f6;
+  --accent-600: #2563eb;
+  --accent-700: #1d4ed8;
+  --accent-800: #1e40af;
+  --accent-900: #1e3a8a;
+  
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-primary-active: #1d4ed8;
+  --accent-light: #eff6ff;
+  --accent-dark: #1e40af;
+  
+  /* Status colors */
+  --status-success: #10b981;
+  --status-success-light: #d1fae5;
+  --status-success-dark: #059669;
+  --status-warning: #f59e0b;
+  --status-warning-light: #fef3c7;
+  --status-warning-dark: #d97706;
+  --status-error: #ef4444;
+  --status-error-light: #fee2e2;
+  --status-error-dark: #dc2626;
+  --status-info: #3b82f6;
+  --status-info-light: #dbeafe;
+  --status-info-dark: #2563eb;
+  
+  /* Document status colors */
+  --status-draft: #94a3b8;
+  --status-pending: #f59e0b;
+  --status-approved: #10b981;
+  --status-rejected: #ef4444;
+  --status-cancelled: #6b7280;
+  
+  /* ==================== Typography ==================== */
+  
+  --font-sans: 'Inter', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  
+  --text-xs: 0.75rem;      /* 12px */
+  --text-sm: 0.875rem;     /* 14px */
+  --text-base: 1rem;       /* 16px */
+  --text-lg: 1.125rem;     /* 18px */
+  --text-xl: 1.25rem;      /* 20px */
+  --text-2xl: 1.5rem;      /* 24px */
+  --text-3xl: 1.875rem;    /* 30px */
+  --text-4xl: 2.25rem;     /* 36px */
+  
+  --font-light: 300;
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+  
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  
+  --tracking-tight: -0.025em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.025em;
+  
+  /* ==================== Spacing ==================== */
+  
+  --space-0: 0;
+  --space-0-5: 0.125rem;   /* 2px */
+  --space-1: 0.25rem;      /* 4px */
+  --space-1-5: 0.375rem;   /* 6px */
+  --space-2: 0.5rem;       /* 8px */
+  --space-2-5: 0.625rem;   /* 10px */
+  --space-3: 0.75rem;      /* 12px */
+  --space-3-5: 0.875rem;   /* 14px */
+  --space-4: 1rem;         /* 16px */
+  --space-5: 1.25rem;      /* 20px */
+  --space-6: 1.5rem;       /* 24px */
+  --space-7: 1.75rem;      /* 28px */
+  --space-8: 2rem;         /* 32px */
+  --space-10: 2.5rem;      /* 40px */
+  --space-12: 3rem;        /* 48px */
+  --space-14: 3.5rem;      /* 56px */
+  --space-16: 4rem;        /* 64px */
+  --space-20: 5rem;        /* 80px */
+  
+  /* ==================== Border Radius ==================== */
+  
+  --radius-none: 0;
+  --radius-sm: 0.25rem;    /* 4px */
+  --radius-default: 0.375rem; /* 6px */
+  --radius-md: 0.5rem;     /* 8px */
+  --radius-lg: 0.75rem;    /* 12px */
+  --radius-xl: 1rem;       /* 16px */
+  --radius-2xl: 1.5rem;    /* 24px */
+  --radius-full: 9999px;
+  
+  /* ==================== Shadows ==================== */
+  
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+  
+  /* Card shadows */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+  --shadow-card-hover: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  
+  /* ==================== Transitions ==================== */
+  
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slower: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* ==================== Z-Index ==================== */
+  
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+  --z-toast: 1080;
+  
+  /* ==================== Layout ==================== */
+  
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 72px;
+  --header-height: 64px;
+  --content-max-width: 1400px;
+}
+
+/* ==================== Dark Mode - Cursor Style ==================== */
+
+.dark {
+  /* Background colors - Deep black like Cursor */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
+  --bg-elevated: #141414;
+  --bg-hover: #1f1f1f;
+  --bg-active: #2a2a2a;
+  --bg-input: #0f0f0f;
+  
+  /* Text colors - Brighter for better readability */
+  --text-primary: #f5f5f5;
+  --text-secondary: #b5b5b5;
+  --text-muted: #737373;
+  --text-inverse: #0a0a0a;
+  --text-link: #60a5fa;
+  
+  /* Border colors - Very subtle */
+  --border-default: #262626;
+  --border-hover: #3a3a3a;
+  --border-focus: #525252;
+  --border-light: #1a1a1a;
+  --border-input: #333333;
+  
+  /* Blue accent palette */
+  --accent-primary: #60a5fa;
+  --accent-primary-hover: #3b82f6;
+  --accent-primary-active: #2563eb;
+  --accent-light: rgba(96, 165, 250, 0.1);
+  --accent-dark: #93c5fd;
+  
+  /* Status colors */
+  --status-success: #22c55e;
+  --status-success-light: rgba(34, 197, 94, 0.1);
+  --status-success-dark: #16a34a;
+  --status-warning: #eab308;
+  --status-warning-light: rgba(234, 179, 8, 0.1);
+  --status-warning-dark: #ca8a04;
+  --status-error: #ef4444;
+  --status-error-light: rgba(239, 68, 68, 0.1);
+  --status-error-dark: #dc2626;
+  --status-info: #60a5fa;
+  --status-info-light: rgba(96, 165, 250, 0.1);
+  --status-info-dark: #3b82f6;
+  
+  /* Document status colors */
+  --status-draft: #525252;
+  --status-pending: #eab308;
+  --status-approved: #22c55e;
+  --status-rejected: #ef4444;
+  --status-cancelled: #525252;
+  
+  /* Shadows - Subtle for dark mode */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.6), 0 8px 10px -6px rgb(0 0 0 / 0.6);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.7);
+  
+  /* Card shadows */
+  --shadow-card: none;
+  --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 0.4);
+}

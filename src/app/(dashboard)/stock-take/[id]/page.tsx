@@ -1,0 +1,452 @@
+'use client'
+
+import { useState, useEffect, use } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  ClipboardCheck,
+  ArrowLeft,
+  Play,
+  CheckCircle,
+  XCircle,
+  Save,
+  AlertTriangle,
+  Loader2,
+  Clock,
+  Warehouse,
+  Package,
+  TrendingUp,
+  TrendingDown,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  getStockTake,
+  startStockTake,
+  updateStockTakeLines,
+  completeStockTake,
+  approveStockTake,
+  cancelStockTake,
+} from '@/actions/stock-take'
+import { StatCard } from '@/components/common'
+
+const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
+  DRAFT: { 
+    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
+    icon: <ClipboardCheck className="w-3.5 h-3.5" />,
+    label: 'แบบร่าง'
+  },
+  IN_PROGRESS: { 
+    color: 'bg-[var(--status-info-light)] text-[var(--status-info)]',
+    icon: <Play className="w-3.5 h-3.5" />,
+    label: 'กำลังนับ'
+  },
+  COMPLETED: { 
+    color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]',
+    icon: <Clock className="w-3.5 h-3.5" />,
+    label: 'รอนุมัติ'
+  },
+  APPROVED: { 
+    color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
+    icon: <CheckCircle className="w-3.5 h-3.5" />,
+    label: 'อนุมัติแล้ว'
+  },
+  CANCELLED: { 
+    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
+    icon: <XCircle className="w-3.5 h-3.5" />,
+    label: 'ยกเลิก'
+  },
+}
+
+interface StockTakeData {
+  id: string
+  code: string
+  status: string
+  note: string | null
+  createdAt: Date
+  completedAt: Date | null
+  approvedAt: Date | null
+  warehouse: { id: string; name: string; code: string }
+  countedBy: { id: string; name: string } | null
+  approvedBy: { id: string; name: string } | null
+  lines: Array<{
+    id: string
+    productId: string
+    variantId: string | null
+    locationId: string
+    systemQty: number
+    countedQty: number | null
+    variance: number | null
+    note: string | null
+    product: { id: string; sku: string; name: string; category: { name: string } | null }
+    variant: { id: string; sku: string; name: string | null } | null
+    location: { id: string; code: string; name: string }
+  }>
+}
+
+interface LineEdit {
+  countedQty: number | null
+  note: string
+}
+
+export default function StockTakeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
+  const router = useRouter()
+  const [stockTake, setStockTake] = useState<StockTakeData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [lineEdits, setLineEdits] = useState<Record<string, LineEdit>>({})
+
+  const loadData = async () => {
+    const result = await getStockTake(id)
+    if (result.success) {
+      const data = result.data as unknown as StockTakeData
+      setStockTake({
+        ...data,
+        lines: data.lines.map(l => ({
+          ...l,
+          systemQty: Number(l.systemQty),
+          countedQty: l.countedQty !== null ? Number(l.countedQty) : null,
+          variance: l.variance !== null ? Number(l.variance) : null,
+        })),
+      })
+      // Initialize line edits
+      const edits: Record<string, LineEdit> = {}
+      for (const line of data.lines) {
+        edits[line.id] = {
+          countedQty: line.countedQty !== null ? Number(line.countedQty) : null,
+          note: line.note || '',
+        }
+      }
+      setLineEdits(edits)
+    } else {
+      toast.error(result.error)
+    }
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [id])
+
+  const handleStart = async () => {
+    const result = await startStockTake(id)
+    if (result.success) {
+      toast.success('เริ่มนับสต๊อคแล้ว')
+      loadData()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    const lines = Object.entries(lineEdits)
+      .filter(([, edit]) => edit.countedQty !== null)
+      .map(([lineId, edit]) => ({
+        lineId,
+        countedQty: edit.countedQty!,
+        note: edit.note || undefined,
+      }))
+
+    const result = await updateStockTakeLines(id, lines)
+    if (result.success) {
+      toast.success('บันทึกสำเร็จ')
+      loadData()
+    } else {
+      toast.error(result.error)
+    }
+    setIsSaving(false)
+  }
+
+  const handleComplete = async () => {
+    const result = await completeStockTake(id)
+    if (result.success) {
+      toast.success('นับเสร็จสมบูรณ์')
+      loadData()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  const handleApprove = async () => {
+    const result = await approveStockTake(id)
+    if (result.success) {
+      toast.success('อนุมัติและปรับยอดสำเร็จ')
+      loadData()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  const handleCancel = async () => {
+    const result = await cancelStockTake(id)
+    if (result.success) {
+      toast.success('ยกเลิกใบตรวจนับแล้ว')
+      router.push('/stock-take')
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  const updateLineEdit = (lineId: string, field: keyof LineEdit, value: number | string | null) => {
+    setLineEdits(prev => ({
+      ...prev,
+      [lineId]: {
+        ...prev[lineId],
+        [field]: value,
+      },
+    }))
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent-primary)]" />
+      </div>
+    )
+  }
+
+  if (!stockTake) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center text-[var(--status-error)]">
+          ไม่พบใบตรวจนับ
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const totalLines = stockTake.lines.length
+  const countedLines = stockTake.lines.filter(l => l.countedQty !== null).length
+  const linesWithVariance = stockTake.lines.filter(l => l.variance !== null && l.variance !== 0)
+  const status = statusConfig[stockTake.status] || statusConfig.DRAFT
+
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/stock-take">
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+          </Button>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">ใบตรวจนับ {stockTake.code}</h1>
+              <Badge className={status.color}>
+                {status.icon}
+                <span className="ml-1">{status.label}</span>
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2 text-[var(--text-muted)] mt-1">
+              <Warehouse className="w-4 h-4" />
+              {stockTake.warehouse.name} ({stockTake.warehouse.code})
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          title="รายการทั้งหมด"
+          value={totalLines}
+          icon={Package}
+          variant="info"
+        />
+        <StatCard
+          title="นับแล้ว"
+          value={countedLines}
+          icon={CheckCircle}
+          variant="success"
+        />
+        <StatCard
+          title="ยังไม่ได้นับ"
+          value={totalLines - countedLines}
+          icon={Clock}
+          variant="warning"
+        />
+        <StatCard
+          title="มีผลต่าง"
+          value={linesWithVariance.length}
+          icon={AlertTriangle}
+          variant={linesWithVariance.length > 0 ? 'error' : 'default'}
+        />
+      </div>
+
+      {/* Actions */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-wrap gap-3">
+            {stockTake.status === 'DRAFT' && (
+              <>
+                <Button onClick={handleStart}>
+                  <Play className="w-4 h-4 mr-2" />
+                  เริ่มนับ
+                </Button>
+                <Button onClick={handleCancel} variant="outline" className="text-[var(--status-error)] border-[var(--status-error)]/50 hover:bg-[var(--status-error-light)]">
+                  <XCircle className="w-4 h-4 mr-2" />
+                  ยกเลิก
+                </Button>
+              </>
+            )}
+            {stockTake.status === 'IN_PROGRESS' && (
+              <>
+                <Button onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  บันทึก
+                </Button>
+                <Button onClick={handleComplete} variant="secondary">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  นับเสร็จ
+                </Button>
+                <Button onClick={handleCancel} variant="outline" className="text-[var(--status-error)] border-[var(--status-error)]/50 hover:bg-[var(--status-error-light)]">
+                  <XCircle className="w-4 h-4 mr-2" />
+                  ยกเลิก
+                </Button>
+              </>
+            )}
+            {stockTake.status === 'COMPLETED' && (
+              <>
+                <Button onClick={handleApprove}>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  อนุมัติและปรับยอด
+                </Button>
+                <Button onClick={handleCancel} variant="outline" className="text-[var(--status-error)] border-[var(--status-error)]/50 hover:bg-[var(--status-error-light)]">
+                  <XCircle className="w-4 h-4 mr-2" />
+                  ยกเลิก
+                </Button>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Progress Bar */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-[var(--text-muted)]">ความคืบหน้าการนับ</span>
+            <span className="font-medium">{Math.round((countedLines / totalLines) * 100)}%</span>
+          </div>
+          <div className="w-full bg-[var(--bg-tertiary)] rounded-full h-3">
+            <div
+              className="bg-[var(--accent-primary)] h-3 rounded-full transition-all"
+              style={{ width: `${(countedLines / totalLines) * 100}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-2 text-sm text-[var(--text-muted)]">
+            <span>{countedLines} นับแล้ว</span>
+            <span>{totalLines - countedLines} เหลือ</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Lines Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Package className="w-4 h-4 text-[var(--accent-primary)]" />
+            รายการสินค้า
+            <Badge variant="secondary" className="bg-[var(--accent-light)] text-[var(--accent-primary)]">
+              {totalLines} รายการ
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="max-h-[600px] overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>ชื่อสินค้า</TableHead>
+                  <TableHead>ตำแหน่ง</TableHead>
+                  <TableHead className="text-right">ยอดในระบบ</TableHead>
+                  <TableHead className="text-right">นับได้</TableHead>
+                  <TableHead className="text-right">ผลต่าง</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stockTake.lines.map((line) => {
+                  const edit = lineEdits[line.id] || { countedQty: null, note: '' }
+                  const variance = edit.countedQty !== null 
+                    ? edit.countedQty - line.systemQty 
+                    : line.variance
+
+                  return (
+                    <TableRow key={line.id}>
+                      <TableCell className="font-mono text-sm">
+                        <Link href={`/products/${line.productId}`} className="text-[var(--accent-primary)] hover:underline">
+                          {line.variant?.sku || line.product.sku}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {line.product.name}
+                        {line.variant?.name && (
+                          <span className="text-[var(--text-muted)] ml-2">({line.variant.name})</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-[var(--text-muted)] font-mono text-sm">{line.location.code}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {line.systemQty.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {stockTake.status === 'IN_PROGRESS' ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            value={edit.countedQty ?? ''}
+                            onChange={(e) => updateLineEdit(
+                              line.id,
+                              'countedQty',
+                              e.target.value ? Number(e.target.value) : null
+                            )}
+                            className="w-24 text-right"
+                          />
+                        ) : (
+                          <span className="font-mono font-medium">
+                            {line.countedQty?.toLocaleString() ?? '-'}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {variance !== null && (
+                          <span className={`font-mono font-semibold flex items-center justify-end gap-1 ${
+                            variance > 0 ? 'text-[var(--status-success)]' :
+                            variance < 0 ? 'text-[var(--status-error)]' : 'text-[var(--text-muted)]'
+                          }`}>
+                            {variance !== 0 && (
+                              variance > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />
+                            )}
+                            {variance > 0 ? '+' : ''}{variance.toLocaleString()}
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
