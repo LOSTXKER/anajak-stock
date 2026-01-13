@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button'
 
 interface SidebarProps {
   userRole: Role
+  customPermissions?: string[]
 }
 
 interface MenuItem {
@@ -134,7 +135,7 @@ const settingsMenuItem: MenuItem = {
   adminOnly: true,
 }
 
-export function Sidebar({ userRole }: SidebarProps) {
+export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -174,7 +175,7 @@ export function Sidebar({ userRole }: SidebarProps) {
   const canAccess = (permission: string | null, adminOnly?: boolean) => {
     if (adminOnly && userRole !== 'ADMIN') return false
     if (!permission) return true
-    return hasPermission(userRole, permission)
+    return hasPermission(userRole, permission, customPermissions)
   }
 
   const toggleGroup = (groupName: string) => {

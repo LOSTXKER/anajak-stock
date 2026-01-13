@@ -17,6 +17,7 @@ export interface SessionUser {
   email: string
   name: string
   role: Role
+  customPermissions: string[]
 }
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -109,6 +110,7 @@ export async function getSession(): Promise<SessionUser | null> {
     email: user.email,
     name: dbUser.name,
     role: dbUser.role,
+    customPermissions: dbUser.customPermissions || [],
   }
 }
 

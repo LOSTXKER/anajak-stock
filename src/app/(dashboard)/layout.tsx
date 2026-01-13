@@ -16,7 +16,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)] flex">
-      <Sidebar userRole={session.role} />
+      <Sidebar userRole={session.role} customPermissions={session.customPermissions} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header
           user={{
