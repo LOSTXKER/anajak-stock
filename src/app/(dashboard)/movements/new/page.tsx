@@ -226,8 +226,13 @@ export default function NewMovementPage(props: PageProps) {
         toast.error(`กรุณาเลือก variant สำหรับ ${product.name}`)
         return
       }
-      if (line.qty <= 0) {
+      // ADJUST allows negative qty (for stock reduction)
+      if (type !== MovementType.ADJUST && line.qty <= 0) {
         toast.error('จำนวนต้องมากกว่า 0')
+        return
+      }
+      if (line.qty === 0) {
+        toast.error('จำนวนต้องไม่เป็น 0')
         return
       }
     }
@@ -513,11 +518,17 @@ export default function NewMovementPage(props: PageProps) {
                           <TableCell>
                             <Input
                               type="number"
-                              min="1"
+                              min={type === 'ADJUST' ? undefined : 1}
                               value={line.qty}
                               onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
                               className="w-20"
+                              placeholder={type === 'ADJUST' ? '±' : undefined}
                             />
+                            {type === 'ADJUST' && (
+                              <span className="text-xs text-[var(--text-muted)] mt-1">
+                                {line.qty >= 0 ? '+เพิ่ม' : '-ลด'}
+                              </span>
+                            )}
                           </TableCell>
                           {type === 'RECEIVE' && (
                             <TableCell>

@@ -385,9 +385,14 @@ export async function postMovement(id: string): Promise<ActionResult> {
             break
 
           case MovementType.ADJUST:
-            // Set qty directly (can be positive or negative adjustment)
+            // Adjust stock: positive qty = add, negative qty = subtract
             if (line.toLocationId) {
-              await incrementStock(line.productId, variantId, line.toLocationId, qty)
+              if (qty >= 0) {
+                await incrementStock(line.productId, variantId, line.toLocationId, qty)
+              } else {
+                // qty is negative, decrement by absolute value
+                await decrementStock(line.productId, variantId, line.toLocationId, Math.abs(qty), productName)
+              }
             }
             break
 
