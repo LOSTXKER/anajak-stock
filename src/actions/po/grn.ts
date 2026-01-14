@@ -232,8 +232,6 @@ export async function postGRN(id: string): Promise<ActionResult> {
       where: { id },
       data: {
         status: 'POSTED',
-        postedById: session.id,
-        postedAt: new Date(),
       },
     })
 
