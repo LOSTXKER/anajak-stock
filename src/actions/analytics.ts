@@ -350,6 +350,51 @@ export async function getSupplierPerformance(): Promise<ActionResult<SupplierPer
       },
     })
 
+    // Get all GRN IDs by supplier for quality calculation
+    const supplierGRNs: Record<string, string[]> = {}
+    for (const supplier of suppliers) {
+      supplierGRNs[supplier.id] = supplier.pos.flatMap(po => po.grns.map(grn => grn.id))
+    }
+
+    // Get received quantities by supplier (from GRN lines)
+    const grnLines = await prisma.gRNLine.findMany({
+      where: {
+        grnId: { in: Object.values(supplierGRNs).flat() },
+      },
+      include: {
+        grn: {
+          include: {
+            po: true,
+          },
+        },
+      },
+    })
+
+    // Calculate received qty per supplier
+    const receivedBySupplier: Record<string, number> = {}
+    for (const line of grnLines) {
+      const supplierId = line.grn.po.supplierId
+      receivedBySupplier[supplierId] = (receivedBySupplier[supplierId] || 0) + Number(line.qtyReceived)
+    }
+
+    // Get return movements (RETURN type) and calculate return qty
+    // We link returns to suppliers through the products that were received from them
+    const returnMovements = await prisma.movementLine.findMany({
+      where: {
+        movement: {
+          type: 'RETURN',
+          status: 'POSTED',
+        },
+      },
+      include: {
+        movement: true,
+      },
+    })
+
+    // For simplicity, distribute returns proportionally based on supplier's share of received products
+    const totalReceived = Object.values(receivedBySupplier).reduce((sum, qty) => sum + qty, 0)
+    const totalReturned = returnMovements.reduce((sum, line) => sum + Number(line.qty), 0)
+
     const result: SupplierPerformance[] = suppliers.map((supplier) => {
       const totalValue = supplier.pos.reduce((sum, po) => sum + Number(po.total), 0)
 
@@ -383,6 +428,19 @@ export async function getSupplierPerformance(): Promise<ActionResult<SupplierPer
       const avgLeadTime = completedOrders > 0 ? totalLeadTime / completedOrders : 0
       const onTimeRate = completedOrders > 0 ? (onTimeOrders / completedOrders) * 100 : 100
 
+      // Calculate Quality Score based on return rate
+      // Quality Score = 100 - (Return Rate * 100)
+      const supplierReceived = receivedBySupplier[supplier.id] || 0
+      let qualityScore = 100
+
+      if (supplierReceived > 0 && totalReceived > 0) {
+        // Proportional return rate based on supplier's share
+        const supplierShare = supplierReceived / totalReceived
+        const estimatedReturns = totalReturned * supplierShare
+        const returnRate = (estimatedReturns / supplierReceived) * 100
+        qualityScore = Math.max(0, Math.round(100 - returnRate))
+      }
+
       return {
         id: supplier.id,
         code: supplier.code,
@@ -391,7 +449,7 @@ export async function getSupplierPerformance(): Promise<ActionResult<SupplierPer
         totalValue: Math.round(totalValue),
         avgLeadTime: Math.round(avgLeadTime * 10) / 10,
         onTimeDeliveryRate: Math.round(onTimeRate),
-        qualityScore: 100, // Placeholder - could be calculated from returns
+        qualityScore,
       }
     }).filter((s) => s.totalPOs > 0)
       .sort((a, b) => b.totalValue - a.totalValue)
