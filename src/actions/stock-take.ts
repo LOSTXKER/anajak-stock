@@ -106,6 +106,14 @@ export async function getStockTake(id: string) {
         systemQty: Number(line.systemQty),
         countedQty: line.countedQty !== null ? Number(line.countedQty) : null,
         variance: line.variance !== null ? Number(line.variance) : null,
+        product: {
+          ...line.product,
+          reorderPoint: Number(line.product.reorderPoint),
+          minQty: line.product.minQty !== null ? Number(line.product.minQty) : null,
+          maxQty: line.product.maxQty !== null ? Number(line.product.maxQty) : null,
+          standardCost: line.product.standardCost !== null ? Number(line.product.standardCost) : null,
+          lastCost: line.product.lastCost !== null ? Number(line.product.lastCost) : null,
+        },
       })),
     }
 
