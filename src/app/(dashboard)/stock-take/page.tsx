@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table'
 import { ClipboardCheck, Plus, Eye, Warehouse, Clock, CheckCircle2, XCircle, Play } from 'lucide-react'
 import { PageHeader, EmptyState } from '@/components/common'
+import { TableSkeleton } from '@/components/ui/skeleton'
 
 const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
   DRAFT: { 
@@ -169,13 +170,7 @@ export default function StockTakePage() {
 
       {/* List */}
       <Suspense
-        fallback={
-          <Card>
-            <CardContent className="py-12 flex justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent-primary)]" />
-            </CardContent>
-          </Card>
-        }
+        fallback={<Card><CardContent className="p-0"><TableSkeleton rows={6} cols={7} /></CardContent></Card>}
       >
         <StockTakeList />
       </Suspense>

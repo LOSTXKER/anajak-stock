@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
+import { TableSkeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -161,13 +162,7 @@ async function SuppliersContent() {
 
 export default function SuppliersPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent-primary)]" />
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="space-y-6"><TableSkeleton rows={8} cols={8} /></div>}>
       <SuppliersContent />
     </Suspense>
   )

@@ -17,6 +17,7 @@ import { GRNStatus } from '@/generated/prisma'
 import { format } from 'date-fns'
 import { th } from 'date-fns/locale'
 import { PageHeader, EmptyState } from '@/components/common'
+import { TableSkeleton } from '@/components/ui/skeleton'
 
 interface PageProps {
   searchParams: Promise<{
@@ -229,13 +230,7 @@ async function GRNContent({ searchParams }: PageProps) {
 
 export default function GRNPage(props: PageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent-primary)]" />
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="space-y-6"><TableSkeleton rows={8} cols={7} /></div>}>
       <GRNContent {...props} />
     </Suspense>
   )
