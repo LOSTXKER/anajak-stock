@@ -13,6 +13,24 @@ export interface ProductImportRow {
   standardCost?: number
 }
 
+// New: Product with Variants import
+export interface ProductVariantImportRow {
+  // Product fields
+  sku: string
+  name: string
+  description?: string
+  categoryName?: string
+  unitCode?: string
+  reorderPoint?: number
+  standardCost?: number
+  // Variant fields
+  variantSku?: string
+  color?: string
+  size?: string
+  variantBarcode?: string
+  variantCost?: number
+}
+
 export function parseCSV(csvContent: string): ProductImportRow[] {
   const lines = csvContent.split('\n').filter((line) => line.trim())
 
@@ -108,4 +126,162 @@ function parseCSVLine(line: string): string[] {
 
   values.push(current.trim())
   return values
+}
+
+/**
+ * Parse CSV with Variants support
+ * Format: SKU, ชื่อสินค้า, หมวดหมู่, สี, ไซส์, Variant SKU, Barcode, ราคาทุน
+ */
+export function parseCSVWithVariants(csvContent: string): ProductVariantImportRow[] {
+  const lines = csvContent.split('\n').filter((line) => line.trim())
+
+  if (lines.length < 2) {
+    return []
+  }
+
+  // Parse header
+  const headerLine = lines[0]
+  const headers = headerLine.split(',').map((h) => h.trim().replace(/^"|"$/g, '').toLowerCase())
+
+  // Map headers to fields
+  const headerMap: Record<string, keyof ProductVariantImportRow> = {
+    // Product fields
+    sku: 'sku',
+    'รหัสสินค้า': 'sku',
+    'ชื่อสินค้า': 'name',
+    name: 'name',
+    'รายละเอียด': 'description',
+    description: 'description',
+    'หมวดหมู่': 'categoryName',
+    category: 'categoryName',
+    categoryname: 'categoryName',
+    'หน่วย': 'unitCode',
+    unit: 'unitCode',
+    unitcode: 'unitCode',
+    'reorder point': 'reorderPoint',
+    reorderpoint: 'reorderPoint',
+    rop: 'reorderPoint',
+    'ต้นทุน': 'standardCost',
+    'ราคาทุน': 'standardCost',
+    cost: 'standardCost',
+    standardcost: 'standardCost',
+    // Variant fields
+    'variant sku': 'variantSku',
+    variantsku: 'variantSku',
+    'รหัส variant': 'variantSku',
+    'สี': 'color',
+    color: 'color',
+    'ไซส์': 'size',
+    size: 'size',
+    'barcode': 'variantBarcode',
+    'variant barcode': 'variantBarcode',
+    variantbarcode: 'variantBarcode',
+    'ต้นทุน variant': 'variantCost',
+    variantcost: 'variantCost',
+  }
+
+  const columnIndices: Partial<Record<keyof ProductVariantImportRow, number>> = {}
+
+  headers.forEach((header, index) => {
+    const field = headerMap[header]
+    if (field) {
+      columnIndices[field] = index
+    }
+  })
+
+  // Parse rows
+  const rows: ProductVariantImportRow[] = []
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]
+    const values = parseCSVLine(line)
+
+    const getValue = (field: keyof ProductVariantImportRow): string | undefined => {
+      const idx = columnIndices[field]
+      return idx !== undefined ? values[idx]?.trim() : undefined
+    }
+
+    const getNumber = (field: keyof ProductVariantImportRow): number | undefined => {
+      const val = getValue(field)
+      if (!val) return undefined
+      const num = parseFloat(val)
+      return isNaN(num) ? undefined : num
+    }
+
+    const row: ProductVariantImportRow = {
+      sku: getValue('sku') || '',
+      name: getValue('name') || '',
+      description: getValue('description'),
+      categoryName: getValue('categoryName'),
+      unitCode: getValue('unitCode'),
+      reorderPoint: getNumber('reorderPoint'),
+      standardCost: getNumber('standardCost'),
+      variantSku: getValue('variantSku'),
+      color: getValue('color'),
+      size: getValue('size'),
+      variantBarcode: getValue('variantBarcode'),
+      variantCost: getNumber('variantCost'),
+    }
+
+    // Must have SKU and name
+    if (row.sku && row.name) {
+      rows.push(row)
+    }
+  }
+
+  return rows
+}
+
+/**
+ * Group variant rows by product SKU
+ */
+export interface GroupedProductImport {
+  sku: string
+  name: string
+  description?: string
+  categoryName?: string
+  unitCode?: string
+  reorderPoint?: number
+  standardCost?: number
+  variants: Array<{
+    variantSku: string
+    color?: string
+    size?: string
+    barcode?: string
+    cost?: number
+  }>
+}
+
+export function groupVariantRows(rows: ProductVariantImportRow[]): GroupedProductImport[] {
+  const productMap = new Map<string, GroupedProductImport>()
+
+  for (const row of rows) {
+    if (!productMap.has(row.sku)) {
+      productMap.set(row.sku, {
+        sku: row.sku,
+        name: row.name,
+        description: row.description,
+        categoryName: row.categoryName,
+        unitCode: row.unitCode,
+        reorderPoint: row.reorderPoint,
+        standardCost: row.standardCost,
+        variants: [],
+      })
+    }
+
+    const product = productMap.get(row.sku)!
+
+    // If has variant info, add to variants
+    if (row.variantSku || row.color || row.size) {
+      product.variants.push({
+        variantSku: row.variantSku || `${row.sku}-${row.color || ''}-${row.size || ''}`.replace(/--/g, '-').replace(/-$/, ''),
+        color: row.color,
+        size: row.size,
+        barcode: row.variantBarcode,
+        cost: row.variantCost ?? row.standardCost,
+      })
+    }
+  }
+
+  return Array.from(productMap.values())
 }

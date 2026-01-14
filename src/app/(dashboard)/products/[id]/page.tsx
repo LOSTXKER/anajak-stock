@@ -205,7 +205,9 @@ async function ProductDetail({ id }: { id: string }) {
       {/* Variants Section */}
       {product.hasVariants && (
         <VariantsSection 
-          productId={product.id} 
+          productId={product.id}
+          productSku={product.sku}
+          productName={product.name}
           variants={product.variants.map(v => ({
             id: v.id,
             sku: v.sku,

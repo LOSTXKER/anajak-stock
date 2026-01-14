@@ -127,14 +127,14 @@ export function SearchFilter({
         {filters.map((filter) => (
           <Select
             key={filter.key}
-            value={searchParams.get(filter.key) || ''}
-            onValueChange={(value) => updateParams(filter.key, value)}
+            value={searchParams.get(filter.key) || '__all__'}
+            onValueChange={(value) => updateParams(filter.key, value === '__all__' ? '' : value)}
           >
             <SelectTrigger className="w-[180px] bg-[var(--bg-primary)] border-[var(--border-default)]">
               <SelectValue placeholder={filter.placeholder || filter.label} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">ทั้งหมด</SelectItem>
+              <SelectItem value="__all__">ทั้งหมด</SelectItem>
               {filter.options.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}

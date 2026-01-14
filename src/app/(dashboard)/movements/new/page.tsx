@@ -32,15 +32,24 @@ import { toast } from 'sonner'
 import { MovementType } from '@/generated/prisma'
 import type { ProductWithRelations, LocationWithWarehouse } from '@/types'
 import { PageHeader } from '@/components/common'
+import { CascadingVariantPicker } from '@/components/variants'
 
 interface PageProps {
   searchParams: Promise<{ type?: MovementType }>
 }
 
+interface VariantOption {
+  optionName: string
+  value: string
+}
+
 interface Variant {
   id: string
   sku: string
-  options: string[]
+  name: string | null
+  options: VariantOption[]
+  stock?: number
+  costPrice?: number
 }
 
 interface ProductWithVariants extends ProductWithRelations {
@@ -128,10 +137,23 @@ export default function NewMovementPage(props: PageProps) {
       const response = await fetch(`/api/products/${productId}/variants`)
       if (response.ok) {
         const variants = await response.json()
-        return variants.map((v: { id: string; sku: string; optionValues: { optionValue: { value: string } }[] }) => ({
+        return variants.map((v: { 
+          id: string
+          sku: string
+          name: string | null
+          costPrice?: number
+          optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+          stockBalances?: { qtyOnHand: number }[]
+        }) => ({
           id: v.id,
           sku: v.sku,
-          options: v.optionValues?.map((ov: { optionValue: { value: string } }) => ov.optionValue.value) || [],
+          name: v.name,
+          options: v.optionValues?.map((ov) => ({
+            optionName: ov.optionValue.optionType.name,
+            value: ov.optionValue.value,
+          })) || [],
+          stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
         }))
       }
     } catch (error) {
@@ -364,7 +386,7 @@ export default function NewMovementPage(props: PageProps) {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="min-w-[200px]">สินค้า</TableHead>
-                    <TableHead className="min-w-[150px]">Variant</TableHead>
+                    <TableHead className="min-w-[200px]">ตัวเลือก (สี/ไซส์)</TableHead>
                     {(type === 'ISSUE' || type === 'TRANSFER') && (
                       <TableHead className="min-w-[150px]">จากโลเคชัน</TableHead>
                     )}
@@ -423,28 +445,26 @@ export default function NewMovementPage(props: PageProps) {
                           <TableCell>
                             {showVariantSelect ? (
                               variants.length > 0 ? (
-                                <Select
-                                  value={line.variantId || ''}
-                                  onValueChange={(v) => {
-                                    const variant = variants.find(vr => vr.id === v)
-                                    updateLine(line.id, {
-                                      variantId: v,
-                                      variantLabel: variant?.options.join(' / '),
-                                    })
+                                <CascadingVariantPicker
+                                  variants={variants}
+                                  selectedVariantId={line.variantId}
+                                  onSelect={(variant) => {
+                                    if (variant) {
+                                      updateLine(line.id, {
+                                        variantId: variant.id,
+                                        variantLabel: variant.options.map(o => o.value).join(' / '),
+                                        unitCost: variant.costPrice || line.unitCost,
+                                      })
+                                    } else {
+                                      updateLine(line.id, {
+                                        variantId: undefined,
+                                        variantLabel: undefined,
+                                      })
+                                    }
                                   }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="เลือก variant" />
-                                  </SelectTrigger>
-                                  <SelectContent className="max-h-60">
-                                    {variants.map((variant) => (
-                                      <SelectItem key={variant.id} value={variant.id}>
-                                        <span className="font-mono text-xs mr-1">{variant.sku}</span>
-                                        ({variant.options.join(' / ')})
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  showStock={true}
+                                  placeholder="เลือก สี/ไซส์"
+                                />
                               ) : (
                                 <div className="text-[var(--text-muted)] text-sm animate-pulse">กำลังโหลด...</div>
                               )

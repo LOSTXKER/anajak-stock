@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,15 +23,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import { Layers, Pencil, Trash2, ChevronDown, ChevronRight, Warehouse, Save, Loader2 } from 'lucide-react'
+import { Layers, Pencil, Trash2, ChevronDown, ChevronRight, Warehouse, Save, Loader2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateVariant, deleteVariant } from '@/actions/variants'
 import { useRouter } from 'next/navigation'
+import { AddVariantDialog } from './add-variant-dialog'
 
 interface VariantOption {
   typeName: string
@@ -61,6 +57,8 @@ interface Variant {
 
 interface VariantsSectionProps {
   productId: string
+  productSku: string
+  productName: string
   variants: Variant[]
 }
 
@@ -70,7 +68,7 @@ interface EditableVariant extends Variant {
   isDirty?: boolean
 }
 
-export function VariantsSection({ productId, variants: initialVariants }: VariantsSectionProps) {
+export function VariantsSection({ productId, productSku, productName, variants: initialVariants }: VariantsSectionProps) {
   const router = useRouter()
   const [expandedVariants, setExpandedVariants] = useState<Set<string>>(new Set())
   const [variants, setVariants] = useState<EditableVariant[]>(
@@ -82,6 +80,9 @@ export function VariantsSection({ productId, variants: initialVariants }: Varian
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingVariant, setDeletingVariant] = useState<Variant | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Add variant dialog
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
 
   const toggleExpanded = (variantId: string) => {
     setExpandedVariants(prev => {
@@ -175,6 +176,27 @@ export function VariantsSection({ productId, variants: initialVariants }: Varian
 
   const hasDirtyVariants = variants.some(v => v.isDirty)
 
+  // Group variants by first option (e.g., color)
+  const groupedVariants = React.useMemo(() => {
+    const groups: Map<string, EditableVariant[]> = new Map()
+    
+    for (const variant of variants) {
+      const firstOption = variant.options[0]?.value || 'อื่นๆ'
+      if (!groups.has(firstOption)) {
+        groups.set(firstOption, [])
+      }
+      groups.get(firstOption)!.push(variant)
+    }
+    
+    return Array.from(groups.entries())
+  }, [variants])
+
+  // Get unique option type names
+  const optionTypes = React.useMemo(() => {
+    if (variants.length === 0) return []
+    return variants[0].options.map(o => o.typeName)
+  }, [variants])
+
   return (
     <>
       <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
@@ -182,85 +204,128 @@ export function VariantsSection({ productId, variants: initialVariants }: Varian
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Layers className="w-5 h-5 text-[var(--accent-primary)]" />
-              SKU ({variants.length})
+              รายการตัวเลือกสินค้า ({variants.length})
             </CardTitle>
-            {hasDirtyVariants && (
-              <Button onClick={saveAllChanges} size="sm">
-                <Save className="w-4 h-4 mr-2" />
-                บันทึกทั้งหมด
+            <div className="flex items-center gap-2">
+              {hasDirtyVariants && (
+                <Button onClick={saveAllChanges} size="sm" variant="outline">
+                  <Save className="w-4 h-4 mr-2" />
+                  บันทึกทั้งหมด
+                </Button>
+              )}
+              <Button onClick={() => setAddDialogOpen(true)} size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                เพิ่มตัวเลือก
               </Button>
-            )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="bg-[var(--bg-tertiary)]">
                   <TableHead className="w-8"></TableHead>
-                  <TableHead>ชื่อ</TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>ราคาทุน</TableHead>
-                  <TableHead>ราคาขาย</TableHead>
+                  {optionTypes.map((typeName) => (
+                    <TableHead key={typeName} className="text-[var(--status-error)]">
+                      ● {typeName}
+                    </TableHead>
+                  ))}
+                  {optionTypes.length === 0 && <TableHead>ชื่อ</TableHead>}
+                  <TableHead>* ราคาขาย</TableHead>
+                  <TableHead>* ราคาทุน</TableHead>
                   <TableHead>สต๊อค</TableHead>
-                  <TableHead>จุดสั่งซื้อ</TableHead>
+                  <TableHead>SKU</TableHead>
                   <TableHead className="text-center">แจ้งเตือน</TableHead>
-                  <TableHead className="w-24"></TableHead>
+                  <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {variants.map((variant) => (
-                  <Collapsible key={variant.id} asChild>
-                    <>
-                      <TableRow className={variant.isDirty ? 'bg-[var(--status-warning)]/5' : ''}>
+                {groupedVariants.map(([groupName, groupVariants], groupIdx) => (
+                  <React.Fragment key={groupName}>
+                    {groupVariants.map((variant, varIdx) => (
+                      <React.Fragment key={variant.id}>
+                        <TableRow 
+                          className={`
+                            ${variant.isDirty ? 'bg-[var(--status-warning)]/5' : ''}
+                            ${varIdx === 0 && groupIdx > 0 ? 'border-t-2 border-[var(--border-default)]' : ''}
+                          `}
+                        >
                         <TableCell>
                           {variant.stockByLocation.length > 0 && (
-                            <CollapsibleTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="p-1 h-auto"
-                                onClick={() => toggleExpanded(variant.id)}
-                              >
-                                {expandedVariants.has(variant.id) ? (
-                                  <ChevronDown className="w-4 h-4" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4" />
-                                )}
-                              </Button>
-                            </CollapsibleTrigger>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="p-1 h-auto"
+                              onClick={() => toggleExpanded(variant.id)}
+                            >
+                              {expandedVariants.has(variant.id) ? (
+                                <ChevronDown className="w-4 h-4" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4" />
+                              )}
+                            </Button>
                           )}
                         </TableCell>
+                        {/* Option columns - show first option only on first row of group */}
+                        {variant.options.map((opt, optIdx) => (
+                          <TableCell key={optIdx}>
+                            {optIdx === 0 ? (
+                              varIdx === 0 ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="w-10 h-10 rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] flex items-center justify-center text-xs font-medium">
+                                    {opt.value.substring(0, 2)}
+                                  </div>
+                                  <span className="font-medium">{opt.value}</span>
+                                </div>
+                              ) : null
+                            ) : (
+                              <span className={varIdx === 0 ? 'font-medium text-[var(--accent-primary)]' : ''}>
+                                {opt.value}
+                              </span>
+                            )}
+                          </TableCell>
+                        ))}
+                        {optionTypes.length === 0 && (
+                          <TableCell>
+                            <Input
+                              value={variant.name || variant.sku}
+                              onChange={(e) => updateLocalVariant(variant.id, 'name', e.target.value)}
+                              className="h-8 w-32"
+                            />
+                          </TableCell>
+                        )}
+                        {/* ราคาขาย */}
                         <TableCell>
-                          <Input
-                            value={variant.name || variant.options.map(o => o.value).join(', ')}
-                            onChange={(e) => updateLocalVariant(variant.id, 'name', e.target.value)}
-                            className="h-8 w-32"
-                          />
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm text-[var(--text-muted)]">฿</span>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={variant.sellingPrice || ''}
+                              onChange={(e) => updateLocalVariant(variant.id, 'sellingPrice', Number(e.target.value))}
+                              className="h-8 w-24"
+                              placeholder="0"
+                            />
+                          </div>
                         </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {variant.sku}
-                        </TableCell>
+                        {/* ราคาทุน */}
                         <TableCell>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={variant.costPrice}
-                            onChange={(e) => updateLocalVariant(variant.id, 'costPrice', Number(e.target.value))}
-                            className="h-8 w-24"
-                          />
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm text-[var(--text-muted)]">฿</span>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={variant.costPrice || ''}
+                              onChange={(e) => updateLocalVariant(variant.id, 'costPrice', Number(e.target.value))}
+                              className="h-8 w-24"
+                              placeholder="0"
+                            />
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={variant.sellingPrice}
-                            onChange={(e) => updateLocalVariant(variant.id, 'sellingPrice', Number(e.target.value))}
-                            className="h-8 w-24"
-                          />
-                        </TableCell>
+                        {/* สต๊อค */}
                         <TableCell className="text-center">
                           <Badge
                             variant="outline"
@@ -273,21 +338,18 @@ export function VariantsSection({ productId, variants: initialVariants }: Varian
                             {variant.totalStock.toLocaleString()}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="0"
-                            value={variant.reorderPoint}
-                            onChange={(e) => updateLocalVariant(variant.id, 'reorderPoint', Number(e.target.value))}
-                            className="h-8 w-20"
-                          />
+                        {/* SKU */}
+                        <TableCell className="font-mono text-xs">
+                          {variant.sku}
                         </TableCell>
+                        {/* แจ้งเตือน */}
                         <TableCell className="text-center">
                           <Checkbox
                             checked={variant.lowStockAlert}
                             onCheckedChange={(checked) => updateLocalVariant(variant.id, 'lowStockAlert', !!checked)}
                           />
                         </TableCell>
+                        {/* Actions */}
                         <TableCell>
                           <div className="flex items-center justify-end gap-1">
                             {variant.isDirty && (
@@ -314,34 +376,35 @@ export function VariantsSection({ productId, variants: initialVariants }: Varian
                           </div>
                         </TableCell>
                       </TableRow>
-                      {expandedVariants.has(variant.id) && variant.stockByLocation.length > 0 && (
-                        <TableRow className="bg-[var(--bg-secondary)]">
-                          <TableCell colSpan={9} className="p-0">
-                            <div className="px-8 py-4">
-                              <div className="flex items-center gap-2 mb-3 text-sm text-[var(--text-muted)]">
-                                <Warehouse className="w-4 h-4" />
-                                สต๊อคตาม Location
+                        {expandedVariants.has(variant.id) && variant.stockByLocation.length > 0 && (
+                          <TableRow className="bg-[var(--bg-secondary)]">
+                            <TableCell colSpan={optionTypes.length + 7} className="p-0">
+                              <div className="px-8 py-4">
+                                <div className="flex items-center gap-2 mb-3 text-sm text-[var(--text-muted)]">
+                                  <Warehouse className="w-4 h-4" />
+                                  สต๊อคตาม Location
+                                </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                  {variant.stockByLocation.map((loc) => (
+                                    <div
+                                      key={loc.locationId}
+                                      className="bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-lg p-3"
+                                    >
+                                      <p className="text-[var(--text-muted)] text-xs">{loc.warehouseName}</p>
+                                      <p className="font-mono text-sm">{loc.locationCode}</p>
+                                      <p className="text-[var(--status-success)] font-bold mt-1">
+                                        {loc.qty.toLocaleString()} ชิ้น
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                              <div className="grid grid-cols-3 gap-3">
-                                {variant.stockByLocation.map((loc) => (
-                                  <div
-                                    key={loc.locationId}
-                                    className="bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-lg p-3"
-                                  >
-                                    <p className="text-[var(--text-muted)] text-xs">{loc.warehouseName}</p>
-                                    <p className="font-mono text-sm">{loc.locationCode}</p>
-                                    <p className="text-[var(--status-success)] font-bold mt-1">
-                                      {loc.qty.toLocaleString()} ชิ้น
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </>
-                  </Collapsible>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -373,6 +436,20 @@ export function VariantsSection({ productId, variants: initialVariants }: Varian
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Add Variant Dialog */}
+      <AddVariantDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        productId={productId}
+        productSku={productSku}
+        productName={productName}
+        existingVariants={variants.map(v => ({
+          id: v.id,
+          sku: v.sku,
+          options: v.options,
+        }))}
+      />
     </>
   )
 }

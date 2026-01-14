@@ -192,14 +192,14 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                 <div className="space-y-2">
                   <Label>หมวดหมู่</Label>
                   <Select
-                    value={watch('categoryId') || ''}
-                    onValueChange={(v) => setValue('categoryId', v)}
+                    value={watch('categoryId') || '__none__'}
+                    onValueChange={(v) => setValue('categoryId', v === '__none__' ? '' : v)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="เลือกหมวดหมู่" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">ไม่ระบุ</SelectItem>
+                      <SelectItem value="__none__">ไม่ระบุ</SelectItem>
                       {categories.map((cat) => (
                         <SelectItem key={cat.id} value={cat.id}>
                           {cat.name}
@@ -212,14 +212,14 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                 <div className="space-y-2">
                   <Label>หน่วยนับ</Label>
                   <Select
-                    value={watch('unitId') || ''}
-                    onValueChange={(v) => setValue('unitId', v)}
+                    value={watch('unitId') || '__none__'}
+                    onValueChange={(v) => setValue('unitId', v === '__none__' ? '' : v)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="เลือกหน่วย" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">ไม่ระบุ</SelectItem>
+                      <SelectItem value="__none__">ไม่ระบุ</SelectItem>
                       {units.map((unit) => (
                         <SelectItem key={unit.id} value={unit.id}>
                           {unit.name} ({unit.code})

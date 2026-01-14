@@ -30,6 +30,11 @@ export async function GET(
             },
           },
         },
+        stockBalances: {
+          select: {
+            qtyOnHand: true,
+          },
+        },
       },
       orderBy: { createdAt: 'asc' },
     })

@@ -4,12 +4,22 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult } from '@/types'
-import type { ProductImportRow } from '@/lib/csv-parser'
+import type { ProductImportRow, GroupedProductImport } from '@/lib/csv-parser'
 
 interface ImportResult {
   total: number
   created: number
   updated: number
+  errors: string[]
+}
+
+interface VariantImportResult {
+  totalProducts: number
+  totalVariants: number
+  productsCreated: number
+  productsUpdated: number
+  variantsCreated: number
+  variantsUpdated: number
   errors: string[]
 }
 
@@ -24,6 +34,272 @@ interface StockImportResult {
   total: number
   success: number
   errors: Array<{ row: number; message: string }>
+}
+
+/**
+ * Import products with variants (Color/Size)
+ */
+export async function importProductsWithVariants(
+  products: GroupedProductImport[]
+): Promise<ActionResult<VariantImportResult>> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  const result: VariantImportResult = {
+    totalProducts: products.length,
+    totalVariants: products.reduce((sum, p) => sum + p.variants.length, 0),
+    productsCreated: 0,
+    productsUpdated: 0,
+    variantsCreated: 0,
+    variantsUpdated: 0,
+    errors: [],
+  }
+
+  // Get or create categories
+  const categoryMap = new Map<string, string>()
+  const uniqueCategories = [...new Set(products.map((p) => p.categoryName).filter(Boolean))]
+
+  for (const catName of uniqueCategories) {
+    if (!catName) continue
+    let category = await prisma.category.findFirst({
+      where: { name: { equals: catName, mode: 'insensitive' } },
+    })
+    if (!category) {
+      category = await prisma.category.create({
+        data: { name: catName },
+      })
+    }
+    categoryMap.set(catName.toLowerCase(), category.id)
+  }
+
+  // Get units
+  const unitMap = new Map<string, string>()
+  const units = await prisma.unitOfMeasure.findMany()
+  for (const unit of units) {
+    unitMap.set(unit.code.toLowerCase(), unit.id)
+    unitMap.set(unit.name.toLowerCase(), unit.id)
+  }
+
+  // Get or create option types for Color and Size
+  let colorOptionType = await prisma.optionType.findFirst({
+    where: { name: { equals: 'สี', mode: 'insensitive' } },
+  })
+  if (!colorOptionType) {
+    colorOptionType = await prisma.optionType.findFirst({
+      where: { name: { equals: 'Color', mode: 'insensitive' } },
+    })
+  }
+  if (!colorOptionType) {
+    colorOptionType = await prisma.optionType.create({
+      data: { name: 'สี', displayOrder: 1 },
+    })
+  }
+
+  let sizeOptionType = await prisma.optionType.findFirst({
+    where: { name: { equals: 'ไซส์', mode: 'insensitive' } },
+  })
+  if (!sizeOptionType) {
+    sizeOptionType = await prisma.optionType.findFirst({
+      where: { name: { equals: 'Size', mode: 'insensitive' } },
+    })
+  }
+  if (!sizeOptionType) {
+    sizeOptionType = await prisma.optionType.create({
+      data: { name: 'ไซส์', displayOrder: 2 },
+    })
+  }
+
+  // Cache for option values
+  const colorValueMap = new Map<string, string>()
+  const sizeValueMap = new Map<string, string>()
+
+  async function getOrCreateOptionValue(
+    optionTypeId: string,
+    value: string,
+    cache: Map<string, string>
+  ): Promise<string> {
+    const key = value.toLowerCase()
+    if (cache.has(key)) {
+      return cache.get(key)!
+    }
+
+    let optionValue = await prisma.optionValue.findFirst({
+      where: {
+        optionTypeId,
+        value: { equals: value, mode: 'insensitive' },
+      },
+    })
+
+    if (!optionValue) {
+      optionValue = await prisma.optionValue.create({
+        data: {
+          optionTypeId,
+          value,
+        },
+      })
+    }
+
+    cache.set(key, optionValue.id)
+    return optionValue.id
+  }
+
+  // Process each product
+  for (let i = 0; i < products.length; i++) {
+    const productData = products[i]
+
+    try {
+      if (!productData.sku || !productData.name) {
+        result.errors.push(`Product ${i + 1}: SKU และชื่อสินค้าต้องไม่ว่าง`)
+        continue
+      }
+
+      const categoryId = productData.categoryName
+        ? categoryMap.get(productData.categoryName.toLowerCase()) || null
+        : null
+
+      const unitId = productData.unitCode
+        ? unitMap.get(productData.unitCode.toLowerCase()) || null
+        : null
+
+      // Check if product exists
+      let product = await prisma.product.findUnique({
+        where: { sku: productData.sku },
+      })
+
+      if (product) {
+        // Update product
+        product = await prisma.product.update({
+          where: { id: product.id },
+          data: {
+            name: productData.name,
+            description: productData.description,
+            categoryId,
+            unitId,
+            reorderPoint: productData.reorderPoint ?? product.reorderPoint,
+            standardCost: productData.standardCost ?? product.standardCost,
+            hasVariants: productData.variants.length > 0,
+          },
+        })
+        result.productsUpdated++
+      } else {
+        // Create product
+        product = await prisma.product.create({
+          data: {
+            sku: productData.sku,
+            name: productData.name,
+            description: productData.description,
+            categoryId,
+            unitId,
+            reorderPoint: productData.reorderPoint ?? 0,
+            standardCost: productData.standardCost ?? 0,
+            lastCost: productData.standardCost ?? 0,
+            hasVariants: productData.variants.length > 0,
+          },
+        })
+        result.productsCreated++
+      }
+
+      // Process variants
+      for (const variantData of productData.variants) {
+        try {
+          const variantSku = variantData.variantSku
+
+          // Check if variant exists
+          let variant = await prisma.productVariant.findUnique({
+            where: { sku: variantSku },
+          })
+
+          if (variant) {
+            // Update variant
+            await prisma.productVariant.update({
+              where: { id: variant.id },
+              data: {
+                barcode: variantData.barcode || variant.barcode,
+                costPrice: variantData.cost ?? variant.costPrice,
+              },
+            })
+            result.variantsUpdated++
+          } else {
+            // Create variant
+            variant = await prisma.productVariant.create({
+              data: {
+                productId: product.id,
+                sku: variantSku,
+                barcode: variantData.barcode,
+                costPrice: variantData.cost ?? 0,
+                active: true,
+              },
+            })
+            result.variantsCreated++
+
+            // Create option value associations
+            if (variantData.color) {
+              const colorValueId = await getOrCreateOptionValue(
+                colorOptionType.id,
+                variantData.color,
+                colorValueMap
+              )
+              await prisma.variantOptionValue.create({
+                data: {
+                  variantId: variant.id,
+                  optionValueId: colorValueId,
+                },
+              })
+            }
+
+            if (variantData.size) {
+              const sizeValueId = await getOrCreateOptionValue(
+                sizeOptionType.id,
+                variantData.size,
+                sizeValueMap
+              )
+              await prisma.variantOptionValue.create({
+                data: {
+                  variantId: variant.id,
+                  optionValueId: sizeValueId,
+                },
+              })
+            }
+          }
+        } catch (variantError) {
+          const message = variantError instanceof Error ? variantError.message : 'Unknown error'
+          result.errors.push(`Variant ${variantData.variantSku}: ${message}`)
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      result.errors.push(`Product ${productData.sku}: ${message}`)
+    }
+  }
+
+  // Audit log
+  await prisma.auditLog.create({
+    data: {
+      actorId: session.id,
+      action: 'IMPORT',
+      refType: 'PRODUCT_VARIANT',
+      refId: 'bulk',
+      newData: {
+        totalProducts: result.totalProducts,
+        totalVariants: result.totalVariants,
+        productsCreated: result.productsCreated,
+        productsUpdated: result.productsUpdated,
+        variantsCreated: result.variantsCreated,
+        variantsUpdated: result.variantsUpdated,
+        errorCount: result.errors.length,
+      },
+    },
+  })
+
+  revalidatePath('/products')
+
+  if (result.errors.length > 0 && result.productsCreated === 0 && result.productsUpdated === 0) {
+    return { success: false, error: result.errors.join('\n') }
+  }
+
+  return { success: true, data: result }
 }
 
 export async function importProducts(rows: ProductImportRow[]): Promise<ActionResult<ImportResult>> {

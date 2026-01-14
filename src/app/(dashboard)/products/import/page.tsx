@@ -16,9 +16,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Upload, ArrowLeft, FileSpreadsheet, Loader2, Check, X, Download, Package, Warehouse, AlertTriangle } from 'lucide-react'
-import { importProducts, importStock, validateProductImport, validateStockImport, type StockImportRow } from '@/actions/import'
-import { parseCSV, type ProductImportRow } from '@/lib/csv-parser'
+import { Upload, ArrowLeft, FileSpreadsheet, Loader2, Check, X, Download, Package, Warehouse, AlertTriangle, Palette } from 'lucide-react'
+import { importProducts, importStock, validateProductImport, validateStockImport, importProductsWithVariants, type StockImportRow } from '@/actions/import'
+import { parseCSV, parseCSVWithVariants, groupVariantRows, type ProductImportRow, type GroupedProductImport } from '@/lib/csv-parser'
 import { toast } from 'sonner'
 
 interface ValidationError {
@@ -51,6 +51,18 @@ export default function ImportPage() {
     total: number
     success: number
     errors: Array<{ row: number; message: string }>
+  } | null>(null)
+
+  // Variant import state
+  const [variantCsvContent, setVariantCsvContent] = useState('')
+  const [variantPreviewProducts, setVariantPreviewProducts] = useState<GroupedProductImport[]>([])
+  const [isImportingVariants, setIsImportingVariants] = useState(false)
+  const [variantImportResult, setVariantImportResult] = useState<{
+    productsCreated: number
+    productsUpdated: number
+    variantsCreated: number
+    variantsUpdated: number
+    errors: string[]
   } | null>(null)
 
   // Product handlers
@@ -199,6 +211,72 @@ FABRIC-001,WH01/B01,500,85`
     URL.revokeObjectURL(url)
   }
 
+  // Variant handlers
+  function handleVariantFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const content = event.target?.result as string
+      setVariantCsvContent(content)
+      handleVariantPreview(content)
+    }
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  function handleVariantPreview(content: string = variantCsvContent) {
+    const rows = parseCSVWithVariants(content)
+    const grouped = groupVariantRows(rows)
+    setVariantPreviewProducts(grouped.slice(0, 10))
+    setVariantImportResult(null)
+  }
+
+  async function handleVariantImport() {
+    const rows = parseCSVWithVariants(variantCsvContent)
+    const grouped = groupVariantRows(rows)
+    
+    if (grouped.length === 0) {
+      toast.error('ไม่พบข้อมูลที่จะนำเข้า')
+      return
+    }
+
+    setIsImportingVariants(true)
+    const result = await importProductsWithVariants(grouped)
+    setIsImportingVariants(false)
+
+    if (result.success) {
+      setVariantImportResult(result.data)
+      toast.success(`นำเข้าสำเร็จ: สินค้า ${result.data.productsCreated + result.data.productsUpdated}, ตัวเลือก ${result.data.variantsCreated + result.data.variantsUpdated}`)
+      if (result.data.errors.length === 0) {
+        setTimeout(() => router.push('/products'), 2000)
+      }
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  function downloadVariantTemplate() {
+    const template = `รหัสสินค้า,ชื่อสินค้า,หมวดหมู่,หน่วย,ต้นทุน,Variant SKU,สี,ไซส์,Barcode
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-WH-S,ขาว,S,8851234567890
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-WH-M,ขาว,M,8851234567891
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-WH-L,ขาว,L,8851234567892
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-BK-S,ดำ,S,8851234567893
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-BK-M,ดำ,M,8851234567894
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-BK-L,ดำ,L,8851234567895
+POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV-S,กรม,S,8851234568001
+POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV-M,กรม,M,8851234568002
+POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV-L,กรม,L,8851234568003`
+
+    const blob = new Blob(['\ufeff' + template], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'product-variants-import-template.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -225,7 +303,14 @@ FABRIC-001,WH01/B01,500,85`
             className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white"
           >
             <Package className="w-4 h-4" />
-            นำเข้าสินค้า
+            สินค้าพื้นฐาน
+          </TabsTrigger>
+          <TabsTrigger 
+            value="variants" 
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-[var(--status-info)] data-[state=active]:text-white"
+          >
+            <Palette className="w-4 h-4" />
+            สินค้า+ตัวเลือก
           </TabsTrigger>
           <TabsTrigger 
             value="stock" 
@@ -455,6 +540,216 @@ FABRIC-001,WH01/B01,500,85`
                 <>
                   <Upload className="w-4 h-4 mr-2" />
                   นำเข้าสินค้า ({parseCSV(productCsvContent).length} รายการ)
+                </>
+              )}
+            </Button>
+          </div>
+        </TabsContent>
+
+        {/* Variant Import Tab */}
+        <TabsContent value="variants" className="space-y-6">
+          {/* Instructions */}
+          <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+            <CardHeader>
+              <CardTitle className="text-lg text-[var(--text-primary)]">คำแนะนำ - นำเข้าสินค้าพร้อมตัวเลือก (สี/ไซส์)</CardTitle>
+              <CardDescription className="text-[var(--text-muted)]">
+                นำเข้าสินค้าที่มีหลายสีหลายไซส์พร้อมกัน แต่ละแถวคือ 1 ตัวเลือก
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-[var(--text-primary)] font-medium mb-2">ข้อมูลสินค้า:</p>
+                  <ul className="text-[var(--text-muted)] space-y-1">
+                    <li>• <code className="text-[var(--status-info)]">รหัสสินค้า</code> - SKU หลัก (จำเป็น)</li>
+                    <li>• <code className="text-[var(--status-info)]">ชื่อสินค้า</code> - ชื่อ (จำเป็น)</li>
+                    <li>• <code className="text-[var(--status-info)]">หมวดหมู่</code></li>
+                    <li>• <code className="text-[var(--status-info)]">หน่วย</code></li>
+                    <li>• <code className="text-[var(--status-info)]">ต้นทุน</code></li>
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-[var(--text-primary)] font-medium mb-2">ข้อมูลตัวเลือก:</p>
+                  <ul className="text-[var(--text-muted)] space-y-1">
+                    <li>• <code className="text-[var(--accent-primary)]">Variant SKU</code> - รหัส Variant</li>
+                    <li>• <code className="text-[var(--accent-primary)]">สี</code> - สีของตัวเลือก</li>
+                    <li>• <code className="text-[var(--accent-primary)]">ไซส์</code> - ไซส์ของตัวเลือก</li>
+                    <li>• <code className="text-[var(--accent-primary)]">Barcode</code> - Barcode ของ Variant</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="p-3 bg-[var(--status-info)]/10 border border-[var(--status-info)]/30 rounded-lg">
+                <p className="text-[var(--status-info)] text-sm">
+                  💡 สินค้าเดียวกัน (SKU เดียวกัน) สามารถมีหลายแถวได้ ระบบจะจัดกลุ่มให้อัตโนมัติ
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={downloadVariantTemplate}
+                className="border-[var(--border-default)] text-[var(--text-secondary)]"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                ดาวน์โหลด Template
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Upload */}
+          <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+            <CardHeader>
+              <CardTitle className="text-lg text-[var(--text-primary)]">อัปโหลดไฟล์</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="border-2 border-dashed border-[var(--border-default)] rounded-lg p-8 text-center hover:border-[var(--status-info)]/50 transition-colors">
+                <FileSpreadsheet className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleVariantFileUpload}
+                  className="hidden"
+                  id="variant-csv-upload"
+                />
+                <label
+                  htmlFor="variant-csv-upload"
+                  className="cursor-pointer text-[var(--status-info)] hover:opacity-80 font-medium"
+                >
+                  เลือกไฟล์ CSV
+                </label>
+                <p className="text-[var(--text-muted)] text-sm mt-2">หรือวางเนื้อหา CSV ด้านล่าง</p>
+              </div>
+
+              <div className="space-y-2">
+                <Textarea
+                  value={variantCsvContent}
+                  onChange={(e) => setVariantCsvContent(e.target.value)}
+                  placeholder="รหัสสินค้า,ชื่อสินค้า,หมวดหมู่,หน่วย,ต้นทุน,Variant SKU,สี,ไซส์,Barcode&#10;SHIRT-001,เสื้อยืดคอกลม,เสื้อ,PCS,120,SHIRT-001-WH-S,ขาว,S,8851234567890"
+                  rows={6}
+                  className="bg-[var(--bg-tertiary)] border-[var(--border-default)] text-[var(--text-primary)] font-mono text-sm"
+                />
+                <Button
+                  onClick={() => handleVariantPreview()}
+                  disabled={!variantCsvContent}
+                  variant="outline"
+                  className="border-[var(--border-default)] text-[var(--text-secondary)]"
+                >
+                  แสดงตัวอย่าง
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Preview */}
+          {variantPreviewProducts.length > 0 && (
+            <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+              <CardHeader>
+                <CardTitle className="text-lg text-[var(--text-primary)] flex items-center justify-between">
+                  <span>ตัวอย่างข้อมูล ({variantPreviewProducts.length} สินค้า, {variantPreviewProducts.reduce((sum, p) => sum + p.variants.length, 0)} ตัวเลือก)</span>
+                  <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)]">พร้อมนำเข้า</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {variantPreviewProducts.map((product, idx) => (
+                  <div key={idx} className="border border-[var(--border-default)] rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-medium text-[var(--text-primary)]">{product.name}</p>
+                        <p className="text-sm text-[var(--text-muted)]">
+                          SKU: <span className="font-mono text-[var(--status-info)]">{product.sku}</span>
+                          {product.categoryName && <span className="ml-3">หมวด: {product.categoryName}</span>}
+                        </p>
+                      </div>
+                      <Badge className="bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]">
+                        {product.variants.length} ตัวเลือก
+                      </Badge>
+                    </div>
+                    {product.variants.length > 0 && (
+                      <div className="bg-[var(--bg-tertiary)] rounded-lg p-3">
+                        <div className="flex flex-wrap gap-2">
+                          {product.variants.map((v, vIdx) => (
+                            <div key={vIdx} className="bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-md px-3 py-1.5 text-sm">
+                              <span className="font-mono text-[var(--accent-primary)]">{v.variantSku}</span>
+                              <span className="text-[var(--text-muted)] ml-2">
+                                {[v.color, v.size].filter(Boolean).join(' / ')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Import Result */}
+          {variantImportResult && (
+            <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+              <CardHeader>
+                <CardTitle className="text-lg text-[var(--text-primary)] flex items-center gap-2">
+                  {variantImportResult.errors.length === 0 ? (
+                    <Check className="w-5 h-5 text-[var(--status-success)]" />
+                  ) : (
+                    <X className="w-5 h-5 text-[var(--status-warning)]" />
+                  )}
+                  ผลการนำเข้า
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="text-center p-4 bg-[var(--status-success-light)] rounded-lg border border-[var(--status-success)]/20">
+                    <p className="text-2xl font-bold text-[var(--status-success)]">{variantImportResult.productsCreated}</p>
+                    <p className="text-sm text-[var(--text-muted)]">สินค้าใหม่</p>
+                  </div>
+                  <div className="text-center p-4 bg-[var(--status-info)]/10 rounded-lg border border-[var(--status-info)]/20">
+                    <p className="text-2xl font-bold text-[var(--status-info)]">{variantImportResult.productsUpdated}</p>
+                    <p className="text-sm text-[var(--text-muted)]">สินค้าอัปเดต</p>
+                  </div>
+                  <div className="text-center p-4 bg-[var(--accent-primary)]/10 rounded-lg border border-[var(--accent-primary)]/20">
+                    <p className="text-2xl font-bold text-[var(--accent-primary)]">{variantImportResult.variantsCreated}</p>
+                    <p className="text-sm text-[var(--text-muted)]">ตัวเลือกใหม่</p>
+                  </div>
+                  <div className="text-center p-4 bg-[var(--status-error)]/10 rounded-lg border border-[var(--status-error)]/20">
+                    <p className="text-2xl font-bold text-[var(--status-error)]">{variantImportResult.errors.length}</p>
+                    <p className="text-sm text-[var(--text-muted)]">ข้อผิดพลาด</p>
+                  </div>
+                </div>
+
+                {variantImportResult.errors.length > 0 && (
+                  <div className="bg-[var(--status-error)]/10 border border-[var(--status-error)]/20 rounded-lg p-4">
+                    <p className="text-[var(--status-error)] font-medium mb-2">ข้อผิดพลาด:</p>
+                    <ul className="text-sm text-[var(--status-error)]/80 space-y-1 max-h-40 overflow-y-auto">
+                      {variantImportResult.errors.map((err, idx) => (
+                        <li key={idx}>• {err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3">
+            <Link href="/products">
+              <Button variant="outline" className="border-[var(--border-default)] text-[var(--text-secondary)]">
+                ยกเลิก
+              </Button>
+            </Link>
+            <Button
+              onClick={handleVariantImport}
+              disabled={isImportingVariants || variantPreviewProducts.length === 0}
+              className="bg-[var(--status-info)] hover:opacity-90"
+            >
+              {isImportingVariants ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  กำลังนำเข้า...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-2" />
+                  นำเข้าสินค้า+ตัวเลือก
                 </>
               )}
             </Button>
