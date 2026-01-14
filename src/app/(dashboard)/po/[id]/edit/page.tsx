@@ -147,10 +147,10 @@ export default function EditPOPage(props: PageProps) {
 
   // Calculate totals
   const subtotal = lines.reduce((sum, line) => sum + (line.qty * line.unitPrice), 0)
-  const vatAmount = vatType === 'INCLUSIVE' || vatType === 'EXCLUSIVE' 
+  const vatAmount = vatType === 'INCLUDED' || vatType === 'EXCLUDED' 
     ? subtotal * (vatRate / 100) 
     : 0
-  const total = vatType === 'EXCLUSIVE' ? subtotal + vatAmount : subtotal
+  const total = vatType === 'EXCLUDED' ? subtotal + vatAmount : subtotal
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -177,7 +177,7 @@ export default function EditPOPage(props: PageProps) {
       eta: eta ? new Date(eta) : undefined,
       terms,
       note,
-      vatType: vatType as 'NO_VAT' | 'INCLUSIVE' | 'EXCLUSIVE',
+      vatType: vatType as 'NO_VAT' | 'INCLUDED' | 'EXCLUDED',
       vatRate,
       lines: lines.map((line) => ({
         id: line.id.startsWith('new-') ? undefined : line.id,
@@ -246,8 +246,8 @@ export default function EditPOPage(props: PageProps) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="NO_VAT">ไม่มี VAT</SelectItem>
-                    <SelectItem value="INCLUSIVE">รวม VAT แล้ว</SelectItem>
-                    <SelectItem value="EXCLUSIVE">ยังไม่รวม VAT</SelectItem>
+                    <SelectItem value="INCLUDED">รวม VAT แล้ว</SelectItem>
+                    <SelectItem value="EXCLUDED">ยังไม่รวม VAT</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

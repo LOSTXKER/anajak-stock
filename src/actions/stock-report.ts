@@ -24,7 +24,6 @@ export async function getStockReport() {
       select: {
         productId: true,
         qtyOnHand: true,
-        qtyReserved: true,
         product: {
           select: {
             sku: true,
@@ -69,8 +68,6 @@ export async function getStockReport() {
       locationCode: sb.location.code,
       warehouseName: sb.location.warehouse.name,
       qtyOnHand: Number(sb.qtyOnHand),
-      qtyReserved: Number(sb.qtyReserved),
-      qtyAvailable: Number(sb.qtyOnHand) - Number(sb.qtyReserved),
       unitCost: Number(sb.variant?.costPrice || sb.product.standardCost || 0),
       stockValue: Number(sb.qtyOnHand) * Number(sb.variant?.costPrice || sb.product.standardCost || 0),
     }))
@@ -141,8 +138,6 @@ export async function exportStockReportToCSV(filters: StockReportFilters) {
       'คลังสินค้า',
       'ตำแหน่ง',
       'คงเหลือ',
-      'จอง',
-      'พร้อมใช้',
       'ต้นทุน/หน่วย',
       'มูลค่า',
     ]
@@ -155,8 +150,6 @@ export async function exportStockReportToCSV(filters: StockReportFilters) {
       item.warehouseName,
       item.locationCode,
       item.qtyOnHand,
-      item.qtyReserved,
-      item.qtyAvailable,
       item.unitCost,
       item.stockValue,
     ])

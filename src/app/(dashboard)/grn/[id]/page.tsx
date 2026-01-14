@@ -53,9 +53,6 @@ async function getGRN(id: string) {
       receivedBy: {
         select: { id: true, name: true, email: true },
       },
-      postedBy: {
-        select: { id: true, name: true },
-      },
       lines: {
         include: {
           product: {
@@ -64,11 +61,6 @@ async function getGRN(id: string) {
             },
           },
           variant: true,
-          location: {
-            include: {
-              warehouse: true,
-            },
-          },
         },
       },
     },
@@ -91,7 +83,7 @@ async function GRNDetail({ id }: { id: string }) {
   const userRole = session?.role || 'VIEWER'
   const canPost = grn.status === 'DRAFT' && ['ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER'].includes(userRole)
 
-  const totalQty = grn.lines.reduce((sum, line) => sum + Number(line.receivedQty), 0)
+  const totalQty = grn.lines.reduce((sum, line) => sum + Number(line.qtyReceived), 0)
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -166,24 +158,6 @@ async function GRNDetail({ id }: { id: string }) {
           </CardContent>
         </Card>
 
-        {grn.postedBy && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-[var(--text-muted)] flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" />
-                ผู้บันทึก
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="font-medium">{grn.postedBy.name}</p>
-              {grn.postedAt && (
-                <p className="text-sm text-[var(--text-muted)]">
-                  {format(new Date(grn.postedAt), 'd/M/yyyy HH:mm')}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       {/* Linked PO */}
@@ -243,7 +217,6 @@ async function GRNDetail({ id }: { id: string }) {
                 <TableHead className="w-12">#</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>สินค้า</TableHead>
-                <TableHead>ตำแหน่งจัดเก็บ</TableHead>
                 <TableHead className="text-right">จำนวนรับ</TableHead>
                 <TableHead>หน่วย</TableHead>
               </TableRow>
@@ -268,18 +241,8 @@ async function GRNDetail({ id }: { id: string }) {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm text-[var(--text-muted)]">
-                    {line.location ? (
-                      <div className="flex items-center gap-1">
-                        <Badge variant="outline" className="text-xs font-normal">
-                          {line.location.warehouse.name}
-                        </Badge>
-                        <span className="font-mono">{line.location.code}</span>
-                      </div>
-                    ) : '-'}
-                  </TableCell>
                   <TableCell className="text-right font-mono font-medium">
-                    {Number(line.receivedQty).toLocaleString()}
+                    {Number(line.qtyReceived).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-[var(--text-muted)]">
                     {line.product.unit?.name || '-'}

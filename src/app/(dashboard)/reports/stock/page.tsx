@@ -39,8 +39,6 @@ interface StockReportItem {
   locationCode: string
   warehouseName: string
   qtyOnHand: number
-  qtyReserved: number
-  qtyAvailable: number
   unitCost: number
   stockValue: number
 }
@@ -290,8 +288,6 @@ export default function StockReportPage() {
                     <TableHead>คลัง</TableHead>
                     <TableHead>ตำแหน่ง</TableHead>
                     <TableHead className="text-right">คงเหลือ</TableHead>
-                    <TableHead className="text-right">จอง</TableHead>
-                    <TableHead className="text-right">พร้อมใช้</TableHead>
                     <TableHead className="text-right">ต้นทุน/หน่วย</TableHead>
                     <TableHead className="text-right">มูลค่า</TableHead>
                   </TableRow>
@@ -323,12 +319,6 @@ export default function StockReportPage() {
                         <span className={item.qtyOnHand === 0 ? 'text-[var(--status-error)]' : ''}>
                           {item.qtyOnHand.toLocaleString()}
                         </span>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-[var(--text-muted)]">
-                        {item.qtyReserved.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-medium text-[var(--status-success)]">
-                        {item.qtyAvailable.toLocaleString()}
                       </TableCell>
                       <TableCell className="text-right font-mono text-[var(--text-muted)]">
                         ฿{item.unitCost.toLocaleString()}
