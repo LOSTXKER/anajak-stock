@@ -33,3 +33,9 @@ export { SearchFilter, SimpleSearch } from './search-filter'
 
 // Dialogs
 export { ConfirmDialog, DeleteConfirmDialog } from './confirm-dialog'
+
+// Help
+export { HelpTooltip, InlineHelp, FeatureBadge } from './help-tooltip'
+
+// Onboarding
+export { WelcomeTour, OnboardingChecklist } from './welcome-tour'

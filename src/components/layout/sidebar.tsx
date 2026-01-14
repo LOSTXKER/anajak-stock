@@ -24,6 +24,7 @@ import {
   Calendar,
   FileStack,
   Scan,
+  HelpCircle,
 } from 'lucide-react'
 import { Role } from '@/generated/prisma'
 import { hasPermission } from '@/lib/permissions'
@@ -133,6 +134,14 @@ const settingsMenuItem: MenuItem = {
   icon: Settings,
   permission: null,
   adminOnly: true,
+}
+
+// Help - available to all users
+const helpMenuItem: MenuItem = {
+  title: 'คู่มือการใช้งาน',
+  href: '/help',
+  icon: HelpCircle,
+  permission: null,
 }
 
 export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
@@ -370,6 +379,7 @@ export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
             )}
             {collapsed && <div className="h-3" />}
             {renderMenuItem(settingsMenuItem)}
+            {renderMenuItem(helpMenuItem)}
           </>
         )}
       </nav>

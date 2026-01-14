@@ -31,7 +31,7 @@ import { getLocations } from '@/actions/stock'
 import { toast } from 'sonner'
 import { MovementType } from '@/generated/prisma'
 import type { ProductWithRelations, LocationWithWarehouse } from '@/types'
-import { PageHeader } from '@/components/common'
+import { PageHeader, HelpTooltip } from '@/components/common'
 import { CascadingVariantPicker } from '@/components/variants'
 
 interface PageProps {
