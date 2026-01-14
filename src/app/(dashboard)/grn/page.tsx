@@ -158,8 +158,13 @@ async function GRNContent({ searchParams }: PageProps) {
 
                   return (
                     <TableRow key={grn.id}>
-                      <TableCell className="font-mono text-sm text-[var(--accent-primary)]">
-                        {grn.grnNumber}
+                      <TableCell className="font-mono text-sm">
+                        <Link
+                          href={`/grn/${grn.id}`}
+                          className="text-[var(--accent-primary)] hover:underline"
+                        >
+                          {grn.grnNumber}
+                        </Link>
                       </TableCell>
                       <TableCell>
                         <Link

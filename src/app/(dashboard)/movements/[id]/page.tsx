@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
+import { getSession } from '@/lib/auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +16,7 @@ import {
 } from '@/components/ui/table'
 import { ArrowLeft, ArrowLeftRight, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, CheckCircle2, XCircle, Clock, Send, FileText } from 'lucide-react'
 import { MovementStats } from './movement-stats'
+import { MovementActions } from './movement-actions'
 import { EmptyState } from '@/components/common'
 
 interface PageProps {
@@ -112,7 +114,10 @@ async function getMovement(id: string) {
 }
 
 async function MovementDetail({ id }: { id: string }) {
-  const movement = await getMovement(id)
+  const [movement, session] = await Promise.all([
+    getMovement(id),
+    getSession(),
+  ])
 
   if (!movement) {
     notFound()
@@ -121,6 +126,11 @@ async function MovementDetail({ id }: { id: string }) {
   const totalQty = movement.lines.reduce((sum, line) => sum + Number(line.qty), 0)
   const typeInfo = typeConfig[movement.type] || typeConfig.ISSUE
   const statusInfo = statusConfig[movement.status] || statusConfig.DRAFT
+
+  // Check permissions
+  const userRole = session?.role || 'VIEWER'
+  const canApprove = ['ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER'].includes(userRole)
+  const canEdit = movement.createdById === session?.id || ['ADMIN', 'MANAGER'].includes(userRole)
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -155,6 +165,14 @@ async function MovementDetail({ id }: { id: string }) {
             </p>
           </div>
         </div>
+        
+        {/* Actions */}
+        <MovementActions
+          movementId={movement.id}
+          status={movement.status}
+          canApprove={canApprove}
+          canEdit={canEdit}
+        />
       </div>
 
       {/* Stats Cards */}

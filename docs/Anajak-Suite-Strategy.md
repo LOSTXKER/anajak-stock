@@ -1,523 +1,669 @@
-# Anajak Suite - แผนพัฒนาระบบจัดการธุรกิจ SME
+# 🏢 Anajak Suite - Business Management Platform for Thai SMEs
 
-## 0) วิสัยทัศน์ (Vision)
-
-> **"ทำทีละอย่างให้เป็นที่ 1 แล้วค่อยรวมเป็น Suite"**
-
-สร้าง ecosystem ของแอปพลิเคชันสำหรับธุรกิจ SME ที่:
-- แต่ละแอปทำหน้าที่เดียว แต่ทำได้ดีที่สุด
-- เชื่อมต่อกันได้อย่างไร้รอยต่อ
-- ใช้งานง่าย ราคาเข้าถึงได้
-- แข่งขันกับ Specialist ในแต่ละด้านได้
+> ระบบจัดการธุรกิจครบวงจรสำหรับ SME ไทย
 
 ---
 
-## 1) แผนผังผลิตภัณฑ์ (Product Suite)
+## 📋 สารบัญ
+
+1. [วิสัยทัศน์และพันธกิจ](#วิสัยทัศน์และพันธกิจ)
+2. [Product Model: แบบ Google / Adobe](#product-model-แบบ-google--adobe)
+3. [ภาพรวมผลิตภัณฑ์](#ภาพรวมผลิตภัณฑ์)
+4. [สถาปัตยกรรมระบบ](#สถาปัตยกรรมระบบ)
+5. [รายละเอียดแต่ละ App](#รายละเอียดแต่ละ-app)
+6. [Technology Stack](#technology-stack)
+7. [Roadmap](#roadmap)
+8. [Business Model](#business-model)
+9. [การแข่งขัน](#การแข่งขัน)
+
+---
+
+## 🎯 วิสัยทัศน์และพันธกิจ
+
+### Vision
+> "ทำให้ทุก SME ไทยเข้าถึงระบบจัดการธุรกิจระดับมืออาชีพ ในราคาที่จับต้องได้"
+
+### Mission
+- สร้างระบบที่ใช้งานง่าย ไม่ต้องเป็น IT ก็ใช้ได้
+- ราคาเหมาะสมกับ SME (ไม่ใช่ Enterprise pricing)
+- ออกแบบสำหรับบริบทธุรกิจไทย (ภาษาไทย, ภาษี, กฎหมาย)
+- เชื่อมต่อกับระบบที่ SME ใช้อยู่ (PEAK, Line, Shopee, Lazada)
+
+### Target Users
+- ธุรกิจ SME ขนาด 1-50 คน
+- ร้านค้าออนไลน์ / Reseller
+- ธุรกิจค้าส่ง / ค้าปลีก
+- ธุรกิจบริการ
+- Startup ขนาดเล็ก
+
+---
+
+## 🧩 Product Model: แบบ Google / Adobe
+
+### แนวคิด: Suite of Independent Apps
+
+Anajak Suite ใช้โมเดลเดียวกับ **Google Workspace** และ **Adobe Creative Cloud**:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      ANAJAK SUITE                           │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   STOCK     │  │    CHAT     │  │ PRODUCTION  │         │
-│  │   ✅ Done   │  │   Phase 2   │  │   Phase 3   │         │
-│  │             │  │             │  │             │         │
-│  │ • Inventory │  │ • Multi-ch  │  │ • BOM       │         │
-│  │ • PR/PO/GRN │  │ • Order Mgt │  │ • Work Order│         │
-│  │ • Reports   │  │ • Auto-reply│  │ • Planning  │         │
-│  │ • Analytics │  │ • CRM basic │  │ • Costing   │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-│         │                │                │                 │
-│         └────────────────┼────────────────┘                 │
-│                          │                                  │
-│                    ┌─────┴─────┐                           │
-│                    │  CONNECT  │                           │
-│                    │  (Core)   │                           │
-│                    └───────────┘                           │
-│                                                             │
-├─────────────────────────────────────────────────────────────┤
-│                   INTEGRATIONS                              │
-│  [PEAK] [LINE] [Facebook] [Shopee] [Lazada] [Bank API]     │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         GOOGLE                                   │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐        │
+│  │ Gmail  │ │ Drive  │ │  Docs  │ │ Sheets │ │  Meet  │ ...    │
+│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘        │
+│                    ↓ Google Account (SSO) ↓                      │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                         ADOBE                                    │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐        │
+│  │Photoshop│ │Illustr│ │Premiere│ │  XD    │ │Lightroom│ ...   │
+│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘        │
+│                    ↓ Adobe ID (SSO) ↓                            │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      ANAJAK SUITE                                │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐        │
+│  │ Stock  │ │ Sales  │ │  HRM   │ │  Chat  │ │  POS   │ ...    │
+│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘        │
+│                    ↓ Anajak ID (SSO) ↓                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### หลักการสำคัญ
+
+| หลักการ | รายละเอียด | ตัวอย่าง |
+|---------|------------|---------|
+| **🔐 Single Sign-On (SSO)** | เข้าสู่ระบบครั้งเดียว ใช้ได้ทุก App | Anajak ID |
+| **📦 Independent Apps** | แต่ละ App ทำงานเดี่ยวได้ ไม่ต้องพึ่งพา App อื่น | Stock ใช้ได้เดี่ยวๆ |
+| **🔗 Seamless Integration** | Apps เชื่อมต่อกันได้อย่างราบรื่น | Sales ดึงสินค้าจาก Stock |
+| **🛒 Flexible Purchasing** | ซื้อแยก App หรือซื้อเป็น Bundle | Retail Bundle |
+| **🎨 Consistent Design** | ทุก App ใช้ Design System เดียวกัน | Anajak UI |
+
+### เปรียบเทียบกับคู่แข่ง
+
+| | **Google** | **Adobe** | **Anajak** |
+|---|-----------|----------|------------|
+| **SSO** | Google Account | Adobe ID | Anajak ID |
+| **แยก Apps** | ✅ | ✅ | ✅ |
+| **Data Sharing** | ✅ Drive ↔ Docs | ✅ PS ↔ AI | ✅ Stock ↔ Sales |
+| **Bundle Pricing** | ✅ Workspace | ✅ Creative Cloud | ✅ Suite Plans |
+| **Design System** | Material Design | Adobe Spectrum | Anajak UI |
+| **Cloud-based** | ✅ | ✅ | ✅ |
+
+### ข้อดีของโมเดลนี้
+
+| ข้อดี | สำหรับลูกค้า | สำหรับเรา |
+|------|--------------|----------|
+| **🎯 โฟกัส** | แต่ละ App ทำได้ดี ไม่จับฉ่าย | พัฒนาทีละ App ได้ |
+| **💰 ประหยัด** | ซื้อเฉพาะที่ต้องการ | หลาย Revenue Stream |
+| **🔧 ยืดหยุ่น** | เพิ่ม/ลด App ได้ตามต้องการ | ทีมแยกดูแลได้ |
+| **🚀 Scalable** | เติบโตไปพร้อมธุรกิจ | เพิ่ม App ใหม่ง่าย |
+| **🔄 ไม่ผูกมัด** | ไม่ต้องซื้อทั้งหมด | ลูกค้าเข้าถึงได้ง่าย |
+
+### การเชื่อมต่อระหว่าง Apps
+
+```
+📦 Stock                    🛒 Sales
+├── สินค้า     ──────────▶  ├── ดึงสินค้ามาขาย
+├── สต๊อค      ◀──────────  ├── หักสต๊อคเมื่อขาย
+└── ราคาทุน   ──────────▶  └── คำนวณกำไร
+
+🛒 Sales                    💰 Account (PEAK)
+├── Invoice   ──────────▶  ├── บันทึกบัญชี
+└── ยอดขาย    ──────────▶  └── ภาษี
+
+👥 HRM                      📊 BI
+├── พนักงาน  ──────────▶  ├── รายงานบุคคล
+└── เงินเดือน ──────────▶  └── วิเคราะห์ต้นทุน
+
+🛍️ POS                      📦 Stock
+├── ขาย       ──────────▶  ├── หักสต๊อค Real-time
+└── รายงาน    ◀──────────  └── เช็คสต๊อค
+
+💬 Chat                     🛒 Sales
+├── แชทลูกค้า ──────────▶  ├── สร้าง Lead
+└── Support   ──────────▶  └── สร้าง Ticket
+```
+
+### Bundle Packages (ตัวอย่าง)
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│  🛍️ RETAIL BUNDLE         🏢 OFFICE BUNDLE       🎯 ALL-IN-ONE       │
+│  ─────────────────         ────────────────       ─────────────       │
+│  สำหรับร้านค้า             สำหรับสำนักงาน         ทุกอย่างครบ         │
+│                                                                        │
+│  • Stock ✅                • HRM ✅               • ทุก App ✅         │
+│  • Sales ✅                • Chat ✅                                   │
+│  • POS ✅                  • BI ✅                                     │
+│  • Delivery ✅                                                         │
+│                                                                        │
+│  ฿999/เดือน                ฿799/เดือน            ฿1,499/เดือน        │
+│  (ประหยัด 30%)            (ประหยัด 25%)          (ประหยัด 40%)        │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+### ❓ ทำไมไม่ทำเป็น App เดียวจบ?
+
+> **คำถามที่พบบ่อย:** "ทำไมไม่รวม Sales กับ Stock เป็นแอปเดียว?" หรือ "ทำไมไม่ทำ All-in-One ERP?"
+
+#### 🔴 ปัญหาของ All-in-One App
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ❌ ALL-IN-ONE APP                            │
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │  Stock + Sales + HRM + Chat + POS + Delivery + BI + ...   │ │
+│  │                                                            │ │
+│  │  • ซับซ้อน ใช้งานยาก                                        │ │
+│  │  • ต้องจ่ายทั้งหมด แม้ใช้แค่บางส่วน                          │ │
+│  │  • Update ยาก กระทบทั้งระบบ                                 │ │
+│  │  • เหมาะกับองค์กรใหญ่ ไม่ใช่ SME                             │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│  ตัวอย่าง: SAP, Oracle → ราคาแพง, ใช้ยาก, ต้องจ้าง Consultant  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### เปรียบเทียบ 2 แนวทาง
+
+| | **All-in-One App** | **Suite of Apps** |
+|---|-------------------|-------------------|
+| **ความซับซ้อน** | 😵 ซับซ้อน เมนูเยอะ | 😊 แต่ละ App เรียบง่าย |
+| **เวลาเรียนรู้** | ⏰ นาน ต้องอบรม | ⚡ เร็ว ใช้งานได้เลย |
+| **ราคา** | 💰 จ่ายทั้งหมด | 💵 จ่ายเฉพาะที่ใช้ |
+| **Flexibility** | 🔒 ถูกบังคับใช้ทั้งหมด | 🔓 เลือกได้ตามต้องการ |
+| **Updates** | 🐢 ช้า กลัว Breaking | 🚀 เร็ว แยก Release |
+| **Performance** | 🐌 หนัก โหลดทุกอย่าง | ⚡ เบา โหลดเฉพาะที่ใช้ |
+| **เหมาะกับ** | 🏭 Enterprise | 🏪 SME |
+
+#### 🟢 ทำไม Suite of Apps ดีกว่าสำหรับ SME
+
+**1. 💰 ประหยัดเงิน - จ่ายเท่าที่ใช้**
+```
+ร้านขายของออนไลน์เล็กๆ:
+❌ All-in-One: จ่าย ฿3,000/เดือน (ได้ HRM, Manufacturing ที่ไม่ใช้)
+✅ Suite:      จ่าย ฿499/เดือน  (ซื้อแค่ Stock)
+```
+
+**2. 🎯 ไม่งง - แต่ละ App ทำหน้าที่เดียว**
+```
+❌ All-in-One: เมนู 50+ อัน ไม่รู้จะเริ่มตรงไหน
+✅ Suite:      Stock = จัดการคลัง, Sales = ขายของ (ชัดเจน)
+```
+
+**3. 🚀 เติบโตไปด้วยกัน**
+```
+วันนี้:    ใช้แค่ Stock (ฟรี)
+เดือนหน้า: เพิ่ม Sales (฿499)
+ปีหน้า:    เพิ่ม HRM + Chat (฿799)
+
+→ จ่ายตามการเติบโต ไม่ต้องลงทุนก้อนใหญ่ตั้งแต่แรก
+```
+
+**4. 🔧 เลือกสิ่งที่ดีที่สุด**
+```
+บางธุรกิจ:
+• ใช้ Anajak Stock (คลัง)
+• ใช้ PEAK (บัญชี) ← เพราะนักบัญชีคุ้นเคย
+• ใช้ Anajak Chat (แชท)
+
+→ ไม่ถูกบังคับใช้ทั้งหมดจากเจ้าเดียว
+```
+
+#### 🤔 แล้วมันไม่ยุ่งยากเหรอ ใช้หลาย App?
+
+**ไม่ยุ่งยากครับ เพราะ:**
+
+| ความกังวล | วิธีแก้ |
+|-----------|--------|
+| **"ต้อง Login หลายครั้ง"** | ❌ ไม่ต้อง! SSO เข้าครั้งเดียว ใช้ได้ทุก App |
+| **"ข้อมูลไม่เชื่อมกัน"** | ❌ ไม่จริง! Data Sync อัตโนมัติ |
+| **"หน้าตาไม่เหมือนกัน"** | ❌ ไม่จริง! ใช้ Design System เดียวกัน |
+| **"ต้องเปิดหลายหน้าต่าง"** | มี Portal รวม Dashboard ทุก App |
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    🏠 ANAJAK PORTAL                             │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  🔐 Login ครั้งเดียว → เข้าถึงทุก App                      │  │
+│  │                                                           │  │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐        │  │
+│  │  │📦 Stock │ │🛒 Sales │ │👥 HRM   │ │💬 Chat  │        │  │
+│  │  │  คลิก   │ │  คลิก   │ │  คลิก   │ │  คลิก   │        │  │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘        │  │
+│  │                                                           │  │
+│  │  📊 Dashboard รวม: ยอดขาย + สต๊อค + พนักงาน              │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 📌 สรุป: ทำไมเลือก Suite ไม่ใช่ All-in-One
+
+| เหตุผล | อธิบาย |
+|--------|--------|
+| **🎯 SME First** | ออกแบบมาสำหรับธุรกิจเล็ก ไม่ใช่ Enterprise |
+| **💰 Pay as you grow** | จ่ายตามที่ใช้ ไม่ต้องลงทุนก้อนใหญ่ |
+| **🧩 Modular** | เพิ่ม/ลด App ได้ตามความต้องการ |
+| **🚀 Fast & Light** | แต่ละ App เบา โหลดเร็ว |
+| **🔗 Connected** | เชื่อมกันได้ แม้แยก App |
+| **🌐 Open** | เชื่อมกับระบบอื่นได้ (PEAK, Shopee, etc.) |
+
+---
+
+## 📱 ภาพรวมผลิตภัณฑ์
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        🏢 ANAJAK SUITE                              │
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                    🏠 Anajak Portal                          │   │
+│  │              (Dashboard รวม / SSO / Settings)                 │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │
+│  │   📦    │ │   🛒    │ │   💰    │ │   👥    │ │   💬    │      │
+│  │  Stock  │ │  Sales  │ │ Account │ │   HRM   │ │  Chat   │      │
+│  │   ✅    │ │   📋    │ │  🔗     │ │   📋    │ │   📋    │      │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘      │
+│                                                                      │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │
+│  │   🛍️   │ │   🚚    │ │   📊    │ │   🔌    │ │   🤖    │      │
+│  │   POS   │ │Delivery │ │   BI    │ │ Connect │ │   AI    │      │
+│  │   📋    │ │   📋    │ │   📋    │ │   📋    │ │   📋    │      │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘      │
+│                                                                      │
+│  ✅ = เสร็จแล้ว   🔗 = เชื่อมระบบอื่น   📋 = วางแผน                    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Apps ทั้งหมด
+
+| App | ชื่อ | รายละเอียด | สถานะ |
+|-----|-----|------------|-------|
+| 📦 | **Anajak Stock** | คลังสินค้า, PR/PO/GRN, สต๊อค | ✅ Done |
+| 🛒 | **Anajak Sales** | ขาย, ใบเสนอราคา, Invoice, CRM | 📋 Plan |
+| 💰 | **Anajak Account** | บัญชี, ภาษี (หรือเชื่อม PEAK) | 🔗 Integrate |
+| 👥 | **Anajak HRM** | พนักงาน, เงินเดือน, ลางาน | 📋 Plan |
+| 💬 | **Anajak Chat** | แชทภายใน, แชทลูกค้า, Ticket | 📋 Plan |
+| 🛍️ | **Anajak POS** | ขายหน้าร้าน, ขายบูธ | 📋 Plan |
+| 🚚 | **Anajak Delivery** | จัดส่ง, Tracking, ขนส่ง | 📋 Plan |
+| 📊 | **Anajak BI** | Dashboard, รายงาน, วิเคราะห์ | 📋 Plan |
+| 🔌 | **Anajak Connect** | API Hub, Marketplace Sync | 📋 Plan |
+| 🤖 | **Anajak AI** | AI Assistant, พยากรณ์, แนะนำ | 📋 Plan |
+
+---
+
+## 🏗️ สถาปัตยกรรมระบบ
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         CLIENTS                                  │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
+│  │   Web   │  │ Mobile  │  │   API   │  │ Widget  │            │
+│  │  (PWA)  │  │  (RN)   │  │ Client  │  │ Embed   │            │
+│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘            │
+└───────┼────────────┼────────────┼────────────┼──────────────────┘
+        │            │            │            │
+        └────────────┴────────────┴────────────┘
+                           │
+┌──────────────────────────┼──────────────────────────────────────┐
+│                    API GATEWAY                                   │
+│              (Authentication, Rate Limit, Routing)               │
+└──────────────────────────┼──────────────────────────────────────┘
+                           │
+┌──────────────────────────┼──────────────────────────────────────┐
+│                     SERVICES                                     │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
+│  │  Auth   │  │  Stock  │  │  Sales  │  │   HRM   │  ...       │
+│  │ Service │  │ Service │  │ Service │  │ Service │            │
+│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘            │
+└───────┼────────────┼────────────┼────────────┼──────────────────┘
+        │            │            │            │
+┌───────┴────────────┴────────────┴────────────┴──────────────────┐
+│                     SHARED LAYER                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │  Database   │  │    Cache    │  │   Storage   │              │
+│  │ (Supabase)  │  │   (Redis)   │  │    (S3)     │              │
+│  └─────────────┘  └─────────────┘  └─────────────┘              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Multi-Tenant Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      ORGANIZATION                                │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Organization ID: org_abc123                                  ││
+│  │ Name: ร้านเสื้อผ้า XYZ                                        ││
+│  │ Plan: Business                                               ││
+│  │ Apps: [Stock, Sales, HRM]                                    ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │   Admin     │  │   Manager   │  │    Staff    │              │
+│  │  (Owner)    │  │             │  │             │              │
+│  └─────────────┘  └─────────────┘  └─────────────┘              │
+│                                                                  │
+│  Data Isolation: Row-Level Security (RLS)                        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2) Roadmap
+## 📦 รายละเอียดแต่ละ App
 
-### Phase 1: Anajak Stock (ปัจจุบัน - Q1 2026)
-**สถานะ: ✅ เสร็จแล้ว**
+### 1. 📦 Anajak Stock (✅ เสร็จแล้ว)
 
-| Module | ฟีเจอร์ | สถานะ |
-|--------|---------|--------|
-| Inventory | สินค้า, Variants, หมวดหมู่ | ✅ |
-| Stock | สต๊อค, คลัง, โลเคชัน | ✅ |
-| Movement | รับเข้า/เบิกออก/โอน/ปรับยอด | ✅ |
-| PR/PO/GRN | จัดซื้อครบวงจร | ✅ |
-| Reports | 10+ รายงาน, Analytics | ✅ |
-| Barcode | สแกน QR/Barcode | ✅ |
-| Integration | PEAK Account, ERP API | ✅ |
+**สถานะ:** Production Ready
 
-**เป้าหมาย Phase 1:**
-- [ ] Launch ใช้งานจริง
-- [ ] หาลูกค้า Pilot 5-10 ราย
-- [ ] รับ Feedback ปรับปรุง
-- [ ] เตรียม SaaS Infrastructure
+**ฟีเจอร์:**
+- ✅ จัดการสินค้าและ Variants (สี/ไซส์)
+- ✅ คลังสินค้าหลาย Location
+- ✅ รับ/เบิก/โอน/ปรับยอด สต๊อค
+- ✅ ใบขอซื้อ (PR) → ใบสั่งซื้อ (PO) → รับสินค้า (GRN)
+- ✅ Barcode Scanner
+- ✅ รายงานและสถิติ
+- ✅ Import/Export Excel
+- ✅ API สำหรับเชื่อมต่อ
 
 ---
 
-### Phase 2: Anajak Chat (Q2-Q3 2026)
-**สถานะ: 📋 Planning**
+### 2. 🛒 Anajak Sales (📋 วางแผน)
 
-```
-┌─────────────────────────────────────────┐
-│            Anajak Chat                  │
-├─────────────────────────────────────────┤
-│                                         │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐ │
-│  │  LINE   │  │Facebook │  │ Instagram│ │
-│  │  OA     │  │ Messenger│ │  DM     │ │
-│  └────┬────┘  └────┬────┘  └────┬────┘ │
-│       │            │            │       │
-│       └────────────┼────────────┘       │
-│                    ▼                    │
-│  ┌─────────────────────────────────┐   │
-│  │         Unified Inbox           │   │
-│  │   • All chats in one place     │   │
-│  │   • Quick replies / Templates  │   │
-│  │   • Auto-assign to team        │   │
-│  │   • Customer profile           │   │
-│  └─────────────────────────────────┘   │
-│                    │                    │
-│                    ▼                    │
-│  ┌─────────────────────────────────┐   │
-│  │        Order Management         │   │
-│  │   • สร้าง Order จากแชท         │   │
-│  │   • ตัดสต๊อคอัตโนมัติ (→Stock) │   │
-│  │   • ติดตามสถานะจัดส่ง          │   │
-│  │   • แจ้งลูกค้าอัตโนมัติ        │   │
-│  └─────────────────────────────────┘   │
-│                                         │
-└─────────────────────────────────────────┘
-```
+**เป้าหมาย:** ระบบขายและ CRM สำหรับ B2B/B2C
 
 **ฟีเจอร์หลัก:**
-- [ ] เชื่อม LINE Official Account
+- [ ] ใบเสนอราคา (Quotation)
+- [ ] ใบสั่งขาย (Sales Order)
+- [ ] ใบแจ้งหนี้ (Invoice)
+- [ ] ใบเสร็จรับเงิน (Receipt)
+- [ ] จัดการลูกค้า (CRM)
+- [ ] ประวัติการซื้อ
+- [ ] ส่วนลด / โปรโมชั่น
+- [ ] เชื่อม Stock อัตโนมัติ
+
+**Flow:**
+```
+Quotation → Sales Order → Invoice → Receipt
+     ↓           ↓
+   ลูกค้า     หัก Stock
+```
+
+---
+
+### 3. 💰 Anajak Account (🔗 เชื่อม PEAK)
+
+**แนวทาง:** เชื่อมกับ PEAK Account แทนการทำเอง
+
+**เหตุผล:**
+- PEAK เป็นมาตรฐานบัญชีไทย
+- มี e-Tax Invoice
+- ลดเวลาพัฒนา
+- ลูกค้าหลายรายใช้ PEAK อยู่แล้ว
+
+**Integration:**
+- [ ] Sync ข้อมูลลูกค้า/Supplier
+- [ ] Push Invoice ไป PEAK
+- [ ] Pull ข้อมูลบัญชีกลับมา
+- [ ] Dashboard รวม
+
+---
+
+### 4. 👥 Anajak HRM (📋 วางแผน)
+
+**เป้าหมาย:** จัดการพนักงาน ลางาน เงินเดือน
+
+**ฟีเจอร์หลัก:**
+- [ ] ทะเบียนพนักงาน
+- [ ] โครงสร้างองค์กร
+- [ ] เข้า-ออกงาน (Check-in/out)
+- [ ] ลางาน / OT
+- [ ] คำนวณเงินเดือน
+- [ ] Payslip
+- [ ] ประกันสังคม / ภาษี
+
+---
+
+### 5. 💬 Anajak Chat (📋 วางแผน)
+
+**เป้าหมาย:** แชทภายในและแชทลูกค้า
+
+**ฟีเจอร์หลัก:**
+- [ ] แชทภายในทีม
+- [ ] ช่องแชทตาม Department
+- [ ] แชทลูกค้า (Live Chat Widget)
+- [ ] Ticket System
+- [ ] เชื่อม Line OA
 - [ ] เชื่อม Facebook Messenger
-- [ ] เชื่อม Instagram DM
-- [ ] Unified Inbox (แชทรวมทุกช่อง)
-- [ ] Quick Replies / Templates
-- [ ] Customer Profile & History
-- [ ] Order จากแชท → ตัดสต๊อค (เชื่อม Stock)
-- [ ] Auto-reply บอท
-- [ ] Team Assignment
-- [ ] Reports: Response time, Sales by channel
-
-**Integration กับ Stock:**
-```
-Customer แชทสั่งของ
-        ↓
-สร้าง Order ใน Chat
-        ↓
-ตัดสต๊อคใน Stock (Auto)
-        ↓
-สร้าง Movement (ISSUE)
-        ↓
-แจ้งลูกค้า "จัดส่งแล้ว"
-```
+- [ ] Chatbot พื้นฐาน
 
 ---
 
-### Phase 3: Anajak Production (Q4 2026 - Q1 2027)
-**สถานะ: 📋 Future**
+### 6. 🛍️ Anajak POS (📋 วางแผน)
 
-```
-┌─────────────────────────────────────────┐
-│          Anajak Production              │
-├─────────────────────────────────────────┤
-│                                         │
-│  ┌─────────────────────────────────┐   │
-│  │     Bill of Materials (BOM)     │   │
-│  │   • Parent-Child relationship  │   │
-│  │   • Multi-level BOM            │   │
-│  │   • Version control            │   │
-│  └─────────────────────────────────┘   │
-│                    │                    │
-│                    ▼                    │
-│  ┌─────────────────────────────────┐   │
-│  │        Work Order (WO)          │   │
-│  │   • Production planning        │   │
-│  │   • Material reservation       │   │
-│  │   • Progress tracking          │   │
-│  │   • Quality checkpoints        │   │
-│  └─────────────────────────────────┘   │
-│                    │                    │
-│                    ▼                    │
-│  ┌─────────────────────────────────┐   │
-│  │        Production Costing       │   │
-│  │   • Material cost              │   │
-│  │   • Labor cost                 │   │
-│  │   • Overhead allocation        │   │
-│  │   • Actual vs Standard         │   │
-│  └─────────────────────────────────┘   │
-│                                         │
-└─────────────────────────────────────────┘
-```
+**เป้าหมาย:** ขายหน้าร้าน / ขายบูธ
 
 **ฟีเจอร์หลัก:**
-- [ ] Bill of Materials (BOM)
-- [ ] Work Order Management
-- [ ] Production Planning (MRP lite)
-- [ ] Material Reservation
-- [ ] WIP Tracking
-- [ ] Production Costing
-- [ ] Quality Control Checkpoints
-- [ ] Machine/Workstation Management
+- [ ] หน้าจอขาย (Touch-friendly)
+- [ ] สแกน Barcode
+- [ ] รับชำระเงินสด / โอน / บัตร
+- [ ] พิมพ์ใบเสร็จ
+- [ ] เปิด-ปิดกะ
+- [ ] รายงานยอดขายรายวัน
+- [ ] Offline Mode
 
-**Integration กับ Stock:**
+---
+
+### 7. 🚚 Anajak Delivery (📋 วางแผน)
+
+**เป้าหมาย:** จัดการการจัดส่ง
+
+**ฟีเจอร์หลัก:**
+- [ ] สร้างใบจัดส่ง
+- [ ] เชื่อมขนส่ง (Kerry, Flash, J&T, ไปรษณีย์)
+- [ ] พิมพ์ใบปะหน้า
+- [ ] Tracking
+- [ ] แจ้งลูกค้าอัตโนมัติ
+- [ ] COD Management
+
+---
+
+### 8. 📊 Anajak BI (📋 วางแผน)
+
+**เป้าหมาย:** Dashboard และรายงานรวม
+
+**ฟีเจอร์หลัก:**
+- [ ] Dashboard รวมจากทุก App
+- [ ] สร้าง Report แบบ Drag & Drop
+- [ ] กราฟและแผนภูมิ
+- [ ] Export PDF / Excel
+- [ ] Schedule Report
+- [ ] Alerts & Notifications
+
+---
+
+### 9. 🔌 Anajak Connect (📋 วางแผน)
+
+**เป้าหมาย:** API Hub และ Marketplace Integration
+
+**ฟีเจอร์หลัก:**
+- [ ] Shopee Integration
+- [ ] Lazada Integration
+- [ ] Line OA Integration
+- [ ] Facebook Shop
+- [ ] WooCommerce
+- [ ] Webhook Management
+- [ ] API Marketplace
+
+---
+
+### 10. 🤖 Anajak AI (📋 วางแผน)
+
+**เป้าหมาย:** AI ช่วยการทำงาน
+
+**ฟีเจอร์หลัก:**
+- [ ] พยากรณ์ยอดขาย
+- [ ] แนะนำการสั่งซื้อ
+- [ ] Chatbot ตอบลูกค้า
+- [ ] วิเคราะห์ลูกค้า
+- [ ] ตรวจจับความผิดปกติ
+
+---
+
+## 💻 Technology Stack
+
+### Frontend
+```yaml
+Framework: Next.js 15+ (App Router)
+UI Library: Tailwind CSS + Shadcn/ui
+State: Zustand + React Query
+Forms: React Hook Form + Zod
+Charts: Recharts
+Animation: Framer Motion
 ```
-Work Order สร้าง
-        ↓
-Reserve วัตถุดิบจาก Stock
-        ↓
-เริ่มผลิต → Issue วัตถุดิบ
-        ↓
-ผลิตเสร็จ → Receive สินค้าสำเร็จ
-        ↓
-Update Stock Balance
+
+### Backend
+```yaml
+API: Next.js API Routes / tRPC
+Auth: Supabase Auth (SSO)
+Database: PostgreSQL (Supabase)
+Cache: Redis (Upstash)
+Queue: Inngest
+Storage: Supabase Storage / S3
+Email: Resend
+```
+
+### Infrastructure
+```yaml
+Hosting: Vercel
+Database: Supabase
+CDN: Vercel Edge
+Monitoring: Sentry
+Analytics: Posthog
+CI/CD: GitHub Actions
+```
+
+### Monorepo Structure
+```
+anajak-suite/
+├── apps/
+│   ├── portal/         # Main entry point
+│   ├── stock/          # Stock management
+│   ├── sales/          # Sales & CRM
+│   ├── hrm/            # HR management
+│   ├── chat/           # Chat system
+│   ├── pos/            # Point of Sale
+│   └── docs/           # Documentation
+│
+├── packages/
+│   ├── ui/             # @anajak/ui
+│   ├── auth/           # @anajak/auth
+│   ├── db/             # @anajak/db
+│   ├── api/            # @anajak/api
+│   ├── utils/          # @anajak/utils
+│   └── config/         # @anajak/config
+│
+├── turbo.json
+├── pnpm-workspace.yaml
+└── package.json
 ```
 
 ---
 
-### Phase 4+: Future Apps
+## 🗺️ Roadmap
 
-| App | คำอธิบาย | Priority |
-|-----|----------|----------|
-| **Anajak POS** | ระบบขายหน้าร้าน | Medium |
-| **Anajak Delivery** | จัดการขนส่ง/จัดส่ง | Medium |
-| **Anajak HR** | จัดการพนักงาน (หรือเชื่อม Eko) | Low |
-| **Anajak CRM** | จัดการลูกค้าเต็มรูป | Low |
+### 2025 Q1: Foundation ✅
+- [x] Anajak Stock - Core features
+- [x] Anajak Stock - PR/PO/GRN workflow
+- [x] Anajak Stock - Reports & Analytics
+- [x] Anajak Stock - API for integrations
 
----
+### 2025 Q2: Sales & Integration
+- [ ] Anajak Portal - SSO & Dashboard
+- [ ] Anajak Sales - Quotation & Invoice
+- [ ] PEAK Account Integration
+- [ ] Monorepo Setup
 
-## 3) สถาปัตยกรรมระบบ (Technical Architecture)
+### 2025 Q3: Operations
+- [ ] Anajak POS - Basic features
+- [ ] Anajak Delivery - Shipping integration
+- [ ] Anajak Connect - Shopee/Lazada sync
+- [ ] Mobile App (PWA)
 
-### 3.1 Anajak Connect (Core Platform)
+### 2025 Q4: People & Communication
+- [ ] Anajak HRM - Employee management
+- [ ] Anajak Chat - Internal chat
+- [ ] Anajak BI - Dashboard builder
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    ANAJAK CONNECT                           │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │                 Shared Services                      │   │
-│  ├─────────────────────────────────────────────────────┤   │
-│  │  Auth          │ Supabase Auth (SSO across apps)    │   │
-│  │  Users         │ User management, Roles             │   │
-│  │  Tenants       │ Multi-company/Multi-branch         │   │
-│  │  Billing       │ Subscription, Usage tracking       │   │
-│  │  Notifications │ Push, Email, LINE notify           │   │
-│  │  Storage       │ Supabase Storage (files/images)    │   │
-│  │  Events        │ Event bus (cross-app communication)│   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │                 Shared UI Library                    │   │
-│  ├─────────────────────────────────────────────────────┤   │
-│  │  • Design System (Colors, Typography, Spacing)      │   │
-│  │  • Component Library (shadcn/ui customized)         │   │
-│  │  • Layout Components (Sidebar, Header, etc.)        │   │
-│  │  • Common Components (Table, Form, Dialog, etc.)    │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 3.2 App Architecture (Per App)
-
-```
-┌─────────────────────────────────────────┐
-│              Anajak [App]               │
-├─────────────────────────────────────────┤
-│                                         │
-│  Next.js 16+ (App Router)               │
-│  ├── Server Components                  │
-│  ├── Server Actions                     │
-│  └── API Routes                         │
-│                                         │
-│  Prisma ORM                             │
-│  ├── Schema (per app)                   │
-│  ├── Migrations                         │
-│  └── Type-safe queries                  │
-│                                         │
-│  Supabase                               │
-│  ├── PostgreSQL (Database)              │
-│  ├── Auth (from Connect)                │
-│  ├── Storage (from Connect)             │
-│  └── Realtime (Subscriptions)           │
-│                                         │
-└─────────────────────────────────────────┘
-```
-
-### 3.3 Database Strategy
-
-**Option A: Shared Database (แนะนำสำหรับเริ่มต้น)**
-```
-┌─────────────────────────────────────────┐
-│           Supabase PostgreSQL           │
-├─────────────────────────────────────────┤
-│  Schema: public                         │
-│  ├── users, tenants (shared)            │
-│  ├── stock_* (Stock app)                │
-│  ├── chat_* (Chat app)                  │
-│  └── prod_* (Production app)            │
-└─────────────────────────────────────────┘
-```
-
-**Option B: Separate Databases (Scale later)**
-```
-┌──────────┐  ┌──────────┐  ┌──────────┐
-│  Stock   │  │   Chat   │  │Production│
-│    DB    │  │    DB    │  │    DB    │
-└────┬─────┘  └────┬─────┘  └────┬─────┘
-     │             │             │
-     └─────────────┼─────────────┘
-                   │
-            ┌──────┴──────┐
-            │   Connect   │
-            │   (Auth DB) │
-            └─────────────┘
-```
-
-### 3.4 Cross-App Communication
-
-```typescript
-// Event Bus Pattern
-interface AnajakEvent {
-  type: string
-  source: 'stock' | 'chat' | 'production'
-  payload: unknown
-  timestamp: Date
-  tenantId: string
-}
-
-// Example: Chat creates order → Stock deducts
-{
-  type: 'ORDER_CREATED',
-  source: 'chat',
-  payload: {
-    orderId: 'ORD-001',
-    items: [
-      { productId: 'SKU-001', qty: 2 },
-      { productId: 'SKU-002', qty: 1 }
-    ]
-  }
-}
-// Stock app listens → Creates ISSUE movement
-```
+### 2026 Q1: Intelligence
+- [ ] Anajak AI - Forecasting
+- [ ] Anajak AI - Chatbot
+- [ ] Advanced Analytics
+- [ ] API Marketplace
 
 ---
 
-## 4) Business Model
+## 💰 Business Model
 
-### 4.1 Pricing Strategy
+### Pricing Tiers
 
-**Freemium + Usage-based**
+| | 🆓 Free | 💼 Pro | 🏢 Business | 🏭 Enterprise |
+|---|---------|--------|-------------|---------------|
+| **ราคา** | ฿0/เดือน | ฿499/เดือน | ฿1,499/เดือน | ติดต่อ |
+| **Apps** | 1 | 3 | All | All + Custom |
+| **Users** | 1 | 5 | 20 | Unlimited |
+| **Records** | 1,000 | 10,000 | 100,000 | Unlimited |
+| **Storage** | 1 GB | 10 GB | 50 GB | Unlimited |
+| **Support** | Community | Email | Priority | Dedicated |
+| **API** | ❌ | ✅ | ✅ | ✅ |
+| **Custom Domain** | ❌ | ❌ | ✅ | ✅ |
+| **White Label** | ❌ | ❌ | ❌ | ✅ |
 
-| Tier | Price | Limits |
-|------|-------|--------|
-| **Free** | ฿0 | 1 user, 100 SKUs, 1 warehouse |
-| **Starter** | ฿499/เดือน | 3 users, 500 SKUs, 3 warehouses |
-| **Business** | ฿1,499/เดือน | 10 users, Unlimited SKUs, Reports |
-| **Enterprise** | ติดต่อ | Unlimited, API, Support |
-
-### 4.2 Suite Bundles (Phase 4+)
-
-| Bundle | Apps | Price |
-|--------|------|-------|
-| **Stock Only** | Stock | ฿499-1,499 |
-| **Commerce** | Stock + Chat | ฿999-2,499 |
-| **Manufacturing** | Stock + Production | ฿1,499-3,499 |
-| **Complete Suite** | All Apps | ฿2,499-4,999 |
-
-### 4.3 Revenue Streams
-
-1. **Subscription** - รายเดือน/รายปี
-2. **Transaction Fee** - ค่าธรรมเนียมต่อ Order (Chat)
-3. **Add-ons** - SMS, Extra storage, API calls
-4. **Professional Services** - Setup, Training, Customization
+### Revenue Streams
+1. **SaaS Subscription** - รายได้หลัก
+2. **Add-on Features** - ฟีเจอร์เสริม
+3. **Integration Marketplace** - ค่าธรรมเนียม Integration
+4. **Professional Services** - ติดตั้ง/Customize
+5. **Partner Program** - Reseller/Affiliate
 
 ---
 
-## 5) Go-to-Market Strategy
+## 🏆 การแข่งขัน
 
-### Phase 1: Stock App Launch
+### Competitive Analysis
 
-**Target Market:**
-- SME โรงงาน/ผู้ผลิต
-- ร้านค้าส่ง
-- ธุรกิจที่มีสต๊อค 100+ SKUs
+| | **Anajak** | **Odoo** | **Zoho** | **FlowAccount** |
+|---|-----------|----------|----------|-----------------|
+| **ราคา** | ฿499-1,499 | ฿1,000+ | ฿500+ | ฿500+ |
+| **ภาษาไทย** | ✅ Native | ⚠️ บางส่วน | ⚠️ บางส่วน | ✅ |
+| **SME Focus** | ✅ | ⚠️ | ⚠️ | ✅ |
+| **ใช้งานง่าย** | ✅ | ❌ | ⚠️ | ✅ |
+| **Inventory** | ✅ | ✅ | ✅ | ⚠️ |
+| **Manufacturing** | ❌ | ✅ | ❌ | ❌ |
+| **Customizable** | ✅ | ✅ | ⚠️ | ❌ |
 
-**Marketing Channels:**
-- [ ] Facebook Ads (SME groups)
-- [ ] LINE Official Account
-- [ ] Content Marketing (Blog/YouTube)
-- [ ] Partner: บริษัทบัญชี (PEAK resellers)
-
-**Launch Checklist:**
-- [ ] Landing page
-- [ ] Demo video
-- [ ] Pricing page
-- [ ] Onboarding flow
-- [ ] Help docs / FAQ
-- [ ] Support chat (Crisp/Intercom)
-
-### Phase 2: Expansion
-
-**Cross-sell Strategy:**
-```
-Stock Customer
-     ↓
-"คุณขายของออนไลน์ด้วยใช่ไหม?"
-     ↓
-"ลอง Anajak Chat - รับ Order ตัดสต๊อคอัตโนมัติ"
-     ↓
-Bundle discount -20%
-```
+### Unique Selling Points (USP)
+1. **ออกแบบสำหรับ SME ไทย** - ไม่ใช่แปลจากต่างประเทศ
+2. **ราคาเข้าถึงได้** - ไม่มี hidden cost
+3. **ใช้งานง่าย** - ไม่ต้องอบรมหลายวัน
+4. **Modern Tech Stack** - เร็ว, สวย, ใช้งานได้ทุก Device
+5. **Open API** - เชื่อมต่อกับระบบอื่นได้
 
 ---
 
-## 6) Development Principles
+## 📞 Contact
 
-### 6.1 Code Standards
-
-```
-1. TypeScript Strict Mode
-2. Server Components by default
-3. Server Actions for mutations
-4. Prisma for all DB operations
-5. Zod for validation
-6. Consistent error handling
-7. Audit logging
-```
-
-### 6.2 Design Principles
-
-```
-1. Mobile-first responsive
-2. Dark/Light theme
-3. Consistent UI language
-4. Fast loading (<2s)
-5. Offline-capable (PWA)
-6. Accessibility (WCAG 2.1)
-```
-
-### 6.3 Quality Gates
-
-```
-Before Release:
-□ All TypeScript errors fixed
-□ Build passes
-□ Core flows tested
-□ Mobile tested
-□ Performance checked (<3s LCP)
-□ Security review
-```
+- **Website:** anajak.com (TBD)
+- **Email:** hello@anajak.com (TBD)
+- **GitHub:** github.com/LOSTXKER
 
 ---
 
-## 7) Success Metrics
-
-### Phase 1 (Stock)
-
-| Metric | Target (6 months) |
-|--------|-------------------|
-| Active Users | 50+ |
-| Paying Customers | 10+ |
-| MRR | ฿15,000+ |
-| NPS | > 40 |
-| Churn | < 5%/month |
-
-### Phase 2 (Chat)
-
-| Metric | Target (12 months) |
-|--------|-------------------|
-| Active Users | 200+ |
-| Cross-sell Rate | 30% Stock→Chat |
-| MRR | ฿50,000+ |
-
----
-
-## 8) Risk & Mitigation
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| คู่แข่งราคาถูกกว่า | High | Focus on UX + Integration |
-| ลูกค้าไม่เข้าใจ value | Medium | Demo video + Free trial |
-| Technical debt | Medium | Code review + Refactor sprint |
-| Scaling issues | Low | Supabase managed + CDN |
-
----
-
-## 9) Team Requirements
-
-### Phase 1 (Solo/Small)
-- 1 Full-stack Developer (คุณ)
-- Part-time Designer (Freelance)
-
-### Phase 2 (Growth)
-- 2-3 Developers
-- 1 Designer
-- 1 Customer Success
-
-### Phase 3 (Scale)
-- 5+ Developers
-- 2 Designers
-- Sales team
-- Support team
-
----
-
-## 10) Next Actions (This Week)
-
-### Priority 1: Launch Preparation
-- [ ] ตั้ง domain (anajak.co / anajak.app)
-- [ ] Deploy Stock app to production
-- [ ] Setup production database (Supabase)
-- [ ] Landing page
-- [ ] Pricing page
-
-### Priority 2: First Customers
-- [ ] หาลูกค้า Pilot 3-5 ราย (ฟรี 3 เดือน)
-- [ ] Onboard และเก็บ feedback
-- [ ] ปรับปรุงตาม feedback
-
-### Priority 3: Marketing
-- [ ] สร้าง Facebook Page
-- [ ] Demo video 3-5 นาที
-- [ ] Blog post แนะนำระบบ
-
----
-
-## Appendix: Tech Stack Summary
-
-| Layer | Technology |
-|-------|------------|
-| Frontend | Next.js 16, React, Tailwind CSS |
-| UI Components | shadcn/ui (customized) |
-| Backend | Next.js Server Actions, API Routes |
-| Database | PostgreSQL (Supabase) |
-| ORM | Prisma |
-| Auth | Supabase Auth |
-| Storage | Supabase Storage |
-| Realtime | Supabase Realtime |
-| Email | Resend |
-| Analytics | Plausible / Mixpanel |
-| Hosting | Vercel |
-| Domain | Cloudflare |
-
----
-
-*Last Updated: January 2026*
-*Version: 1.0*
+*เอกสารนี้อัปเดตล่าสุด: มกราคม 2026*
