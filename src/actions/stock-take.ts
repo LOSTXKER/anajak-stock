@@ -114,6 +114,15 @@ export async function getStockTake(id: string) {
           standardCost: line.product.standardCost !== null ? Number(line.product.standardCost) : null,
           lastCost: line.product.lastCost !== null ? Number(line.product.lastCost) : null,
         },
+        variant: line.variant ? {
+          ...line.variant,
+          costPrice: Number(line.variant.costPrice),
+          sellingPrice: line.variant.sellingPrice !== null ? Number(line.variant.sellingPrice) : null,
+          lastCost: line.variant.lastCost !== null ? Number(line.variant.lastCost) : null,
+          reorderPoint: line.variant.reorderPoint !== null ? Number(line.variant.reorderPoint) : null,
+          minQty: line.variant.minQty !== null ? Number(line.variant.minQty) : null,
+          maxQty: line.variant.maxQty !== null ? Number(line.variant.maxQty) : null,
+        } : null,
       })),
     }
 
