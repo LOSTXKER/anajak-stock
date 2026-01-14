@@ -176,14 +176,49 @@ async function getStockByCategory() {
 async function getStockValueTrend() {
   const today = new Date()
   const data = []
+  
   for (let i = 6; i >= 0; i--) {
     const date = new Date(today)
     date.setDate(date.getDate() - i)
+    date.setHours(23, 59, 59, 999) // End of day
+    
+    // Calculate stock value up to this date based on movements
+    const movements = await prisma.movementLine.findMany({
+      where: {
+        movement: {
+          status: 'POSTED',
+          postedAt: { lte: date },
+        },
+      },
+      select: {
+        qty: true,
+        unitCost: true,
+        movement: {
+          select: { type: true },
+        },
+      },
+    })
+    
+    let totalValue = 0
+    for (const line of movements) {
+      const qty = Number(line.qty)
+      const cost = Number(line.unitCost)
+      const type = line.movement.type
+      
+      if (type === 'RECEIVE' || type === 'RETURN') {
+        totalValue += qty * cost
+      } else if (type === 'ISSUE') {
+        totalValue -= qty * cost
+      }
+      // TRANSFER and ADJUST don't change total value
+    }
+    
     data.push({
       date: date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }),
-      value: Math.floor(Math.random() * 50000) + 100000,
+      value: Math.max(0, totalValue),
     })
   }
+  
   return data
 }
 
