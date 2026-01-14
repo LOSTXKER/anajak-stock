@@ -15,8 +15,6 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Loader2, CheckCircle, XCircle, Send, PackageCheck, FileEdit, Ban } from 'lucide-react'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
 import { submitMovement, approveMovement, rejectMovement, postMovement, cancelMovement } from '@/actions/movements'
 import { toast } from 'sonner'
 
