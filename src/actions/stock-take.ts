@@ -98,7 +98,18 @@ export async function getStockTake(id: string) {
       return { success: false as const, error: 'ไม่พบใบตรวจนับ' }
     }
 
-    return { success: true as const, data: stockTake }
+    // Convert Decimal to Number for Client Component compatibility
+    const serializedStockTake = {
+      ...stockTake,
+      lines: stockTake.lines.map(line => ({
+        ...line,
+        systemQty: Number(line.systemQty),
+        countedQty: line.countedQty !== null ? Number(line.countedQty) : null,
+        variance: line.variance !== null ? Number(line.variance) : null,
+      })),
+    }
+
+    return { success: true as const, data: serializedStockTake }
   } catch (error) {
     console.error('Error getting stock take:', error)
     return { success: false as const, error: 'เกิดข้อผิดพลาดในการดึงข้อมูล' }
