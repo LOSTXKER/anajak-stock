@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Truck, Plus, Phone, Mail, Clock } from 'lucide-react'
+import { Truck, Plus, Phone, Mail, Clock, Eye } from 'lucide-react'
 import { PageHeader, EmptyState } from '@/components/common'
 
 async function getSuppliers() {
@@ -38,9 +39,11 @@ async function SuppliersContent() {
           description={`จัดการข้อมูลผู้ขาย ${suppliers.length} ราย`}
           icon={<Truck className="w-6 h-6" />}
         />
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          เพิ่ม Supplier
+        <Button asChild>
+          <Link href="/suppliers/new">
+            <Plus className="w-4 h-4 mr-2" />
+            เพิ่ม Supplier
+          </Link>
         </Button>
       </div>
 
@@ -58,20 +61,23 @@ async function SuppliersContent() {
                 <TableHead className="text-center">Lead Time</TableHead>
                 <TableHead className="text-center">PO</TableHead>
                 <TableHead className="text-center">สถานะ</TableHead>
+                <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {suppliers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12">
+                  <TableCell colSpan={9} className="text-center py-12">
                     <EmptyState
                       icon={<Truck className="w-8 h-8" />}
                       title="ยังไม่มี Supplier"
                       description="เพิ่ม Supplier เพื่อเริ่มสั่งซื้อสินค้า"
                       action={
-                        <Button className="mt-4">
-                          <Plus className="w-4 h-4 mr-2" />
-                          เพิ่ม Supplier
+                        <Button className="mt-4" asChild>
+                          <Link href="/suppliers/new">
+                            <Plus className="w-4 h-4 mr-2" />
+                            เพิ่ม Supplier
+                          </Link>
                         </Button>
                       }
                     />
@@ -134,6 +140,13 @@ async function SuppliersContent() {
                       >
                         {supplier.active ? 'ใช้งาน' : 'ปิด'}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" asChild>
+                        <Link href={`/suppliers/${supplier.id}`}>
+                          <Eye className="w-4 h-4" />
+                        </Link>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
