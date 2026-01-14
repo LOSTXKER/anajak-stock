@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
+import { getCachedCategories, getCachedWarehouses } from '@/lib/cache'
 
 interface StockReportFilters {
   search?: string
@@ -18,17 +19,31 @@ export async function getStockReport() {
 
   try {
     // Get all stock balances with related data
+    // Use select to reduce data size
     const stockBalances = await prisma.stockBalance.findMany({
-      include: {
+      select: {
+        productId: true,
+        qtyOnHand: true,
+        qtyReserved: true,
         product: {
-          include: {
-            category: true,
+          select: {
+            sku: true,
+            name: true,
+            standardCost: true,
+            category: { select: { name: true } },
           },
         },
-        variant: true,
+        variant: {
+          select: {
+            sku: true,
+            name: true,
+            costPrice: true,
+          },
+        },
         location: {
-          include: {
-            warehouse: true,
+          select: {
+            code: true,
+            warehouse: { select: { name: true } },
           },
         },
       },
@@ -38,18 +53,10 @@ export async function getStockReport() {
       ],
     })
 
-    // Get categories and warehouses for filters
+    // Get categories and warehouses from cache
     const [categories, warehouses] = await Promise.all([
-      prisma.category.findMany({
-        where: { deletedAt: null },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-      }),
-      prisma.warehouse.findMany({
-        where: { deletedAt: null, active: true },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true, code: true },
-      }),
+      getCachedCategories(),
+      getCachedWarehouses(),
     ])
 
     // Transform data

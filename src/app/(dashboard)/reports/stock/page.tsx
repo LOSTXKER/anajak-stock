@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,8 @@ import {
 import { Package, Download, Search, Warehouse, DollarSign, Layers } from 'lucide-react'
 import { getStockReport, exportStockReportToCSV } from '@/actions/stock-report'
 import { PageHeader, StatCard, EmptyState } from '@/components/common'
+import { PageSkeleton } from '@/components/ui/skeleton'
+import { useDebounce } from '@/hooks/use-debounce'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 
@@ -66,6 +68,9 @@ export default function StockReportPage() {
     showZero: false,
   })
 
+  // Debounce search to avoid filtering on every keystroke
+  const debouncedSearch = useDebounce(filters.search, 300)
+
   useEffect(() => {
     loadData()
   }, [])
@@ -102,36 +107,40 @@ export default function StockReportPage() {
     }
   }
 
-  // Filter data
-  const filteredData = data.filter((item) => {
-    if (filters.search) {
-      const search = filters.search.toLowerCase()
-      if (
-        !item.sku.toLowerCase().includes(search) &&
-        !item.name.toLowerCase().includes(search)
-      ) {
+  // Filter data with useMemo for performance
+  const filteredData = useMemo(() => {
+    return data.filter((item) => {
+      // Use debounced search
+      if (debouncedSearch) {
+        const search = debouncedSearch.toLowerCase()
+        if (
+          !item.sku.toLowerCase().includes(search) &&
+          !item.name.toLowerCase().includes(search)
+        ) {
+          return false
+        }
+      }
+      if (filters.categoryId) {
+        const cat = categories.find(c => c.id === filters.categoryId)
+        if (cat && item.category !== cat.name) return false
+      }
+      if (filters.warehouseId) {
+        const wh = warehouses.find(w => w.id === filters.warehouseId)
+        if (wh && item.warehouseName !== wh.name) return false
+      }
+      if (!filters.showZero && item.qtyOnHand === 0) {
         return false
       }
-    }
-    if (filters.categoryId && item.category !== filters.categoryId) {
-      // Compare by category name since we have name in the data
-      const cat = categories.find(c => c.id === filters.categoryId)
-      if (cat && item.category !== cat.name) return false
-    }
-    if (filters.warehouseId) {
-      const wh = warehouses.find(w => w.id === filters.warehouseId)
-      if (wh && item.warehouseName !== wh.name) return false
-    }
-    if (!filters.showZero && item.qtyOnHand === 0) {
-      return false
-    }
-    return true
-  })
+      return true
+    })
+  }, [data, debouncedSearch, filters.categoryId, filters.warehouseId, filters.showZero, categories, warehouses])
 
-  // Calculate totals
-  const totalSKUs = new Set(filteredData.map(d => d.productId)).size
-  const totalQty = filteredData.reduce((sum, d) => sum + d.qtyOnHand, 0)
-  const totalValue = filteredData.reduce((sum, d) => sum + d.stockValue, 0)
+  // Calculate totals with useMemo
+  const { totalSKUs, totalQty, totalValue } = useMemo(() => ({
+    totalSKUs: new Set(filteredData.map(d => d.productId)).size,
+    totalQty: filteredData.reduce((sum, d) => sum + d.qtyOnHand, 0),
+    totalValue: filteredData.reduce((sum, d) => sum + d.stockValue, 0),
+  }), [filteredData])
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -255,8 +264,8 @@ export default function StockReportPage() {
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent-primary)]" />
+            <div className="p-4">
+              <PageSkeleton hasStats={false} />
             </div>
           ) : filteredData.length === 0 ? (
             <div className="py-12">
