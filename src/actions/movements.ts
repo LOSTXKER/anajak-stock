@@ -109,6 +109,7 @@ export async function getMovement(id: string): Promise<MovementWithRelations | n
       lines: {
         include: {
           product: true,
+          variant: true,
           fromLocation: { include: { warehouse: true } },
           toLocation: { include: { warehouse: true } },
         },
@@ -116,7 +117,19 @@ export async function getMovement(id: string): Promise<MovementWithRelations | n
     },
   })
 
-  return movement as unknown as MovementWithRelations | null
+  if (!movement) return null
+
+  // Convert Decimal to Number for client components
+  const serializedMovement = {
+    ...movement,
+    lines: movement.lines.map(line => ({
+      ...line,
+      qty: Number(line.qty),
+      unitCost: Number(line.unitCost),
+    })),
+  }
+
+  return serializedMovement as unknown as MovementWithRelations | null
 }
 
 export async function createMovement(data: CreateMovementInput): Promise<ActionResult<MovementWithRelations>> {
