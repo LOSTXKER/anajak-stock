@@ -12,11 +12,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Package, Plus, Search, Layers, FileUp, FileDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Package, Plus, Search, Layers, FileUp, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ProductSearch } from './product-search'
 import { ProductActions } from './product-actions'
 import { ExportButton } from '@/components/export-button'
-import { PageHeader, Spinner, EmptyState } from '@/components/common'
+import { PageHeader, EmptyState } from '@/components/common'
+import { PageSkeleton } from '@/components/ui/skeleton'
 
 interface PageProps {
   searchParams: Promise<{
@@ -215,13 +216,7 @@ async function ProductsContent({ searchParams }: PageProps) {
 
 export default function ProductsPage(props: PageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-64">
-          <Spinner className="w-8 h-8" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton hasStats={false} />}>
       <ProductsContent {...props} />
     </Suspense>
   )

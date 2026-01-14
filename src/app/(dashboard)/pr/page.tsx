@@ -16,7 +16,8 @@ import { FileText, Plus, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { PRStatus } from '@/generated/prisma'
 import { format } from 'date-fns'
 import { th } from 'date-fns/locale'
-import { PageHeader, Spinner, EmptyState } from '@/components/common'
+import { PageHeader, EmptyState } from '@/components/common'
+import { PageSkeleton } from '@/components/ui/skeleton'
 
 interface PageProps {
   searchParams: Promise<{
@@ -227,13 +228,7 @@ async function PRContent({ searchParams }: PageProps) {
 
 export default function PRPage(props: PageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-64">
-          <Spinner className="w-8 h-8" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton hasStats={false} />}>
       <PRContent {...props} />
     </Suspense>
   )

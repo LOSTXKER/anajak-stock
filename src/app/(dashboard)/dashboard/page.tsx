@@ -18,8 +18,8 @@ import {
 import { StockValueChart } from '@/components/charts/stock-value-chart'
 import { TopProductsChart } from '@/components/charts/top-products-chart'
 import { CategoryPieChart } from '@/components/charts/category-pie-chart'
-import { Spinner } from '@/components/common'
 import { DashboardStats } from './dashboard-stats'
+import { PageSkeleton } from '@/components/ui/skeleton'
 
 async function getDashboardStats() {
   const [
@@ -175,48 +175,80 @@ async function getStockByCategory() {
 
 async function getStockValueTrend() {
   const today = new Date()
-  const data = []
+  const sevenDaysAgo = new Date(today)
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   
-  for (let i = 6; i >= 0; i--) {
+  // Single query to get all movements in the last 7 days
+  const movements = await prisma.movementLine.findMany({
+    where: {
+      movement: {
+        status: 'POSTED',
+        postedAt: { gte: sevenDaysAgo },
+      },
+    },
+    select: {
+      qty: true,
+      unitCost: true,
+      movement: {
+        select: { type: true, postedAt: true },
+      },
+    },
+  })
+  
+  // Get current stock value as baseline
+  const currentStock = await prisma.stockBalance.findMany({
+    select: {
+      qtyOnHand: true,
+      product: {
+        select: { standardCost: true },
+      },
+      variant: {
+        select: { costPrice: true },
+      },
+    },
+  })
+  
+  let currentValue = currentStock.reduce((sum, sb) => {
+    const cost = Number(sb.variant?.costPrice || sb.product.standardCost || 0)
+    return sum + Number(sb.qtyOnHand) * cost
+  }, 0)
+  
+  // Build daily values by working backwards
+  const dailyChanges: Record<string, number> = {}
+  for (const line of movements) {
+    if (!line.movement.postedAt) continue
+    const dateKey = line.movement.postedAt.toISOString().split('T')[0]
+    const qty = Number(line.qty)
+    const cost = Number(line.unitCost)
+    const type = line.movement.type
+    
+    if (!dailyChanges[dateKey]) dailyChanges[dateKey] = 0
+    
+    if (type === 'RECEIVE' || type === 'RETURN') {
+      dailyChanges[dateKey] += qty * cost
+    } else if (type === 'ISSUE') {
+      dailyChanges[dateKey] -= qty * cost
+    }
+  }
+  
+  // Generate data for each day
+  const data = []
+  let runningValue = currentValue
+  
+  for (let i = 0; i <= 6; i++) {
     const date = new Date(today)
     date.setDate(date.getDate() - i)
-    date.setHours(23, 59, 59, 999) // End of day
+    const dateKey = date.toISOString().split('T')[0]
     
-    // Calculate stock value up to this date based on movements
-    const movements = await prisma.movementLine.findMany({
-      where: {
-        movement: {
-          status: 'POSTED',
-          postedAt: { lte: date },
-        },
-      },
-      select: {
-        qty: true,
-        unitCost: true,
-        movement: {
-          select: { type: true },
-        },
-      },
-    })
-    
-    let totalValue = 0
-    for (const line of movements) {
-      const qty = Number(line.qty)
-      const cost = Number(line.unitCost)
-      const type = line.movement.type
-      
-      if (type === 'RECEIVE' || type === 'RETURN') {
-        totalValue += qty * cost
-      } else if (type === 'ISSUE') {
-        totalValue -= qty * cost
-      }
-      // TRANSFER and ADJUST don't change total value
-    }
-    
-    data.push({
+    data.unshift({
       date: date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }),
-      value: Math.max(0, totalValue),
+      value: Math.max(0, Math.round(runningValue)),
     })
+    
+    // Subtract today's changes to get yesterday's value
+    if (dailyChanges[dateKey]) {
+      runningValue -= dailyChanges[dateKey]
+    }
   }
   
   return data
@@ -479,13 +511,7 @@ async function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-64">
-          <Spinner className="w-8 h-8" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton hasStats={true} />}>
       <DashboardContent />
     </Suspense>
   )

@@ -15,7 +15,8 @@ import {
 } from '@/components/ui/table'
 import { Warehouse, Package, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, FileDown } from 'lucide-react'
 import { StockSearch } from './stock-search'
-import { PageHeader, Spinner, StatCard, StatCardGrid, EmptyState } from '@/components/common'
+import { PageHeader, StatCard, StatCardGrid, EmptyState } from '@/components/common'
+import { PageSkeleton } from '@/components/ui/skeleton'
 import { ExportButton } from '@/components/export-button'
 
 interface PageProps {
@@ -253,13 +254,7 @@ async function StockContent({ searchParams }: PageProps) {
 
 export default function StockPage(props: PageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-64">
-          <Spinner className="w-8 h-8" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton hasStats={true} />}>
       <StockContent {...props} />
     </Suspense>
   )

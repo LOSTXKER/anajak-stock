@@ -17,7 +17,8 @@ import { MovementType, DocStatus } from '@/generated/prisma'
 import { format } from 'date-fns'
 import { th } from 'date-fns/locale'
 import { ExportButton } from '@/components/export-button'
-import { PageHeader, Spinner, EmptyState } from '@/components/common'
+import { PageHeader, EmptyState } from '@/components/common'
+import { PageSkeleton } from '@/components/ui/skeleton'
 
 interface PageProps {
   searchParams: Promise<{
@@ -300,13 +301,7 @@ async function MovementsContent({ searchParams }: PageProps) {
 
 export default function MovementsPage(props: PageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-64">
-          <Spinner className="w-8 h-8" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton hasStats={false} />}>
       <MovementsContent {...props} />
     </Suspense>
   )

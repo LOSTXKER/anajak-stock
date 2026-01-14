@@ -16,7 +16,8 @@ import { ShoppingCart, Plus, ChevronLeft, ChevronRight, Eye } from 'lucide-react
 import { POStatus } from '@/generated/prisma'
 import { format } from 'date-fns'
 import { th } from 'date-fns/locale'
-import { PageHeader, Spinner, EmptyState } from '@/components/common'
+import { PageHeader, EmptyState } from '@/components/common'
+import { PageSkeleton } from '@/components/ui/skeleton'
 
 interface PageProps {
   searchParams: Promise<{
@@ -233,13 +234,7 @@ async function POContent({ searchParams }: PageProps) {
 
 export default function POPage(props: PageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-64">
-          <Spinner className="w-8 h-8" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton hasStats={false} />}>
       <POContent {...props} />
     </Suspense>
   )

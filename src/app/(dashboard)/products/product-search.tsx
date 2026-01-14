@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -12,8 +12,9 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Search, X, Filter, Scan } from 'lucide-react'
+import { Search, X, Filter, Loader2 } from 'lucide-react'
 import { InlineScanButton } from '@/components/barcode-scanner'
+import { useDebounce } from '@/hooks/use-debounce'
 import type { Category } from '@/generated/prisma'
 
 interface ProductSearchProps {
@@ -27,14 +28,36 @@ export function ProductSearch({ categories }: ProductSearchProps) {
 
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [category, setCategory] = useState(searchParams.get('category') || '')
-
-  function handleSearch() {
+  
+  // Debounce search for auto-search after typing
+  const debouncedSearch = useDebounce(search, 500)
+  
+  // Auto-search when debounced search changes
+  const performSearch = useCallback((searchVal: string, categoryVal: string) => {
     startTransition(() => {
       const params = new URLSearchParams()
-      if (search) params.set('search', search)
-      if (category && category !== 'all') params.set('category', category)
+      if (searchVal) params.set('search', searchVal)
+      if (categoryVal && categoryVal !== 'all') params.set('category', categoryVal)
       router.push(`/products?${params.toString()}`)
     })
+  }, [router])
+  
+  // Trigger search when debounced value changes
+  useEffect(() => {
+    const currentSearch = searchParams.get('search') || ''
+    if (debouncedSearch !== currentSearch) {
+      performSearch(debouncedSearch, category)
+    }
+  }, [debouncedSearch])
+
+  function handleSearch() {
+    performSearch(search, category)
+  }
+  
+  // Auto-search when category changes
+  function handleCategoryChange(value: string) {
+    setCategory(value)
+    performSearch(search, value)
   }
 
   function handleClear() {
@@ -74,7 +97,7 @@ export function ProductSearch({ categories }: ProductSearchProps) {
           </div>
 
           {/* Category Filter */}
-          <Select value={category} onValueChange={setCategory}>
+          <Select value={category} onValueChange={handleCategoryChange}>
             <SelectTrigger className="w-[180px]">
               <Filter className="w-4 h-4 mr-2 text-[var(--text-muted)]" />
               <SelectValue placeholder="หมวดหมู่ทั้งหมด" />
@@ -91,7 +114,11 @@ export function ProductSearch({ categories }: ProductSearchProps) {
 
           {/* Action Buttons */}
           <Button onClick={handleSearch} disabled={isPending}>
-            <Search className="w-4 h-4 mr-2" />
+            {isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4 mr-2" />
+            )}
             ค้นหา
           </Button>
 
