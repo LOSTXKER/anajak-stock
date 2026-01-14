@@ -330,3 +330,78 @@ export async function rejectPR(id: string, reason?: string): Promise<ActionResul
     return { success: false, error: 'ไม่สามารถปฏิเสธ PR ได้' }
   }
 }
+
+interface UpdatePRLineInput {
+  id?: string
+  productId: string
+  qty: number
+  note?: string
+}
+
+interface UpdatePRInput {
+  needByDate?: Date
+  note?: string
+  priority?: string
+  lines: UpdatePRLineInput[]
+}
+
+export async function updatePR(id: string, data: UpdatePRInput): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const pr = await prisma.pR.findUnique({
+      where: { id },
+      include: { lines: true },
+    })
+
+    if (!pr) {
+      return { success: false, error: 'ไม่พบ PR' }
+    }
+
+    if (pr.status !== PRStatus.DRAFT) {
+      return { success: false, error: 'ไม่สามารถแก้ไข PR ที่ไม่ใช่ Draft ได้' }
+    }
+
+    // Delete old lines
+    await prisma.pRLine.deleteMany({
+      where: { prId: id },
+    })
+
+    // Update PR and create new lines
+    await prisma.pR.update({
+      where: { id },
+      data: {
+        needByDate: data.needByDate,
+        note: data.note,
+        priority: data.priority,
+        lines: {
+          create: data.lines.map((line) => ({
+            productId: line.productId,
+            qty: line.qty,
+            note: line.note,
+          })),
+        },
+      },
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'UPDATE',
+        refType: 'PR',
+        refId: id,
+      },
+    })
+
+    revalidatePath('/pr')
+    revalidatePath(`/pr/${id}`)
+    revalidatePath(`/pr/${id}/edit`)
+    return { success: true, data: undefined }
+  } catch (error) {
+    console.error('Update PR error:', error)
+    return { success: false, error: 'ไม่สามารถแก้ไข PR ได้' }
+  }
+}

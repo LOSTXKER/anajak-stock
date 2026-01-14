@@ -483,3 +483,136 @@ export async function rejectMovement(id: string, reason?: string): Promise<Actio
     return { success: false, error: 'ไม่สามารถปฏิเสธรายการได้' }
   }
 }
+
+interface UpdateMovementLineInput {
+  id?: string
+  productId: string
+  variantId?: string
+  fromLocationId?: string
+  toLocationId?: string
+  qty: number
+  unitCost?: number
+  note?: string
+}
+
+interface UpdateMovementInput {
+  note?: string
+  reason?: string
+  projectCode?: string
+  lines: UpdateMovementLineInput[]
+}
+
+export async function updateMovement(id: string, data: UpdateMovementInput): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const movement = await prisma.stockMovement.findUnique({
+      where: { id },
+      include: { lines: true },
+    })
+
+    if (!movement) {
+      return { success: false, error: 'ไม่พบรายการ' }
+    }
+
+    if (movement.status !== DocStatus.DRAFT) {
+      return { success: false, error: 'ไม่สามารถแก้ไขรายการที่ไม่ใช่ Draft ได้' }
+    }
+
+    // Delete old lines
+    await prisma.movementLine.deleteMany({
+      where: { movementId: id },
+    })
+
+    // Update movement and create new lines
+    await prisma.stockMovement.update({
+      where: { id },
+      data: {
+        note: data.note,
+        reason: data.reason,
+        projectCode: data.projectCode,
+        lines: {
+          create: data.lines.map((line) => ({
+            productId: line.productId,
+            variantId: line.variantId || null,
+            fromLocationId: line.fromLocationId || null,
+            toLocationId: line.toLocationId || null,
+            qty: line.qty,
+            unitCost: line.unitCost || 0,
+            note: line.note,
+          })),
+        },
+      },
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'UPDATE',
+        refType: 'MOVEMENT',
+        refId: id,
+      },
+    })
+
+    revalidatePath('/movements')
+    revalidatePath(`/movements/${id}`)
+    revalidatePath(`/movements/${id}/edit`)
+    return { success: true, data: undefined }
+  } catch (error) {
+    console.error('Update movement error:', error)
+    return { success: false, error: 'ไม่สามารถแก้ไขรายการได้' }
+  }
+}
+
+export async function cancelMovement(id: string, reason?: string): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const movement = await prisma.stockMovement.findUnique({
+      where: { id },
+    })
+
+    if (!movement) {
+      return { success: false, error: 'ไม่พบรายการ' }
+    }
+
+    if (movement.status === DocStatus.POSTED) {
+      return { success: false, error: 'ไม่สามารถยกเลิกรายการที่ Post แล้วได้' }
+    }
+
+    if (movement.status === DocStatus.CANCELLED) {
+      return { success: false, error: 'รายการนี้ถูกยกเลิกแล้ว' }
+    }
+
+    await prisma.stockMovement.update({
+      where: { id },
+      data: {
+        status: DocStatus.CANCELLED,
+        note: reason ? `${movement.note || ''}\n[ยกเลิก] ${reason}` : movement.note,
+      },
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'CANCEL',
+        refType: 'MOVEMENT',
+        refId: id,
+        newData: { reason },
+      },
+    })
+
+    revalidatePath('/movements')
+    revalidatePath(`/movements/${id}`)
+    return { success: true, data: undefined }
+  } catch (error) {
+    console.error('Cancel movement error:', error)
+    return { success: false, error: 'ไม่สามารถยกเลิกรายการได้' }
+  }
+}

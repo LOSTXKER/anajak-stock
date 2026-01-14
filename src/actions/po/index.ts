@@ -12,10 +12,10 @@ export { calculatePOTotals } from './utils'
 export { generatePONumber, generateGRNNumber, getSuppliers } from './helpers'
 
 // CRUD operations
-export { getPOs, getPO, createPO } from './crud'
+export { getPOs, getPO, createPO, updatePO } from './crud'
 
 // Workflow actions
 export { approvePO, sendPO, cancelPO } from './workflow'
 
 // GRN operations
-export { createGRN } from './grn'
+export { createGRN, postGRN, cancelGRN } from './grn'

@@ -189,3 +189,100 @@ export async function createPO(data: CreatePOInput): Promise<ActionResult<POWith
     return handleActionError(error, 'createPO')
   }
 }
+
+interface UpdatePOLineInput {
+  id?: string
+  productId: string
+  qty: number
+  unitPrice: number
+  note?: string
+}
+
+interface UpdatePOInput {
+  eta?: Date
+  terms?: string
+  note?: string
+  vatType?: VatType
+  vatRate?: number
+  lines: UpdatePOLineInput[]
+}
+
+/**
+ * Update a PO (only DRAFT status)
+ */
+export async function updatePO(id: string, data: UpdatePOInput): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const po = await prisma.pO.findUnique({
+      where: { id },
+      include: { lines: true },
+    })
+
+    if (!po) {
+      return { success: false, error: 'ไม่พบ PO' }
+    }
+
+    if (po.status !== POStatus.DRAFT) {
+      return { success: false, error: 'ไม่สามารถแก้ไข PO ที่ไม่ใช่ Draft ได้' }
+    }
+
+    // Calculate totals
+    const vatType = data.vatType || po.vatType || VatType.NO_VAT
+    const vatRate = data.vatRate || Number(po.vatRate) || 0
+    const { subtotal, vatAmount, total } = calculatePOTotals(data.lines, vatType, vatRate)
+
+    // Delete old lines
+    await prisma.pOLine.deleteMany({
+      where: { poId: id },
+    })
+
+    // Update PO and create new lines
+    await prisma.pO.update({
+      where: { id },
+      data: {
+        eta: data.eta,
+        terms: data.terms,
+        note: data.note,
+        vatType,
+        vatRate,
+        subtotal,
+        vatAmount,
+        total,
+        lines: {
+          create: data.lines.map((line) => ({
+            productId: line.productId,
+            qty: line.qty,
+            unitPrice: line.unitPrice,
+            note: line.note,
+          })),
+        },
+        timelines: {
+          create: {
+            action: 'แก้ไข PO',
+            note: `แก้ไขโดย ${session.name}`,
+          },
+        },
+      },
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'UPDATE',
+        refType: 'PO',
+        refId: id,
+      },
+    })
+
+    revalidatePath('/po')
+    revalidatePath(`/po/${id}`)
+    revalidatePath(`/po/${id}/edit`)
+    return { success: true, data: undefined }
+  } catch (error) {
+    return handleActionError(error, 'updatePO')
+  }
+}

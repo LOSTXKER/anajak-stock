@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,7 +15,9 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Loader2, CheckCircle, XCircle, Send, PackageCheck, FileEdit, Ban } from 'lucide-react'
-import { submitMovement, approveMovement, rejectMovement, postMovement } from '@/actions/movements'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { submitMovement, approveMovement, rejectMovement, postMovement, cancelMovement } from '@/actions/movements'
 import { toast } from 'sonner'
 
 interface MovementActionsProps {
@@ -36,6 +39,7 @@ export function MovementActions({ movementId, status, canApprove, canEdit }: Mov
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   
   const [rejectReason, setRejectReason] = useState('')
+  const [cancelReason, setCancelReason] = useState('')
 
   // Submit for approval (DRAFT → SUBMITTED)
   async function handleSubmit() {
@@ -97,6 +101,21 @@ export function MovementActions({ movementId, status, canApprove, canEdit }: Mov
     }
   }
 
+  // Cancel movement
+  async function handleCancel() {
+    setIsProcessing(true)
+    const result = await cancelMovement(movementId, cancelReason)
+    setIsProcessing(false)
+
+    if (result.success) {
+      toast.success('ยกเลิกรายการเรียบร้อย')
+      setCancelDialogOpen(false)
+      router.push('/movements')
+    } else {
+      toast.error(result.error)
+    }
+  }
+
   return (
     <>
       <div className="flex items-center gap-2">
@@ -104,12 +123,11 @@ export function MovementActions({ movementId, status, canApprove, canEdit }: Mov
         {status === 'DRAFT' && (
           <>
             {canEdit && (
-              <Button
-                variant="outline"
-                onClick={() => router.push(`/movements/${movementId}/edit`)}
-              >
-                <FileEdit className="w-4 h-4 mr-2" />
-                แก้ไข
+              <Button variant="outline" asChild>
+                <Link href={`/movements/${movementId}/edit`}>
+                  <FileEdit className="w-4 h-4 mr-2" />
+                  แก้ไข
+                </Link>
               </Button>
             )}
             <Button
@@ -300,12 +318,35 @@ export function MovementActions({ movementId, status, canApprove, canEdit }: Mov
           <DialogHeader>
             <DialogTitle>ยกเลิกรายการ</DialogTitle>
             <DialogDescription>
-              ⚠️ ยังไม่รองรับการยกเลิกรายการ กรุณาติดต่อผู้ดูแลระบบ
+              ยืนยันการยกเลิกรายการเคลื่อนไหวนี้? การกระทำนี้ไม่สามารถย้อนกลับได้
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>เหตุผล (ไม่บังคับ)</Label>
+              <Textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="ระบุเหตุผลในการยกเลิก..."
+                rows={3}
+              />
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>
               ปิด
+            </Button>
+            <Button
+              onClick={handleCancel}
+              disabled={isProcessing}
+              variant="destructive"
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Ban className="w-4 h-4 mr-2" />
+              )}
+              ยกเลิกรายการ
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -12,7 +12,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Loader2, PackageCheck, Ban } from 'lucide-react'
-import { postGRN } from '@/actions/po'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { postGRN, cancelGRN } from '@/actions/po'
 import { toast } from 'sonner'
 
 interface GRNActionsProps {
@@ -26,6 +28,7 @@ export function GRNActions({ grnId, status, canPost }: GRNActionsProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [postDialogOpen, setPostDialogOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
 
   // Post GRN to stock (DRAFT → POSTED)
   async function handlePost() {
@@ -37,6 +40,21 @@ export function GRNActions({ grnId, status, canPost }: GRNActionsProps) {
       toast.success('บันทึกเข้าสต๊อคเรียบร้อย')
       setPostDialogOpen(false)
       router.refresh()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  // Cancel GRN
+  async function handleCancel() {
+    setIsProcessing(true)
+    const result = await cancelGRN(grnId, cancelReason)
+    setIsProcessing(false)
+
+    if (result.success) {
+      toast.success('ยกเลิก GRN เรียบร้อย')
+      setCancelDialogOpen(false)
+      router.push('/grn')
     } else {
       toast.error(result.error)
     }
@@ -104,12 +122,35 @@ export function GRNActions({ grnId, status, canPost }: GRNActionsProps) {
           <DialogHeader>
             <DialogTitle>ยกเลิก GRN</DialogTitle>
             <DialogDescription>
-              ⚠️ ยังไม่รองรับการยกเลิก GRN กรุณาติดต่อผู้ดูแลระบบ
+              ยืนยันการยกเลิก GRN นี้? การกระทำนี้ไม่สามารถย้อนกลับได้
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>เหตุผล (ไม่บังคับ)</Label>
+              <Textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="ระบุเหตุผลในการยกเลิก..."
+                rows={3}
+              />
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>
               ปิด
+            </Button>
+            <Button
+              onClick={handleCancel}
+              disabled={isProcessing}
+              variant="destructive"
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Ban className="w-4 h-4 mr-2" />
+              )}
+              ยกเลิก GRN
             </Button>
           </DialogFooter>
         </DialogContent>

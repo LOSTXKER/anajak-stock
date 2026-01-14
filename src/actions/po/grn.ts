@@ -200,3 +200,109 @@ export async function createGRN(data: CreateGRNInput): Promise<ActionResult> {
     return handleActionError(error, 'createGRN')
   }
 }
+
+/**
+ * Post GRN to stock (mark as posted) - For GRNs created as DRAFT
+ */
+export async function postGRN(id: string): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const grn = await prisma.gRN.findUnique({
+      where: { id },
+      include: { lines: true },
+    })
+
+    if (!grn) {
+      return { success: false, error: 'ไม่พบ GRN' }
+    }
+
+    if (grn.status === 'POSTED') {
+      return { success: false, error: 'GRN นี้ถูก Post แล้ว' }
+    }
+
+    if (grn.status === 'CANCELLED') {
+      return { success: false, error: 'GRN นี้ถูกยกเลิกแล้ว' }
+    }
+
+    await prisma.gRN.update({
+      where: { id },
+      data: {
+        status: 'POSTED',
+        postedById: session.id,
+        postedAt: new Date(),
+      },
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'POST',
+        refType: 'GRN',
+        refId: id,
+      },
+    })
+
+    revalidatePath('/grn')
+    revalidatePath(`/grn/${id}`)
+    return { success: true, data: undefined }
+  } catch (error) {
+    return handleActionError(error, 'postGRN')
+  }
+}
+
+/**
+ * Cancel GRN
+ */
+export async function cancelGRN(id: string, reason?: string): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const grn = await prisma.gRN.findUnique({
+      where: { id },
+      include: { lines: true },
+    })
+
+    if (!grn) {
+      return { success: false, error: 'ไม่พบ GRN' }
+    }
+
+    if (grn.status === 'POSTED') {
+      return { success: false, error: 'ไม่สามารถยกเลิก GRN ที่ Post แล้วได้' }
+    }
+
+    if (grn.status === 'CANCELLED') {
+      return { success: false, error: 'GRN นี้ถูกยกเลิกแล้ว' }
+    }
+
+    await prisma.gRN.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        note: reason ? `${grn.note || ''}\n[ยกเลิก] ${reason}` : grn.note,
+      },
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'CANCEL',
+        refType: 'GRN',
+        refId: id,
+        newData: { reason },
+      },
+    })
+
+    revalidatePath('/grn')
+    revalidatePath(`/grn/${id}`)
+    return { success: true, data: undefined }
+  } catch (error) {
+    return handleActionError(error, 'cancelGRN')
+  }
+}
