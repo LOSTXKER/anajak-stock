@@ -1,9 +1,7 @@
 import type { Metadata } from 'next'
-import { Suspense } from 'react'
 import { Inter, Noto_Sans_Thai, JetBrains_Mono } from 'next/font/google'
 import { ThemeProvider } from '@/components/common'
 import { Toaster } from '@/components/ui/sonner'
-import { NavigationProgress } from '@/components/navigation-progress'
 import './globals.css'
 
 const inter = Inter({

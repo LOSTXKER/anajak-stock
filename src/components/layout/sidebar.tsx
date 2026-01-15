@@ -1,10 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { useState, useEffect, useTransition } from 'react'
 import { cn } from '@/lib/utils'
-import { startProgress } from '@/components/navigation-progress'
 import {
   LayoutDashboard,
   Package,
@@ -147,6 +146,8 @@ const helpMenuItem: MenuItem = {
 
 export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   const [collapsed, setCollapsed] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
@@ -205,9 +206,13 @@ export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
     const Icon = item.icon
     const active = isActive(item.href)
 
-    const handleClick = () => {
+    const handleClick = (e: React.MouseEvent) => {
       if (!active) {
-        startProgress()
+        e.preventDefault()
+        // Use startTransition for instant navigation - UI updates immediately
+        startTransition(() => {
+          router.push(item.href)
+        })
       }
     }
 
