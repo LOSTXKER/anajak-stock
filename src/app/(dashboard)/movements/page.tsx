@@ -19,6 +19,7 @@ import { th } from 'date-fns/locale'
 import { ExportButton } from '@/components/export-button'
 import { PageHeader, EmptyState } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
+import { MovementDateFilter } from './movement-filters'
 
 interface PageProps {
   searchParams: Promise<{
@@ -26,6 +27,8 @@ interface PageProps {
     type?: MovementType
     status?: DocStatus
     search?: string
+    dateFrom?: string
+    dateTo?: string
   }>
 }
 
@@ -78,6 +81,8 @@ async function MovementsContent({ searchParams }: PageProps) {
   const type = params.type
   const status = params.status
   const search = params.search
+  const dateFrom = params.dateFrom
+  const dateTo = params.dateTo
 
   const { items: movements, total, totalPages } = await getMovements({
     page,
@@ -85,6 +90,8 @@ async function MovementsContent({ searchParams }: PageProps) {
     type,
     status,
     search,
+    dateFrom,
+    dateTo,
   })
 
   const buildUrl = (newPage: number) => {
@@ -93,6 +100,8 @@ async function MovementsContent({ searchParams }: PageProps) {
     if (type) p.set('type', type)
     if (status) p.set('status', status)
     if (search) p.set('search', search)
+    if (dateFrom) p.set('dateFrom', dateFrom)
+    if (dateTo) p.set('dateTo', dateTo)
     return `/movements?${p.toString()}`
   }
 
@@ -133,7 +142,7 @@ async function MovementsContent({ searchParams }: PageProps) {
 
       {/* Quick Filters */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-4">
           <div className="flex flex-wrap gap-2">
             <Button
               variant={!type && !status ? 'default' : 'outline'}
@@ -159,6 +168,11 @@ async function MovementsContent({ searchParams }: PageProps) {
                 </Button>
               )
             })}
+          </div>
+          
+          {/* Date Range Filter */}
+          <div className="border-t border-[var(--border-default)] pt-4">
+            <MovementDateFilter />
           </div>
         </CardContent>
       </Card>
@@ -225,6 +239,11 @@ async function MovementsContent({ searchParams }: PageProps) {
                         {movement.lines[0] && (
                           <span className="text-[var(--text-muted)] text-xs ml-2">
                             ({movement.lines[0].product.name}
+                            {movement.lines[0].variant && (
+                              <span className="text-[var(--accent-primary)]">
+                                {' - '}{movement.lines[0].variant.name || movement.lines[0].variant.sku}
+                              </span>
+                            )}
                             {movement.lines.length > 1 && ` +${movement.lines.length - 1}`})
                           </span>
                         )}

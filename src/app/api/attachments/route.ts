@@ -3,6 +3,42 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
 import { uploadFile, generatePath } from '@/lib/supabase/storage'
 
+export async function GET(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const refType = searchParams.get('refType')
+  const refId = searchParams.get('refId')
+
+  if (!refType || !refId) {
+    return NextResponse.json(
+      { success: false, error: 'Missing required query params' },
+      { status: 400 }
+    )
+  }
+
+  try {
+    const attachments = await prisma.attachment.findMany({
+      where: {
+        refType: refType.toUpperCase(),
+        refId: refId,
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    return NextResponse.json(attachments)
+  } catch (error) {
+    console.error('Get attachments error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to get attachments' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) {

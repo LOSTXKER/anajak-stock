@@ -17,6 +17,8 @@ import {
 import { ArrowLeft, ArrowLeftRight, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, CheckCircle2, XCircle, Clock, Send, FileText } from 'lucide-react'
 import { MovementStats } from './movement-stats'
 import { MovementActions } from './movement-actions'
+import { MovementAttachments } from './movement-attachments'
+import { LinkedMovements } from './linked-movements'
 import { EmptyState } from '@/components/common'
 
 interface PageProps {
@@ -170,6 +172,7 @@ async function MovementDetail({ id }: { id: string }) {
         <MovementActions
           movementId={movement.id}
           status={movement.status}
+          type={movement.type}
           canApprove={canApprove}
           canEdit={canEdit}
         />
@@ -294,6 +297,15 @@ async function MovementDetail({ id }: { id: string }) {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Linked Movements */}
+      <LinkedMovements movementId={movement.id} />
+
+      {/* Attachments */}
+      <MovementAttachments
+        movementId={movement.id}
+        readOnly={movement.status === 'POSTED' || movement.status === 'CANCELLED'}
+      />
     </div>
   )
 }

@@ -25,7 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight } from 'lucide-react'
-import { createMovement, submitMovement } from '@/actions/movements'
+import { createMovement, submitMovement, getMovement } from '@/actions/movements'
 import { getProducts } from '@/actions/products'
 import { getLocations } from '@/actions/stock'
 import { toast } from 'sonner'
@@ -33,9 +33,10 @@ import { MovementType } from '@/generated/prisma'
 import type { ProductWithRelations, LocationWithWarehouse } from '@/types'
 import { PageHeader, HelpTooltip } from '@/components/common'
 import { CascadingVariantPicker } from '@/components/variants'
+import { LotSelector } from '@/components/lot-selector'
 
 interface PageProps {
-  searchParams: Promise<{ type?: MovementType }>
+  searchParams: Promise<{ type?: MovementType; refId?: string }>
 }
 
 interface VariantOption {
@@ -68,6 +69,8 @@ interface MovementLine {
   qty: number
   unitCost: number
   note?: string
+  lotId?: string
+  lotNumber?: string
 }
 
 const typeConfig: Record<MovementType, { label: string; icon: React.ReactNode; color: string; description: string }> = {
@@ -112,6 +115,8 @@ export default function NewMovementPage(props: PageProps) {
   const [reason, setReason] = useState('')
   const [projectCode, setProjectCode] = useState('')
   const [lines, setLines] = useState<MovementLine[]>([])
+  const [refId, setRefId] = useState<string | undefined>(searchParams.refId)
+  const [refDocNumber, setRefDocNumber] = useState<string | null>(null)
 
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [locations, setLocations] = useState<LocationWithWarehouse[]>([])
@@ -128,9 +133,34 @@ export default function NewMovementPage(props: PageProps) {
         variants: undefined,
       })))
       setLocations(locationsData as LocationWithWarehouse[])
+
+      // If refId is provided (return from issue), load the original movement
+      if (searchParams.refId && searchParams.type === MovementType.RETURN) {
+        const refMovement = await getMovement(searchParams.refId)
+        if (refMovement) {
+          setRefDocNumber(refMovement.docNumber)
+          setProjectCode(refMovement.projectCode || '')
+          setNote(`คืนของจาก ${refMovement.docNumber}`)
+          setReason('คืนสินค้าจากการเบิก')
+          
+          // Pre-fill lines from the issue movement
+          const prefilledLines: MovementLine[] = refMovement.lines.map((line) => ({
+            id: Math.random().toString(36).substr(2, 9),
+            productId: line.productId,
+            variantId: line.variantId || undefined,
+            productName: line.product?.name,
+            // For return, destination is the source of issue
+            toLocationId: line.fromLocationId || undefined,
+            qty: Number(line.qty),
+            unitCost: Number(line.unitCost),
+            note: `คืนจาก ${refMovement.docNumber}`,
+          }))
+          setLines(prefilledLines)
+        }
+      }
     }
     loadData()
-  }, [])
+  }, [searchParams.refId, searchParams.type])
 
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
     try {
@@ -244,6 +274,8 @@ export default function NewMovementPage(props: PageProps) {
       note,
       reason,
       projectCode,
+      refType: refId && type === MovementType.RETURN ? 'RETURN_FROM' : undefined,
+      refId: refId,
       lines: lines.map((line) => ({
         productId: line.productId,
         variantId: line.variantId,
@@ -252,6 +284,7 @@ export default function NewMovementPage(props: PageProps) {
         qty: line.qty,
         unitCost: line.unitCost,
         note: line.note,
+        lotId: line.lotId,
       })),
     })
 
@@ -321,6 +354,23 @@ export default function NewMovementPage(props: PageProps) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Reference Document (if return from issue) */}
+        {refId && refDocNumber && (
+          <Card className="mb-6 bg-[var(--accent-light)]/50 border-[var(--accent-primary)]/30">
+            <CardContent className="py-4">
+              <div className="flex items-center gap-3">
+                <CornerDownRight className="w-5 h-5 text-[var(--accent-primary)]" />
+                <div>
+                  <span className="text-sm text-[var(--text-muted)]">คืนจากเอกสาร:</span>
+                  <span className="ml-2 font-mono font-medium text-[var(--accent-primary)]">
+                    {refDocNumber}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Movement Info */}
         <Card className="mb-6">
@@ -392,6 +442,7 @@ export default function NewMovementPage(props: PageProps) {
                   <TableRow>
                     <TableHead className="min-w-[200px]">สินค้า</TableHead>
                     <TableHead className="min-w-[200px]">ตัวเลือก (สี/ไซส์)</TableHead>
+                    <TableHead className="min-w-[150px]">Lot/Batch</TableHead>
                     {(type === 'ISSUE' || type === 'TRANSFER') && (
                       <TableHead className="min-w-[150px]">จากโลเคชัน</TableHead>
                     )}
@@ -408,7 +459,7 @@ export default function NewMovementPage(props: PageProps) {
                 <TableBody>
                   {lines.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12">
+                      <TableCell colSpan={8} className="text-center py-12">
                         <div className="flex flex-col items-center gap-2 text-[var(--text-muted)]">
                           <Package className="w-10 h-10 opacity-50" />
                           <p>ยังไม่มีรายการ</p>
@@ -459,11 +510,15 @@ export default function NewMovementPage(props: PageProps) {
                                         variantId: variant.id,
                                         variantLabel: variant.options.map(o => o.value).join(' / '),
                                         unitCost: variant.costPrice || line.unitCost,
+                                        lotId: undefined,
+                                        lotNumber: undefined,
                                       })
                                     } else {
                                       updateLine(line.id, {
                                         variantId: undefined,
                                         variantLabel: undefined,
+                                        lotId: undefined,
+                                        lotNumber: undefined,
                                       })
                                     }
                                   }}
@@ -473,6 +528,31 @@ export default function NewMovementPage(props: PageProps) {
                               ) : (
                                 <div className="text-[var(--text-muted)] text-sm animate-pulse">กำลังโหลด...</div>
                               )
+                            ) : (
+                              <div className="text-[var(--text-muted)] text-sm">-</div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {line.productId ? (
+                              <LotSelector
+                                productId={line.productId}
+                                variantId={line.variantId}
+                                locationId={type === 'ISSUE' || type === 'TRANSFER' ? line.fromLocationId : undefined}
+                                selectedLotId={line.lotId}
+                                onSelect={(lot) => {
+                                  if (lot) {
+                                    updateLine(line.id, {
+                                      lotId: lot.id,
+                                      lotNumber: lot.lotNumber,
+                                    })
+                                  } else {
+                                    updateLine(line.id, {
+                                      lotId: undefined,
+                                      lotNumber: undefined,
+                                    })
+                                  }
+                                }}
+                              />
                             ) : (
                               <div className="text-[var(--text-muted)] text-sm">-</div>
                             )}

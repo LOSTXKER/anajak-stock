@@ -14,6 +14,7 @@ interface MovementLineInput {
   qty: number
   unitCost?: number
   note?: string
+  lotId?: string
 }
 
 interface CreateMovementInput {
@@ -21,6 +22,8 @@ interface CreateMovementInput {
   note?: string
   reason?: string
   projectCode?: string
+  refType?: string
+  refId?: string
   lines: MovementLineInput[]
 }
 
@@ -48,8 +51,10 @@ export async function getMovements(params: {
   type?: MovementType
   status?: DocStatus
   search?: string
+  dateFrom?: string
+  dateTo?: string
 }): Promise<PaginatedResult<MovementWithRelations>> {
-  const { page = 1, limit = 20, type, status, search } = params
+  const { page = 1, limit = 20, type, status, search, dateFrom, dateTo } = params
 
   const where = {
     ...(type && { type }),
@@ -59,6 +64,12 @@ export async function getMovements(params: {
         { docNumber: { contains: search, mode: 'insensitive' as const } },
         { note: { contains: search, mode: 'insensitive' as const } },
       ],
+    }),
+    ...((dateFrom || dateTo) && {
+      createdAt: {
+        ...(dateFrom && { gte: new Date(dateFrom) }),
+        ...(dateTo && { lte: new Date(dateTo + 'T23:59:59.999Z') }),
+      },
     }),
   }
 
@@ -75,6 +86,7 @@ export async function getMovements(params: {
         lines: {
           include: {
             product: true,
+            variant: true,
             fromLocation: { include: { warehouse: true } },
             toLocation: { include: { warehouse: true } },
           },
@@ -153,6 +165,8 @@ export async function createMovement(data: CreateMovementInput): Promise<ActionR
         note: data.note,
         reason: data.reason,
         projectCode: data.projectCode,
+        refType: data.refType,
+        refId: data.refId,
         createdById: session.id,
         lines: {
           create: data.lines.map((line) => ({
@@ -163,6 +177,15 @@ export async function createMovement(data: CreateMovementInput): Promise<ActionR
             qty: line.qty,
             unitCost: line.unitCost || 0,
             note: line.note,
+            // Create LotMovementLine if lotId is provided
+            ...(line.lotId && {
+              lotMovementLines: {
+                create: {
+                  lotId: line.lotId,
+                  qty: line.qty,
+                },
+              },
+            }),
           })),
         },
       },
@@ -309,6 +332,9 @@ export async function postMovement(id: string): Promise<ActionResult> {
             include: { 
               product: true,
               variant: true,
+              lotMovementLines: {
+                include: { lot: true },
+              },
             },
           },
         },
@@ -366,6 +392,39 @@ export async function postMovement(id: string): Promise<ActionResult> {
         }
       }
 
+      // Lot balance helpers
+      async function incrementLotBalance(lotId: string, locationId: string, qty: number) {
+        const existing = await tx.lotBalance.findFirst({
+          where: { lotId, locationId },
+        })
+        if (existing) {
+          await tx.lotBalance.update({
+            where: { lotId_locationId: { lotId, locationId } },
+            data: { qtyOnHand: { increment: qty } },
+          })
+        } else {
+          await tx.lotBalance.create({
+            data: { lotId, locationId, qtyOnHand: qty },
+          })
+        }
+      }
+
+      async function decrementLotBalance(lotId: string, locationId: string, qty: number, lotNumber: string) {
+        const existing = await tx.lotBalance.findFirst({
+          where: { lotId, locationId },
+        })
+        const currentQty = Number(existing?.qtyOnHand ?? 0)
+        if (currentQty < qty) {
+          throw new Error(`Lot ${lotNumber} มีไม่เพียงพอ (มี ${currentQty}, ต้องการ ${qty})`)
+        }
+        if (existing) {
+          await tx.lotBalance.update({
+            where: { lotId_locationId: { lotId, locationId } },
+            data: { qtyOnHand: { decrement: qty } },
+          })
+        }
+      }
+
       // Update stock balances based on movement type
       for (const line of movement.lines) {
         const qty = Number(line.qty)
@@ -373,12 +432,21 @@ export async function postMovement(id: string): Promise<ActionResult> {
         const productName = line.variant 
           ? `${line.product.name} (${line.variant.sku})`
           : line.product.name
+        
+        // Get lot info if exists
+        const lotMovement = line.lotMovementLines[0]
+        const lotId = lotMovement?.lotId
+        const lotNumber = lotMovement?.lot?.lotNumber
 
         switch (movement.type) {
           case MovementType.RECEIVE:
             // Increase stock at destination
             if (line.toLocationId) {
               await incrementStock(line.productId, variantId, line.toLocationId, qty)
+              // Update lot balance if lot is specified
+              if (lotId) {
+                await incrementLotBalance(lotId, line.toLocationId, qty)
+              }
             }
             break
 
@@ -386,6 +454,10 @@ export async function postMovement(id: string): Promise<ActionResult> {
             // Decrease stock at source
             if (line.fromLocationId) {
               await decrementStock(line.productId, variantId, line.fromLocationId, qty, productName)
+              // Update lot balance if lot is specified
+              if (lotId && lotNumber) {
+                await decrementLotBalance(lotId, line.fromLocationId, qty, lotNumber)
+              }
             }
             break
 
@@ -394,6 +466,11 @@ export async function postMovement(id: string): Promise<ActionResult> {
             if (line.fromLocationId && line.toLocationId) {
               await decrementStock(line.productId, variantId, line.fromLocationId, qty, productName)
               await incrementStock(line.productId, variantId, line.toLocationId, qty)
+              // Update lot balance if lot is specified
+              if (lotId && lotNumber) {
+                await decrementLotBalance(lotId, line.fromLocationId, qty, lotNumber)
+                await incrementLotBalance(lotId, line.toLocationId, qty)
+              }
             }
             break
 
@@ -402,9 +479,15 @@ export async function postMovement(id: string): Promise<ActionResult> {
             if (line.toLocationId) {
               if (qty >= 0) {
                 await incrementStock(line.productId, variantId, line.toLocationId, qty)
+                if (lotId) {
+                  await incrementLotBalance(lotId, line.toLocationId, qty)
+                }
               } else {
                 // qty is negative, decrement by absolute value
                 await decrementStock(line.productId, variantId, line.toLocationId, Math.abs(qty), productName)
+                if (lotId && lotNumber) {
+                  await decrementLotBalance(lotId, line.toLocationId, Math.abs(qty), lotNumber)
+                }
               }
             }
             break
@@ -413,6 +496,9 @@ export async function postMovement(id: string): Promise<ActionResult> {
             // Increase stock at destination (return to stock)
             if (line.toLocationId) {
               await incrementStock(line.productId, variantId, line.toLocationId, qty)
+              if (lotId) {
+                await incrementLotBalance(lotId, line.toLocationId, qty)
+              }
             }
             break
         }
@@ -627,5 +713,322 @@ export async function cancelMovement(id: string, reason?: string): Promise<Actio
   } catch (error) {
     console.error('Cancel movement error:', error)
     return { success: false, error: 'ไม่สามารถยกเลิกรายการได้' }
+  }
+}
+
+/**
+ * Reverse a posted movement - creates a new movement that reverses the stock changes
+ */
+export async function reverseMovement(id: string): Promise<ActionResult<{ id: string }>> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const movement = await prisma.stockMovement.findUnique({
+      where: { id },
+      include: {
+        lines: {
+          include: {
+            product: true,
+            variant: true,
+            lotMovementLines: true,
+          },
+        },
+      },
+    })
+
+    if (!movement) {
+      return { success: false, error: 'ไม่พบรายการ' }
+    }
+
+    if (movement.status !== DocStatus.POSTED) {
+      return { success: false, error: 'สามารถกลับรายการได้เฉพาะเอกสารที่ Post แล้วเท่านั้น' }
+    }
+
+    // Check if already reversed
+    const existingReversal = await prisma.stockMovement.findFirst({
+      where: {
+        refType: 'REVERSAL',
+        refId: id,
+        status: { notIn: [DocStatus.CANCELLED, DocStatus.REJECTED] },
+      },
+    })
+
+    if (existingReversal) {
+      return { success: false, error: 'รายการนี้ถูกกลับรายการแล้ว' }
+    }
+
+    // Determine reverse type
+    let reverseType: MovementType
+    switch (movement.type) {
+      case MovementType.RECEIVE:
+        reverseType = MovementType.ISSUE
+        break
+      case MovementType.ISSUE:
+        reverseType = MovementType.RECEIVE
+        break
+      case MovementType.TRANSFER:
+        reverseType = MovementType.TRANSFER
+        break
+      case MovementType.ADJUST:
+        reverseType = MovementType.ADJUST
+        break
+      case MovementType.RETURN:
+        reverseType = MovementType.ISSUE
+        break
+      default:
+        reverseType = MovementType.ADJUST
+    }
+
+    const docNumber = await generateDocNumber('MOVEMENT')
+
+    // Create reversed movement
+    const reversedMovement = await prisma.stockMovement.create({
+      data: {
+        docNumber,
+        type: reverseType,
+        status: DocStatus.DRAFT,
+        refType: 'REVERSAL',
+        refId: id,
+        note: `กลับรายการจาก ${movement.docNumber}`,
+        reason: 'กลับรายการ (Reversal)',
+        projectCode: movement.projectCode,
+        createdById: session.id,
+        lines: {
+          create: movement.lines.map((line) => {
+            // For TRANSFER reversal, swap from and to locations
+            const isTransfer = movement.type === MovementType.TRANSFER
+            const fromLocationId = isTransfer ? line.toLocationId : line.fromLocationId
+            const toLocationId = isTransfer ? line.fromLocationId : line.toLocationId
+
+            // For ADJUST reversal, negate the qty
+            const qty = movement.type === MovementType.ADJUST ? -Number(line.qty) : Number(line.qty)
+
+            return {
+              productId: line.productId,
+              variantId: line.variantId || null,
+              fromLocationId: reverseType === MovementType.ISSUE || reverseType === MovementType.TRANSFER 
+                ? (fromLocationId || line.toLocationId) 
+                : null,
+              toLocationId: reverseType === MovementType.RECEIVE || reverseType === MovementType.TRANSFER 
+                ? (toLocationId || line.fromLocationId) 
+                : null,
+              qty,
+              unitCost: Number(line.unitCost),
+              note: `กลับรายการจาก line: ${line.id}`,
+              // Copy lot information if exists
+              ...(line.lotMovementLines[0] && {
+                lotMovementLines: {
+                  create: {
+                    lotId: line.lotMovementLines[0].lotId,
+                    qty,
+                  },
+                },
+              }),
+            }
+          }),
+        },
+      },
+    })
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'CREATE_REVERSAL',
+        refType: 'MOVEMENT',
+        refId: reversedMovement.id,
+        newData: { originalMovementId: id, originalDocNumber: movement.docNumber },
+      },
+    })
+
+    revalidatePath('/movements')
+    revalidatePath(`/movements/${id}`)
+
+    return { success: true, data: { id: reversedMovement.id } }
+  } catch (error) {
+    console.error('Reverse movement error:', error)
+    return { success: false, error: 'ไม่สามารถกลับรายการได้' }
+  }
+}
+
+interface ReturnLineInput {
+  lineId: string
+  qty: number
+}
+
+/**
+ * Create a RETURN movement from a posted ISSUE movement
+ */
+export async function createReturnFromIssue(
+  issueId: string,
+  returnLines: ReturnLineInput[]
+): Promise<ActionResult<{ id: string }>> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  if (!returnLines || returnLines.length === 0) {
+    return { success: false, error: 'กรุณาระบุรายการที่ต้องการคืน' }
+  }
+
+  try {
+    const issueMovement = await prisma.stockMovement.findUnique({
+      where: { id: issueId },
+      include: {
+        lines: {
+          include: {
+            product: true,
+            variant: true,
+            fromLocation: true,
+            lotMovementLines: true,
+          },
+        },
+      },
+    })
+
+    if (!issueMovement) {
+      return { success: false, error: 'ไม่พบรายการเบิกออก' }
+    }
+
+    if (issueMovement.type !== MovementType.ISSUE) {
+      return { success: false, error: 'สามารถสร้างรายการคืนได้จากรายการเบิกออกเท่านั้น' }
+    }
+
+    if (issueMovement.status !== DocStatus.POSTED) {
+      return { success: false, error: 'สามารถสร้างรายการคืนได้จากรายการที่ Post แล้วเท่านั้น' }
+    }
+
+    // Validate return quantities
+    for (const returnLine of returnLines) {
+      const originalLine = issueMovement.lines.find(l => l.id === returnLine.lineId)
+      if (!originalLine) {
+        return { success: false, error: `ไม่พบรายการที่ต้องการคืน: ${returnLine.lineId}` }
+      }
+      if (returnLine.qty <= 0) {
+        return { success: false, error: 'จำนวนที่คืนต้องมากกว่า 0' }
+      }
+      if (returnLine.qty > Number(originalLine.qty)) {
+        return { success: false, error: `จำนวนที่คืนมากกว่าจำนวนที่เบิก (${originalLine.product.name})` }
+      }
+    }
+
+    const docNumber = await generateDocNumber('MOVEMENT')
+
+    // Create RETURN movement
+    const returnMovement = await prisma.stockMovement.create({
+      data: {
+        docNumber,
+        type: MovementType.RETURN,
+        status: DocStatus.DRAFT,
+        refType: 'RETURN_FROM',
+        refId: issueId,
+        note: `คืนของจาก ${issueMovement.docNumber}`,
+        reason: 'คืนสินค้าจากการเบิก',
+        projectCode: issueMovement.projectCode,
+        createdById: session.id,
+        lines: {
+          create: returnLines.map((returnLine) => {
+            const originalLine = issueMovement.lines.find(l => l.id === returnLine.lineId)!
+            
+            return {
+              productId: originalLine.productId,
+              variantId: originalLine.variantId || null,
+              // Return goes TO the location it was issued FROM
+              toLocationId: originalLine.fromLocationId,
+              qty: returnLine.qty,
+              unitCost: Number(originalLine.unitCost),
+              note: `คืนจาก line: ${originalLine.id}`,
+              // Copy lot information if exists
+              ...(originalLine.lotMovementLines[0] && {
+                lotMovementLines: {
+                  create: {
+                    lotId: originalLine.lotMovementLines[0].lotId,
+                    qty: returnLine.qty,
+                  },
+                },
+              }),
+            }
+          }),
+        },
+      },
+    })
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'CREATE_RETURN',
+        refType: 'MOVEMENT',
+        refId: returnMovement.id,
+        newData: { issueMovementId: issueId, issueDocNumber: issueMovement.docNumber },
+      },
+    })
+
+    revalidatePath('/movements')
+    revalidatePath(`/movements/${issueId}`)
+
+    return { success: true, data: { id: returnMovement.id } }
+  } catch (error) {
+    console.error('Create return from issue error:', error)
+    return { success: false, error: 'ไม่สามารถสร้างรายการคืนได้' }
+  }
+}
+
+/**
+ * Get linked movements (returns, reversals) for a movement
+ */
+export async function getLinkedMovements(id: string) {
+  try {
+    const linkedMovements = await prisma.stockMovement.findMany({
+      where: {
+        refId: id,
+        status: { notIn: [DocStatus.CANCELLED] },
+      },
+      select: {
+        id: true,
+        docNumber: true,
+        type: true,
+        status: true,
+        refType: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    // Also get the original movement if this is a linked one
+    const currentMovement = await prisma.stockMovement.findUnique({
+      where: { id },
+      select: { refType: true, refId: true },
+    })
+
+    let originalMovement = null
+    if (currentMovement?.refId) {
+      originalMovement = await prisma.stockMovement.findUnique({
+        where: { id: currentMovement.refId },
+        select: {
+          id: true,
+          docNumber: true,
+          type: true,
+          status: true,
+          createdAt: true,
+        },
+      })
+    }
+
+    return {
+      success: true,
+      data: {
+        linkedMovements,
+        originalMovement,
+        refType: currentMovement?.refType,
+      },
+    }
+  } catch (error) {
+    console.error('Get linked movements error:', error)
+    return { success: false, error: 'ไม่สามารถโหลดรายการที่เชื่อมโยงได้' }
   }
 }

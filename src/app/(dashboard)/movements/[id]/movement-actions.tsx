@@ -14,18 +14,19 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Loader2, CheckCircle, XCircle, Send, PackageCheck, FileEdit, Ban } from 'lucide-react'
-import { submitMovement, approveMovement, rejectMovement, postMovement, cancelMovement } from '@/actions/movements'
+import { Loader2, CheckCircle, XCircle, Send, PackageCheck, FileEdit, Ban, RotateCcw, CornerDownRight } from 'lucide-react'
+import { submitMovement, approveMovement, rejectMovement, postMovement, cancelMovement, reverseMovement, createReturnFromIssue } from '@/actions/movements'
 import { toast } from 'sonner'
 
 interface MovementActionsProps {
   movementId: string
   status: string
+  type: string
   canApprove: boolean
   canEdit: boolean
 }
 
-export function MovementActions({ movementId, status, canApprove, canEdit }: MovementActionsProps) {
+export function MovementActions({ movementId, status, type, canApprove, canEdit }: MovementActionsProps) {
   const router = useRouter()
   const [isProcessing, setIsProcessing] = useState(false)
   
@@ -35,6 +36,8 @@ export function MovementActions({ movementId, status, canApprove, canEdit }: Mov
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [postDialogOpen, setPostDialogOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+  const [reverseDialogOpen, setReverseDialogOpen] = useState(false)
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false)
   
   const [rejectReason, setRejectReason] = useState('')
   const [cancelReason, setCancelReason] = useState('')
@@ -114,6 +117,28 @@ export function MovementActions({ movementId, status, canApprove, canEdit }: Mov
     }
   }
 
+  // Reverse movement (create opposite entry)
+  async function handleReverse() {
+    setIsProcessing(true)
+    const result = await reverseMovement(movementId)
+    setIsProcessing(false)
+
+    if (result.success) {
+      toast.success('สร้างรายการกลับรายการเรียบร้อย')
+      setReverseDialogOpen(false)
+      router.push(`/movements/${result.data.id}`)
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  // Create return from issue - navigate to return form
+  function handleReturn() {
+    setReturnDialogOpen(false)
+    // Navigate to new movement page with return type and reference
+    router.push(`/movements/new?type=RETURN&refId=${movementId}`)
+  }
+
   return (
     <>
       <div className="flex items-center gap-2">
@@ -167,6 +192,30 @@ export function MovementActions({ movementId, status, canApprove, canEdit }: Mov
           >
             <PackageCheck className="w-4 h-4 mr-2" />
             บันทึกเข้าสต๊อค
+          </Button>
+        )}
+
+        {/* POSTED: Reverse option */}
+        {status === 'POSTED' && (
+          <Button
+            variant="outline"
+            onClick={() => setReverseDialogOpen(true)}
+            className="border-[var(--status-warning)]/30 text-[var(--status-warning)] hover:bg-[var(--status-warning)]/10"
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            กลับรายการ
+          </Button>
+        )}
+
+        {/* POSTED ISSUE: Return option */}
+        {status === 'POSTED' && type === 'ISSUE' && (
+          <Button
+            variant="outline"
+            onClick={() => setReturnDialogOpen(true)}
+            className="border-[var(--accent-primary)]/30 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/10"
+          >
+            <CornerDownRight className="w-4 h-4 mr-2" />
+            คืนของ
           </Button>
         )}
 
@@ -345,6 +394,75 @@ export function MovementActions({ movementId, status, canApprove, canEdit }: Mov
                 <Ban className="w-4 h-4 mr-2" />
               )}
               ยกเลิกรายการ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reverse Dialog */}
+      <Dialog open={reverseDialogOpen} onOpenChange={setReverseDialogOpen}>
+        <DialogContent className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+          <DialogHeader>
+            <DialogTitle>กลับรายการ (Reversal)</DialogTitle>
+            <DialogDescription>
+              ระบบจะสร้างรายการใหม่ที่มีผลตรงข้ามกับรายการนี้ เพื่อกลับคืนสต๊อคให้เป็นเหมือนก่อนทำรายการนี้
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="bg-[var(--status-warning-light)] border border-[var(--status-warning)]/30 rounded-lg p-4">
+              <p className="text-sm text-[var(--status-warning)]">
+                <strong>หมายเหตุ:</strong> รายการกลับรายการที่สร้างใหม่จะอยู่ในสถานะ Draft 
+                และต้องผ่านขั้นตอนอนุมัติและ Post เหมือนรายการปกติ
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReverseDialogOpen(false)}>
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleReverse}
+              disabled={isProcessing}
+              className="bg-[var(--status-warning)] hover:bg-[var(--status-warning)]/90 text-white"
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4 mr-2" />
+              )}
+              สร้างรายการกลับรายการ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Return Dialog */}
+      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+        <DialogContent className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+          <DialogHeader>
+            <DialogTitle>คืนของจากการเบิก</DialogTitle>
+            <DialogDescription>
+              สร้างรายการคืนสินค้ากลับเข้าสต๊อคจากการเบิกนี้
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="bg-[var(--accent-light)] border border-[var(--accent-primary)]/30 rounded-lg p-4">
+              <p className="text-sm text-[var(--accent-primary)]">
+                ระบบจะนำท่านไปหน้าสร้างรายการคืนของ โดยจะ pre-fill ข้อมูลจากรายการเบิกนี้
+                ท่านสามารถแก้ไขจำนวนที่คืนได้
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReturnDialogOpen(false)}>
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleReturn}
+              className="bg-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/90 text-white"
+            >
+              <CornerDownRight className="w-4 h-4 mr-2" />
+              ไปหน้าคืนของ
             </Button>
           </DialogFooter>
         </DialogContent>
