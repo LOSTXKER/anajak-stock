@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { startNavigation } from '@/components/navigation-progress'
 import {
   LayoutDashboard,
   Package,
@@ -25,7 +26,6 @@ import {
   FileStack,
   Scan,
   HelpCircle,
-  Loader2,
 } from 'lucide-react'
 import { Role } from '@/generated/prisma'
 import { hasPermission } from '@/lib/permissions'
@@ -149,13 +149,6 @@ export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-  const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
-
-  // Clear navigating state when pathname changes
-  useEffect(() => {
-    setNavigatingTo(null)
-  }, [pathname])
 
   // Auto-expand group if current path is in it
   useEffect(() => {
@@ -211,14 +204,10 @@ export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
     if (!canAccess(item.permission, item.adminOnly)) return null
     const Icon = item.icon
     const active = isActive(item.href)
-    const isNavigating = navigatingTo === item.href && isPending
 
     const handleClick = () => {
       if (!active) {
-        setNavigatingTo(item.href)
-        startTransition(() => {
-          // Navigation happens via Link, this just marks the transition
-        })
+        startNavigation()
       }
     }
 
@@ -235,27 +224,16 @@ export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
           isSubItem && !collapsed && 'pl-10',
           active
             ? 'bg-[var(--accent-light)] text-[var(--accent-primary)]'
-            : isNavigating
-              ? 'bg-[var(--bg-hover)] text-[var(--accent-primary)]'
-              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+            : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
         )}
       >
-        {isNavigating ? (
-          <Loader2
-            className={cn(
-              'shrink-0 animate-spin text-[var(--accent-primary)]',
-              isSubItem ? 'w-4 h-4' : 'w-5 h-5'
-            )}
-          />
-        ) : (
-          <Icon
-            className={cn(
-              'w-4 h-4 shrink-0',
-              isSubItem ? 'w-4 h-4' : 'w-5 h-5',
-              active ? 'text-[var(--accent-primary)]' : ''
-            )}
-          />
-        )}
+        <Icon
+          className={cn(
+            'w-4 h-4 shrink-0',
+            isSubItem ? 'w-4 h-4' : 'w-5 h-5',
+            active ? 'text-[var(--accent-primary)]' : ''
+          )}
+        />
         {!collapsed && <span className="truncate">{item.title}</span>}
       </Link>
     )

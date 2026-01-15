@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { Inter, Noto_Sans_Thai, JetBrains_Mono } from 'next/font/google'
 import { ThemeProvider } from '@/components/common'
 import { Toaster } from '@/components/ui/sonner'
+import { NavigationProgressProvider } from '@/components/navigation-progress'
 import './globals.css'
 
 const inter = Inter({
@@ -45,7 +47,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <Suspense fallback={null}>
+            <NavigationProgressProvider>
+              {children}
+            </NavigationProgressProvider>
+          </Suspense>
           <Toaster position="top-right" />
         </ThemeProvider>
       </body>
