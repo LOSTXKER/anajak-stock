@@ -280,7 +280,7 @@ async function MovementsContent({ searchParams }: PageProps) {
             asChild={page > 1}
           >
             {page > 1 ? (
-              <ProgressLink href={buildUrl(page - 1)}>
+              <Link href={buildUrl(page - 1)}>
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 ก่อนหน้า
               </Link>
@@ -301,7 +301,7 @@ async function MovementsContent({ searchParams }: PageProps) {
             asChild={page < totalPages}
           >
             {page < totalPages ? (
-              <ProgressLink href={buildUrl(page + 1)}>
+              <Link href={buildUrl(page + 1)}>
                 ถัดไป
                 <ChevronRight className="w-4 h-4 ml-1" />
               </Link>
