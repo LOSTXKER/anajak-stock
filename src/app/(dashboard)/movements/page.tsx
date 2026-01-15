@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { ProgressLink } from '@/components/progress-link'
 import { getMovements } from '@/actions/movements'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -150,7 +149,7 @@ async function MovementsContent({ searchParams }: PageProps) {
               size="sm"
               asChild
             >
-              <ProgressLink href="/movements">ทั้งหมด</ProgressLink>
+              <Link href="/movements">ทั้งหมด</Link>
             </Button>
             {Object.entries(typeConfig).map(([key, config]) => {
               const isActive = type === key
@@ -162,10 +161,10 @@ async function MovementsContent({ searchParams }: PageProps) {
                   className={isActive ? config.activeColor : ''}
                   asChild
                 >
-                  <ProgressLink href={`/movements?type=${key}`}>
+                  <Link href={`/movements?type=${key}`}>
                     <config.icon className="w-4 h-4 mr-1" />
                     {config.label}
-                  </ProgressLink>
+                  </Link>
                 </Button>
               )
             })}
@@ -284,7 +283,7 @@ async function MovementsContent({ searchParams }: PageProps) {
               <ProgressLink href={buildUrl(page - 1)}>
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 ก่อนหน้า
-              </ProgressLink>
+              </Link>
             ) : (
               <>
                 <ChevronLeft className="w-4 h-4 mr-1" />
@@ -305,7 +304,7 @@ async function MovementsContent({ searchParams }: PageProps) {
               <ProgressLink href={buildUrl(page + 1)}>
                 ถัดไป
                 <ChevronRight className="w-4 h-4 ml-1" />
-              </ProgressLink>
+              </Link>
             ) : (
               <>
                 ถัดไป
