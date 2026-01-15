@@ -10,6 +10,7 @@ import {
   Warehouse,
   ChevronRight,
   Link2,
+  Bell,
 } from 'lucide-react'
 
 const settingsNavItems = [
@@ -30,6 +31,12 @@ const settingsNavItems = [
     description: 'คลังและตำแหน่งจัดเก็บ',
     icon: Warehouse,
     href: '/settings/warehouses',
+  },
+  {
+    title: 'การแจ้งเตือน',
+    description: 'LINE Messaging API',
+    icon: Bell,
+    href: '/settings/notifications',
   },
   {
     title: 'เชื่อมต่อระบบ',
