@@ -292,7 +292,7 @@ export default function NotificationSettingsPage() {
               >
                 LINE Developers Console
               </a>
-              {' → Messaging API → Channel Access Token
+              {' → Messaging API → Channel Access Token'}
             </p>
           </div>
         </CardContent>
