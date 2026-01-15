@@ -45,9 +45,6 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Suspense fallback={null}>
-            <NavigationProgress />
-          </Suspense>
           {children}
           <Toaster position="top-right" />
         </ThemeProvider>
