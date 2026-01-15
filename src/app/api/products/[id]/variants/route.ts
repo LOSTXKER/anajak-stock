@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
+import { serialize } from '@/lib/serialize'
 
 export async function GET(
   request: Request,
@@ -39,7 +40,8 @@ export async function GET(
       orderBy: { createdAt: 'asc' },
     })
 
-    return NextResponse.json(variants)
+    // Serialize to convert Decimal to number for client components
+    return NextResponse.json(serialize(variants))
   } catch (error) {
     console.error('Error fetching variants:', error)
     return NextResponse.json({ error: 'Failed to fetch variants' }, { status: 500 })

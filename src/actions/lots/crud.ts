@@ -243,9 +243,20 @@ export async function getLotsByProduct(productId: string, variantId?: string) {
     return {
       success: true as const,
       data: lots.map((lot) => ({
-        ...lot,
+        id: lot.id,
+        lotNumber: lot.lotNumber,
+        expiryDate: lot.expiryDate?.toISOString() || null,
+        manufacturedDate: lot.manufacturedDate?.toISOString() || null,
+        note: lot.note,
         qtyReceived: Number(lot.qtyReceived),
         totalQtyOnHand: lot.balances.reduce((sum, b) => sum + Number(b.qtyOnHand), 0),
+        balances: lot.balances.map((b) => ({
+          qtyOnHand: Number(b.qtyOnHand),
+          location: {
+            id: b.location.id,
+            code: b.location.code,
+          },
+        })),
       })),
     }
   } catch (error) {
