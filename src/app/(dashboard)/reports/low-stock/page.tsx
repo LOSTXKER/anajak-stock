@@ -16,35 +16,77 @@ import { AlertTriangle, ShoppingCart } from 'lucide-react'
 import { PageHeader, EmptyState } from '@/components/common'
 
 async function getLowStockReport() {
-  const stockData = await prisma.stockBalance.findMany({
+  // Query all products with reorder point > 0
+  // This includes products that never had any movement (new products)
+  const products = await prisma.product.findMany({
     where: {
-      product: {
-        reorderPoint: { gt: 0 },
-        active: true,
-        deletedAt: null,
-      },
+      reorderPoint: { gt: 0 },
+      active: true,
+      deletedAt: null,
     },
     include: {
-      product: {
+      category: true,
+      unit: true,
+      stockBalances: {
         include: {
-          category: true,
-          unit: true,
-        },
-      },
-      location: {
-        include: {
-          warehouse: true,
+          location: {
+            include: {
+              warehouse: true,
+            },
+          },
         },
       },
     },
     orderBy: {
-      qtyOnHand: 'asc',
+      name: 'asc',
     },
   })
 
-  return stockData.filter(
-    (item) => Number(item.qtyOnHand) <= Number(item.product.reorderPoint)
-  )
+  // Transform to include calculated total stock
+  const result: Array<{
+    id: string
+    productId: string
+    product: typeof products[0]
+    location: { code: string; name: string; warehouse: { name: string } } | null
+    qtyOnHand: number
+    totalStock: number
+  }> = []
+
+  for (const product of products) {
+    const totalStock = product.stockBalances.reduce(
+      (sum, sb) => sum + Number(sb.qtyOnHand),
+      0
+    )
+    const rop = Number(product.reorderPoint)
+
+    // Only include if total stock <= reorder point
+    if (totalStock <= rop) {
+      if (product.stockBalances.length === 0) {
+        // Product has no stock balance records (never had movement)
+        result.push({
+          id: `${product.id}-no-stock`,
+          productId: product.id,
+          product,
+          location: null,
+          qtyOnHand: 0,
+          totalStock: 0,
+        })
+      } else {
+        // Group by product and show total
+        result.push({
+          id: `${product.id}-total`,
+          productId: product.id,
+          product,
+          location: product.stockBalances[0]?.location || null,
+          qtyOnHand: totalStock,
+          totalStock,
+        })
+      }
+    }
+  }
+
+  // Sort by qty ascending (most critical first)
+  return result.sort((a, b) => a.qtyOnHand - b.qtyOnHand)
 }
 
 const levelConfig = {
@@ -122,10 +164,16 @@ async function LowStockReportContent() {
                         {item.product.category?.name || '-'}
                       </TableCell>
                       <TableCell>
-                        <span className="font-medium">{item.location.warehouse.name}</span>
-                        <span className="text-[var(--text-muted)] text-xs ml-2">
-                          ({item.location.code})
-                        </span>
+                        {item.location ? (
+                          <>
+                            <span className="font-medium">{item.location.warehouse.name}</span>
+                            <span className="text-[var(--text-muted)] text-xs ml-2">
+                              ({item.location.code})
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[var(--text-muted)] italic">ยังไม่มีสต๊อค</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <span className={qty === 0 ? 'text-[var(--status-error)] font-bold' : 'text-[var(--status-warning)] font-bold'}>
