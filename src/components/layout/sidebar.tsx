@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { startProgress } from '@/components/navigation-progress'
 import {
   LayoutDashboard,
   Package,
@@ -204,10 +205,17 @@ export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
     const Icon = item.icon
     const active = isActive(item.href)
 
+    const handleClick = () => {
+      if (!active) {
+        startProgress()
+      }
+    }
+
     return (
       <Link
         key={item.href}
         href={item.href}
+        onClick={handleClick}
         title={collapsed ? item.title : undefined}
         className={cn(
           'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200',
