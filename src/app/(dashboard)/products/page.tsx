@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
+import { ProgressLink } from '@/components/progress-link'
 import { getProducts, getCategories } from '@/actions/products'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -176,10 +177,10 @@ async function ProductsContent({ searchParams }: PageProps) {
             asChild={page > 1}
           >
             {page > 1 ? (
-              <Link href={`/products?page=${page - 1}${search ? `&search=${search}` : ''}${categoryId ? `&category=${categoryId}` : ''}`}>
+              <ProgressLink href={`/products?page=${page - 1}${search ? `&search=${search}` : ''}${categoryId ? `&category=${categoryId}` : ''}`}>
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 ก่อนหน้า
-              </Link>
+              </ProgressLink>
             ) : (
               <>
                 <ChevronLeft className="w-4 h-4 mr-1" />
@@ -197,10 +198,10 @@ async function ProductsContent({ searchParams }: PageProps) {
             asChild={page < totalPages}
           >
             {page < totalPages ? (
-              <Link href={`/products?page=${page + 1}${search ? `&search=${search}` : ''}${categoryId ? `&category=${categoryId}` : ''}`}>
+              <ProgressLink href={`/products?page=${page + 1}${search ? `&search=${search}` : ''}${categoryId ? `&category=${categoryId}` : ''}`}>
                 ถัดไป
                 <ChevronRight className="w-4 h-4 ml-1" />
-              </Link>
+              </ProgressLink>
             ) : (
               <>
                 ถัดไป

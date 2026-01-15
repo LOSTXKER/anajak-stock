@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useCallback } from 'react'
+import { startNavigation } from '@/components/navigation-progress'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -32,6 +33,7 @@ export function MovementDateFilter() {
     // Reset to page 1 when filter changes
     params.set('page', '1')
     
+    startNavigation()
     router.push(`/movements?${params.toString()}`)
   }, [dateFrom, dateTo, searchParams, router])
 
@@ -44,6 +46,7 @@ export function MovementDateFilter() {
     params.delete('dateTo')
     params.set('page', '1')
     
+    startNavigation()
     router.push(`/movements?${params.toString()}`)
   }, [searchParams, router])
 

@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition, useEffect, useCallback } from 'react'
+import { startNavigation } from '@/components/navigation-progress'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -34,6 +35,7 @@ export function ProductSearch({ categories }: ProductSearchProps) {
   
   // Auto-search when debounced search changes
   const performSearch = useCallback((searchVal: string, categoryVal: string) => {
+    startNavigation()
     startTransition(() => {
       const params = new URLSearchParams()
       if (searchVal) params.set('search', searchVal)
@@ -63,6 +65,7 @@ export function ProductSearch({ categories }: ProductSearchProps) {
   function handleClear() {
     setSearch('')
     setCategory('')
+    startNavigation()
     startTransition(() => {
       router.push('/products')
     })
@@ -70,6 +73,7 @@ export function ProductSearch({ categories }: ProductSearchProps) {
 
   function handleBarcodeSearch(barcode: string) {
     setSearch(barcode)
+    startNavigation()
     startTransition(() => {
       router.push(`/products?search=${encodeURIComponent(barcode)}`)
     })

@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
+import { ProgressLink } from '@/components/progress-link'
 import { getMovements } from '@/actions/movements'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -149,7 +150,7 @@ async function MovementsContent({ searchParams }: PageProps) {
               size="sm"
               asChild
             >
-              <Link href="/movements">ทั้งหมด</Link>
+              <ProgressLink href="/movements">ทั้งหมด</ProgressLink>
             </Button>
             {Object.entries(typeConfig).map(([key, config]) => {
               const isActive = type === key
@@ -161,10 +162,10 @@ async function MovementsContent({ searchParams }: PageProps) {
                   className={isActive ? config.activeColor : ''}
                   asChild
                 >
-                  <Link href={`/movements?type=${key}`}>
+                  <ProgressLink href={`/movements?type=${key}`}>
                     <config.icon className="w-4 h-4 mr-1" />
                     {config.label}
-                  </Link>
+                  </ProgressLink>
                 </Button>
               )
             })}
@@ -280,10 +281,10 @@ async function MovementsContent({ searchParams }: PageProps) {
             asChild={page > 1}
           >
             {page > 1 ? (
-              <Link href={buildUrl(page - 1)}>
+              <ProgressLink href={buildUrl(page - 1)}>
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 ก่อนหน้า
-              </Link>
+              </ProgressLink>
             ) : (
               <>
                 <ChevronLeft className="w-4 h-4 mr-1" />
@@ -301,10 +302,10 @@ async function MovementsContent({ searchParams }: PageProps) {
             asChild={page < totalPages}
           >
             {page < totalPages ? (
-              <Link href={buildUrl(page + 1)}>
+              <ProgressLink href={buildUrl(page + 1)}>
                 ถัดไป
                 <ChevronRight className="w-4 h-4 ml-1" />
-              </Link>
+              </ProgressLink>
             ) : (
               <>
                 ถัดไป
