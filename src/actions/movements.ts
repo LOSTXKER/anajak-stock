@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { MovementType, DocStatus } from '@/generated/prisma'
+import { serialize } from '@/lib/serialize'
 import type { ActionResult, PaginatedResult, MovementWithRelations } from '@/types'
 
 interface MovementLineInput {
@@ -100,7 +101,7 @@ export async function getMovements(params: {
   ])
 
   return {
-    items: items as unknown as MovementWithRelations[],
+    items: serialize(items) as MovementWithRelations[],
     total,
     page,
     limit,
@@ -132,16 +133,7 @@ export async function getMovement(id: string): Promise<MovementWithRelations | n
   if (!movement) return null
 
   // Convert Decimal to Number for client components
-  const serializedMovement = {
-    ...movement,
-    lines: movement.lines.map(line => ({
-      ...line,
-      qty: Number(line.qty),
-      unitCost: Number(line.unitCost),
-    })),
-  }
-
-  return serializedMovement as unknown as MovementWithRelations | null
+  return serialize(movement) as MovementWithRelations
 }
 
 export async function createMovement(data: CreateMovementInput): Promise<ActionResult<MovementWithRelations>> {
