@@ -14,6 +14,8 @@ export async function getStockBalances(params: {
   const { page = 1, limit = 20, search, warehouseId, categoryId, lowStockOnly } = params
 
   const where = {
+    // Only show items with stock > 0
+    qtyOnHand: { gt: 0 },
     product: {
       active: true,
       deletedAt: null,
