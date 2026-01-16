@@ -76,69 +76,60 @@ interface CameraScannerProps {
 }
 
 export function CameraScanner({ onScan, onClose }: CameraScannerProps) {
-  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const scannerRef = useRef<HTMLDivElement>(null)
-  const html5QrCodeRef = useRef<import('html5-qrcode').Html5Qrcode | null>(null)
+  const scannerContainerId = useRef(`scanner-${Date.now()}`)
+  const scannerRef = useRef<import('html5-qrcode').Html5QrcodeScanner | null>(null)
   const hasScannedRef = useRef(false)
-
-  const stopScanner = useCallback(async () => {
-    if (html5QrCodeRef.current) {
-      try {
-        const state = html5QrCodeRef.current.getState()
-        if (state === 2) { // SCANNING state
-          await html5QrCodeRef.current.stop()
-        }
-      } catch (err) {
-        console.error('Error stopping scanner:', err)
-      }
-      html5QrCodeRef.current = null
-    }
-  }, [])
 
   useEffect(() => {
     let mounted = true
 
     async function startScanner() {
-      if (!scannerRef.current || !mounted) return
+      if (!mounted) return
 
       try {
-        const { Html5Qrcode } = await import('html5-qrcode')
+        const { Html5QrcodeScanner } = await import('html5-qrcode')
         
         if (!mounted) return
 
-        const scannerId = 'barcode-scanner-' + Date.now()
-        scannerRef.current.id = scannerId
+        // Wait for DOM to be ready
+        await new Promise(resolve => setTimeout(resolve, 100))
 
-        const html5QrCode = new Html5Qrcode(scannerId)
-        html5QrCodeRef.current = html5QrCode
+        const container = document.getElementById(scannerContainerId.current)
+        if (!container || !mounted) return
 
-        await html5QrCode.start(
-          { facingMode: 'environment' },
+        const scanner = new Html5QrcodeScanner(
+          scannerContainerId.current,
           {
             fps: 10,
             qrbox: { width: 250, height: 150 },
             aspectRatio: 1.5,
+            rememberLastUsedCamera: true,
+            showTorchButtonIfSupported: true,
           },
+          false // verbose
+        )
+        
+        scannerRef.current = scanner
+
+        scanner.render(
           (decodedText) => {
             if (!hasScannedRef.current && mounted) {
               hasScannedRef.current = true
+              scanner.clear()
               onScan(decodedText)
             }
           },
-          () => {
-            // QR code scan error (silent)
+          (errorMessage) => {
+            // Scan error - this fires constantly when no QR is detected, ignore it
+            console.debug('Scan frame error:', errorMessage)
           }
         )
-
-        if (mounted) {
-          setIsLoading(false)
-        }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Scanner error:', err)
         if (mounted) {
-          setError('ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้กล้อง')
-          setIsLoading(false)
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          setError(`ไม่สามารถเปิดกล้องได้: ${errorMessage}`)
         }
       }
     }
@@ -147,45 +138,42 @@ export function CameraScanner({ onScan, onClose }: CameraScannerProps) {
 
     return () => {
       mounted = false
-      stopScanner()
+      if (scannerRef.current) {
+        try {
+          scannerRef.current.clear()
+        } catch (err) {
+          console.error('Error clearing scanner:', err)
+        }
+        scannerRef.current = null
+      }
     }
-  }, [onScan, stopScanner])
+  }, [onScan])
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+        <Camera className="w-12 h-12 text-[var(--status-error)]" />
+        <p className="text-[var(--status-error)]">{error}</p>
+        <Button variant="outline" onClick={onClose}>
+          ปิด
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
-      {isLoading && (
-        <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent-primary)]" />
-          <p className="text-[var(--text-muted)]">กำลังเปิดกล้อง...</p>
-        </div>
-      )}
-
-      {error && (
-        <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-          <Camera className="w-12 h-12 text-[var(--status-error)]" />
-          <p className="text-[var(--status-error)]">{error}</p>
-          <Button variant="outline" onClick={onClose}>
-            ปิด
-          </Button>
-        </div>
-      )}
-
+      {/* Scanner container with its own UI */}
       <div 
-        ref={scannerRef} 
-        className={`w-full rounded-lg overflow-hidden ${isLoading || error ? 'hidden' : ''}`}
-        style={{ minHeight: 300 }}
+        id={scannerContainerId.current}
+        className="w-full"
       />
 
-      {!isLoading && !error && (
-        <div className="text-center space-y-2">
-          <p className="text-sm text-[var(--text-muted)]">
-            หันกล้องไปที่ Barcode/QR Code
-          </p>
-          <Button variant="outline" onClick={onClose}>
-            ยกเลิก
-          </Button>
-        </div>
-      )}
+      <div className="text-center">
+        <Button variant="outline" onClick={onClose}>
+          ยกเลิก
+        </Button>
+      </div>
     </div>
   )
 }
