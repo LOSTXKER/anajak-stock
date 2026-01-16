@@ -69,6 +69,12 @@ interface ScannedProduct {
   categoryName: string | null
   unitName: string | null
   stock: { locationId: string; locationName: string; warehouseName: string; qty: number }[]
+  variant?: {
+    id: string
+    sku: string
+    name: string | null
+    barcode: string | null
+  }
 }
 
 interface LocationOption {
@@ -113,16 +119,24 @@ export default function ScanPage() {
         setNotFound(barcode)
         toast.error(`ไม่พบสินค้า: ${barcode}`)
       } else {
+        // Use variant info if available, otherwise use product info
+        const displayName = result.variant 
+          ? `${result.product.name} - ${result.variant.name || result.variant.sku}`
+          : result.product.name
+        const displaySku = result.variant?.sku || result.product.sku
+        const displayBarcode = result.variant?.barcode || result.product.barcode
+
         setScannedProduct({
           id: result.product.id,
-          sku: result.product.sku,
-          name: result.product.name,
-          barcode: result.product.barcode ?? null,
+          sku: displaySku,
+          name: displayName,
+          barcode: displayBarcode ?? null,
           categoryName: result.product.category?.name ?? null,
           unitName: result.product.unit?.name ?? null,
           stock: result.stock,
+          variant: result.variant,
         })
-        toast.success(`พบสินค้า: ${result.product.name}`)
+        toast.success(`พบสินค้า: ${displayName}`)
       }
     } catch (error) {
       console.error('Scan error:', error)
@@ -168,6 +182,7 @@ export default function ScanPage() {
         note: `Quick ${movementType.toLowerCase()} via barcode scan`,
         lines: [{
           productId: scannedProduct.id,
+          variantId: scannedProduct.variant?.id,
           fromLocationId: actionMode === 'issue' ? selectedLocation : undefined,
           toLocationId: actionMode === 'receive' ? selectedLocation : undefined,
           qty,
@@ -513,7 +528,14 @@ export default function ScanPage() {
                   <CheckCircle2 className="w-6 h-6 text-[var(--status-success)]" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">{scannedProduct.name}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg">{scannedProduct.name}</CardTitle>
+                    {scannedProduct.variant && (
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-light)] text-[var(--accent-primary)] font-medium">
+                        Variant
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-[var(--text-muted)]">
                     SKU: {scannedProduct.sku}
                     {scannedProduct.barcode && ` | Barcode: ${scannedProduct.barcode}`}

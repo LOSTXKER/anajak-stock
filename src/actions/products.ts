@@ -96,11 +96,14 @@ export async function getProduct(id: string): Promise<ProductWithRelations | nul
 
 export async function getProductByBarcode(barcode: string): Promise<{
   product: ProductWithRelations
+  variant?: { id: string; sku: string; name: string | null; barcode: string | null }
   stock: { locationId: string; locationName: string; warehouseName: string; qty: number }[]
 } | null> {
   if (!barcode.trim()) return null
 
-  // First try exact barcode match
+  let foundVariant: { id: string; sku: string; name: string | null; barcode: string | null } | undefined
+
+  // First try exact barcode match on product
   let product = await prisma.product.findUnique({
     where: { barcode: barcode.trim() },
     include: {
@@ -118,7 +121,7 @@ export async function getProductByBarcode(barcode: string): Promise<{
     },
   })
 
-  // If not found, try SKU match
+  // If not found, try product SKU match
   if (!product) {
     product = await prisma.product.findUnique({
       where: { sku: barcode.trim() },
@@ -138,7 +141,40 @@ export async function getProductByBarcode(barcode: string): Promise<{
     })
   }
 
-  // If still not found, try variant SKU
+  // If not found, try variant barcode match
+  if (!product) {
+    const variant = await prisma.productVariant.findFirst({
+      where: { barcode: barcode.trim() },
+      include: {
+        product: {
+          include: {
+            category: true,
+            unit: true,
+            stockBalances: {
+              include: {
+                location: {
+                  include: {
+                    warehouse: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+    if (variant) {
+      product = variant.product
+      foundVariant = {
+        id: variant.id,
+        sku: variant.sku,
+        name: variant.name,
+        barcode: variant.barcode,
+      }
+    }
+  }
+
+  // If still not found, try variant SKU match
   if (!product) {
     const variant = await prisma.productVariant.findUnique({
       where: { sku: barcode.trim() },
@@ -162,12 +198,23 @@ export async function getProductByBarcode(barcode: string): Promise<{
     })
     if (variant) {
       product = variant.product
+      foundVariant = {
+        id: variant.id,
+        sku: variant.sku,
+        name: variant.name,
+        barcode: variant.barcode,
+      }
     }
   }
 
   if (!product) return null
 
-  const stock = product.stockBalances.map(sb => ({
+  // Filter stock by variant if we found a specific variant
+  const relevantBalances = foundVariant
+    ? product.stockBalances.filter(sb => sb.variantId === foundVariant!.id)
+    : product.stockBalances.filter(sb => sb.variantId === null)
+
+  const stock = relevantBalances.map(sb => ({
     locationId: sb.locationId,
     locationName: sb.location.name,
     warehouseName: sb.location.warehouse.name,
@@ -176,6 +223,7 @@ export async function getProductByBarcode(barcode: string): Promise<{
 
   return {
     product: serialize(product) as ProductWithRelations,
+    variant: foundVariant,
     stock,
   }
 }
