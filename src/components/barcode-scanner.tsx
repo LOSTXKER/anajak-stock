@@ -78,6 +78,7 @@ interface CameraScannerProps {
 export function CameraScanner({ onScan, onClose }: CameraScannerProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [useFrontCamera, setUseFrontCamera] = useState(false)
   const scannerContainerId = useRef(`scanner-${Date.now()}`)
   const html5QrCodeRef = useRef<import('html5-qrcode').Html5Qrcode | null>(null)
   const hasScannedRef = useRef(false)
@@ -95,6 +96,12 @@ export function CameraScanner({ onScan, onClose }: CameraScannerProps) {
       html5QrCodeRef.current = null
     }
   }, [])
+
+  const switchCamera = useCallback(async () => {
+    setIsLoading(true)
+    await stopScanner()
+    setUseFrontCamera(prev => !prev)
+  }, [stopScanner])
 
   useEffect(() => {
     let mounted = true
@@ -116,22 +123,11 @@ export function CameraScanner({ onScan, onClose }: CameraScannerProps) {
         const html5QrCode = new Html5Qrcode(scannerContainerId.current)
         html5QrCodeRef.current = html5QrCode
 
-        // Get available cameras first
-        const cameras = await Html5Qrcode.getCameras()
-        if (cameras.length === 0) {
-          throw new Error('ไม่พบกล้องในอุปกรณ์นี้')
-        }
-
-        // Prefer back camera
-        const backCamera = cameras.find(c => 
-          c.label.toLowerCase().includes('back') || 
-          c.label.toLowerCase().includes('rear') ||
-          c.label.toLowerCase().includes('environment')
-        )
-        const cameraId = backCamera?.id || cameras[0].id
+        // Use facingMode constraint - more reliable for mobile
+        const facingMode = useFrontCamera ? 'user' : 'environment'
 
         await html5QrCode.start(
-          cameraId,
+          { facingMode },
           {
             fps: 10,
             qrbox: { width: 250, height: 150 },
@@ -160,6 +156,13 @@ export function CameraScanner({ onScan, onClose }: CameraScannerProps) {
             setError('ไม่พบกล้องในอุปกรณ์นี้')
           } else if (errorMessage.includes('NotReadable') || errorMessage.includes('already in use')) {
             setError('กล้องกำลังถูกใช้งานโดยแอปอื่น กรุณาปิดแอปอื่นแล้วลองใหม่')
+          } else if (errorMessage.includes('OverconstrainedError')) {
+            // If back camera not available, try front
+            if (!useFrontCamera) {
+              setUseFrontCamera(true)
+              return
+            }
+            setError('ไม่สามารถเปิดกล้องได้')
           } else {
             setError(`ไม่สามารถเปิดกล้องได้: ${errorMessage}`)
           }
@@ -174,7 +177,7 @@ export function CameraScanner({ onScan, onClose }: CameraScannerProps) {
       mounted = false
       stopScanner()
     }
-  }, [onScan, stopScanner])
+  }, [onScan, stopScanner, useFrontCamera])
 
   return (
     <div className="space-y-4">
@@ -206,13 +209,19 @@ export function CameraScanner({ onScan, onClose }: CameraScannerProps) {
       />
 
       {!isLoading && !error && (
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-3">
           <p className="text-sm text-[var(--text-muted)]">
             หันกล้องไปที่ Barcode/QR Code
           </p>
-          <Button variant="outline" onClick={onClose}>
-            ยกเลิก
-          </Button>
+          <div className="flex items-center justify-center gap-2">
+            <Button variant="outline" size="sm" onClick={switchCamera}>
+              <Camera className="w-4 h-4 mr-2" />
+              {useFrontCamera ? 'กล้องหลัง' : 'กล้องหน้า'}
+            </Button>
+            <Button variant="outline" onClick={onClose}>
+              ยกเลิก
+            </Button>
+          </div>
         </div>
       )}
     </div>
