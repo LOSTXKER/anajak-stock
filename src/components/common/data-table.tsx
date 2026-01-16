@@ -15,6 +15,8 @@
 'use client'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { useTransition } from 'react'
+import { startNavigation } from '@/components/navigation-progress'
 import {
   Table,
   TableBody,
@@ -24,9 +26,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2 } from 'lucide-react'
 import { NoSearchResults, NoData } from './empty-state'
 import { SkeletonTable } from './loading-state'
+import { cn } from '@/lib/utils'
 
 // Column definition
 interface Column<T> {
@@ -56,6 +59,7 @@ interface DataTableProps<T> {
   onRowClick?: (row: T) => void
   className?: string
   stickyHeader?: boolean
+  loadingRows?: number
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -68,19 +72,31 @@ export function DataTable<T extends Record<string, unknown>>({
   onRowClick,
   className = '',
   stickyHeader = false,
+  loadingRows = 8,
 }: DataTableProps<T>) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const [isPending, startTransition] = useTransition()
 
   const goToPage = (page: number) => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('page', String(page))
-    router.push(`${pathname}?${params.toString()}`)
+    startNavigation()
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('page', String(page))
+      router.push(`${pathname}?${params.toString()}`)
+    })
   }
 
+  // Show skeleton when initially loading
   if (isLoading) {
-    return <SkeletonTable rows={5} cols={columns.length} />
+    return (
+      <div className={`space-y-4 ${className}`}>
+        <div className="border border-[var(--border-default)] rounded-lg overflow-hidden bg-[var(--bg-elevated)]">
+          <SkeletonTable rows={loadingRows} cols={columns.length} />
+        </div>
+      </div>
+    )
   }
 
   if (data.length === 0) {
@@ -99,7 +115,12 @@ export function DataTable<T extends Record<string, unknown>>({
 
   return (
     <div className={`space-y-4 ${className}`}>
-      <div className="border border-[var(--border-default)] rounded-lg overflow-hidden">
+      <div 
+        className={cn(
+          "border border-[var(--border-default)] rounded-lg overflow-hidden transition-opacity duration-200",
+          isPending && "opacity-60 pointer-events-none"
+        )}
+      >
         <Table>
           <TableHeader className={stickyHeader ? 'sticky top-0 z-10' : ''}>
             <TableRow className="bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)]">
@@ -119,7 +140,7 @@ export function DataTable<T extends Record<string, unknown>>({
             {data.map((row, rowIndex) => (
               <TableRow
                 key={rowIndex}
-                className={`border-[var(--border-default)] ${
+                className={`border-[var(--border-default)] transition-colors ${
                   onRowClick ? 'cursor-pointer hover:bg-[var(--bg-secondary)]' : ''
                 }`}
                 onClick={() => onRowClick?.(row)}
@@ -148,6 +169,7 @@ export function DataTable<T extends Record<string, unknown>>({
           total={pagination.total}
           limit={pagination.limit}
           onPageChange={goToPage}
+          isLoading={isPending}
         />
       )}
     </div>
@@ -161,6 +183,7 @@ interface PaginationProps {
   total: number
   limit?: number
   onPageChange: (page: number) => void
+  isLoading?: boolean
 }
 
 export function Pagination({
@@ -169,22 +192,31 @@ export function Pagination({
   total,
   limit = 20,
   onPageChange,
+  isLoading = false,
 }: PaginationProps) {
   const start = (page - 1) * limit + 1
   const end = Math.min(page * limit, total)
 
   return (
     <div className="flex items-center justify-between px-2">
-      <p className="text-sm text-[var(--text-muted)]">
-        แสดง {start}-{end} จาก {total.toLocaleString()} รายการ
-      </p>
+      <div className="flex items-center gap-2">
+        {isLoading && (
+          <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-primary)]" />
+        )}
+        <p className={cn(
+          "text-sm text-[var(--text-muted)] transition-opacity",
+          isLoading && "opacity-50"
+        )}>
+          แสดง {start}-{end} จาก {total.toLocaleString()} รายการ
+        </p>
+      </div>
       <div className="flex items-center gap-1">
         <Button
           variant="outline"
           size="icon"
           className="h-8 w-8"
           onClick={() => onPageChange(1)}
-          disabled={page === 1}
+          disabled={page === 1 || isLoading}
         >
           <ChevronsLeft className="w-4 h-4" />
         </Button>
@@ -193,11 +225,14 @@ export function Pagination({
           size="icon"
           className="h-8 w-8"
           onClick={() => onPageChange(page - 1)}
-          disabled={page === 1}
+          disabled={page === 1 || isLoading}
         >
           <ChevronLeft className="w-4 h-4" />
         </Button>
-        <span className="px-3 text-sm text-[var(--text-secondary)]">
+        <span className={cn(
+          "px-3 text-sm text-[var(--text-secondary)] min-w-[100px] text-center transition-opacity",
+          isLoading && "opacity-50"
+        )}>
           หน้า {page} / {totalPages}
         </span>
         <Button
@@ -205,7 +240,7 @@ export function Pagination({
           size="icon"
           className="h-8 w-8"
           onClick={() => onPageChange(page + 1)}
-          disabled={page === totalPages}
+          disabled={page === totalPages || isLoading}
         >
           <ChevronRight className="w-4 h-4" />
         </Button>
@@ -214,7 +249,7 @@ export function Pagination({
           size="icon"
           className="h-8 w-8"
           onClick={() => onPageChange(totalPages)}
-          disabled={page === totalPages}
+          disabled={page === totalPages || isLoading}
         >
           <ChevronsRight className="w-4 h-4" />
         </Button>

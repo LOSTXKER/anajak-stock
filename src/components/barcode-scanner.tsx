@@ -34,31 +34,38 @@ export function BarcodeInput({
     }
   }, [autoFocus])
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  function handleSubmit() {
     if (barcode.trim()) {
       onScan(barcode.trim())
       setBarcode('')
     }
   }
 
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2">
+    <div className="flex gap-2">
       <div className="relative flex-1">
         <Scan className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
         <Input
           ref={inputRef}
           value={barcode}
           onChange={(e) => setBarcode(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="pl-10"
           autoFocus={autoFocus}
         />
       </div>
-      <Button type="submit">
+      <Button type="button" onClick={handleSubmit}>
         <Search className="w-4 h-4" />
       </Button>
-    </form>
+    </div>
   )
 }
 

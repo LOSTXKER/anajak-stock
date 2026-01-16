@@ -27,6 +27,7 @@ import {
   BarcodeInput, 
   useBarcodeScanner 
 } from '@/components/barcode-scanner'
+import { PrintLabel } from '@/components/print-label'
 import { getProductByBarcode } from '@/actions/products'
 import { getLocations } from '@/actions/warehouses'
 import { createMovement } from '@/actions/movements'
@@ -43,7 +44,18 @@ import {
   AlertCircle,
   CheckCircle2,
   Box,
-  MapPin
+  MapPin,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Usb,
+  MousePointer,
+  Smartphone,
+  Monitor,
+  CheckCheck,
+  XCircle,
+  Lightbulb,
+  Printer,
 } from 'lucide-react'
 
 type ScanMode = 'idle' | 'keyboard' | 'camera'
@@ -72,6 +84,7 @@ export default function ScanPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [scannedProduct, setScannedProduct] = useState<ScannedProduct | null>(null)
   const [notFound, setNotFound] = useState<string | null>(null)
+  const [showGuide, setShowGuide] = useState(false)
   
   // Quick action state
   const [showActionDialog, setShowActionDialog] = useState(false)
@@ -185,10 +198,220 @@ export default function ScanPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="สแกน Barcode"
-        description="สแกน Barcode/QR Code เพื่อค้นหาสินค้าและดำเนินการอย่างรวดเร็ว"
-      />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          title="สแกน Barcode"
+          description="สแกน Barcode/QR Code เพื่อค้นหาสินค้าและดำเนินการอย่างรวดเร็ว"
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowGuide(!showGuide)}
+          className="flex items-center gap-2 shrink-0"
+        >
+          <HelpCircle className="w-4 h-4" />
+          คู่มือการใช้งาน
+          {showGuide ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </div>
+
+      {/* User Guide */}
+      {showGuide && (
+        <Card className="bg-gradient-to-br from-[var(--accent-light)] to-[var(--bg-elevated)] border-[var(--accent-primary)]/20">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg flex items-center gap-2 text-[var(--accent-primary)]">
+              <Lightbulb className="w-5 h-5" />
+              คู่มือการใช้งานเครื่องสแกน Barcode
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Method 1: USB Scanner */}
+            <div className="space-y-3">
+              <h3 className="font-semibold flex items-center gap-2 text-[var(--text-primary)]">
+                <div className="w-6 h-6 rounded-full bg-[var(--accent-primary)] text-white flex items-center justify-center text-sm font-bold">1</div>
+                <Usb className="w-5 h-5 text-[var(--accent-primary)]" />
+                เครื่องสแกน USB (แนะนำ)
+              </h3>
+              <div className="ml-8 space-y-2 text-sm text-[var(--text-secondary)]">
+                <div className="flex items-start gap-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <Monitor className="w-5 h-5 text-[var(--text-muted)] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-[var(--text-primary)]">วิธีต่อเครื่องสแกน</p>
+                    <ol className="list-decimal list-inside mt-1 space-y-1">
+                      <li>เสียบสาย USB ของเครื่องสแกนเข้ากับคอมพิวเตอร์</li>
+                      <li>รอให้ Windows/Mac ติดตั้ง Driver อัตโนมัติ (ประมาณ 5-10 วินาที)</li>
+                      <li>เครื่องสแกนพร้อมใช้งาน!</li>
+                    </ol>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <MousePointer className="w-5 h-5 text-[var(--text-muted)] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-[var(--text-primary)]">วิธีสแกน</p>
+                    <ol className="list-decimal list-inside mt-1 space-y-1">
+                      <li>เปิดหน้านี้ค้างไว้</li>
+                      <li>หันเครื่องสแกนไปที่ Barcode บนสินค้า</li>
+                      <li>กดปุ่มสแกนบนเครื่อง → ระบบจะค้นหาสินค้าอัตโนมัติ</li>
+                    </ol>
+                    <p className="mt-2 text-xs text-[var(--status-success)] flex items-center gap-1">
+                      <CheckCheck className="w-4 h-4" />
+                      ไม่ต้องคลิกที่ช่องใดๆ สแกนได้ทันที!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Method 2: Camera */}
+            <div className="space-y-3">
+              <h3 className="font-semibold flex items-center gap-2 text-[var(--text-primary)]">
+                <div className="w-6 h-6 rounded-full bg-[var(--accent-primary)] text-white flex items-center justify-center text-sm font-bold">2</div>
+                <Camera className="w-5 h-5 text-[var(--accent-primary)]" />
+                สแกนด้วยกล้อง (มือถือ/Webcam)
+              </h3>
+              <div className="ml-8 space-y-2 text-sm text-[var(--text-secondary)]">
+                <div className="flex items-start gap-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <Smartphone className="w-5 h-5 text-[var(--text-muted)] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-[var(--text-primary)]">วิธีสแกน</p>
+                    <ol className="list-decimal list-inside mt-1 space-y-1">
+                      <li>กดปุ่ม &quot;สแกนด้วยกล้อง&quot;</li>
+                      <li>อนุญาตให้เว็บไซต์เข้าถึงกล้อง (ครั้งแรกเท่านั้น)</li>
+                      <li>หันกล้องไปที่ Barcode ให้อยู่ในกรอบ</li>
+                      <li>ระบบจะสแกนอัตโนมัติเมื่ออ่านได้</li>
+                    </ol>
+                  </div>
+                </div>
+                <div className="p-3 bg-[var(--status-warning-light)] rounded-lg border border-[var(--status-warning)]/30">
+                  <p className="text-[var(--status-warning)] text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>ต้องใช้ HTTPS และอนุญาตการเข้าถึงกล้อง | ความสว่างมีผลต่อการสแกน</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Method 3: Manual */}
+            <div className="space-y-3">
+              <h3 className="font-semibold flex items-center gap-2 text-[var(--text-primary)]">
+                <div className="w-6 h-6 rounded-full bg-[var(--accent-primary)] text-white flex items-center justify-center text-sm font-bold">3</div>
+                <Keyboard className="w-5 h-5 text-[var(--accent-primary)]" />
+                พิมพ์เอง
+              </h3>
+              <div className="ml-8 space-y-2 text-sm text-[var(--text-secondary)]">
+                <div className="flex items-start gap-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <Keyboard className="w-5 h-5 text-[var(--text-muted)] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-[var(--text-primary)]">วิธีใช้</p>
+                    <ol className="list-decimal list-inside mt-1 space-y-1">
+                      <li>กดปุ่ม &quot;พิมพ์ Barcode / USB Scanner&quot;</li>
+                      <li>พิมพ์หมายเลข Barcode หรือ SKU</li>
+                      <li>กด Enter หรือกดปุ่มค้นหา</li>
+                    </ol>
+                    <p className="mt-2 text-xs text-[var(--text-muted)]">
+                      สามารถพิมพ์ได้ทั้ง: รหัส Barcode, SKU, หรือรหัสสินค้า
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Real World Workflow */}
+            <div className="space-y-3 pt-4 border-t border-[var(--border-default)]">
+              <h3 className="font-semibold flex items-center gap-2 text-[var(--text-primary)]">
+                <CheckCheck className="w-5 h-5 text-[var(--status-success)]" />
+                ขั้นตอนการใช้งานจริง
+              </h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Workflow 1: Product with existing barcode */}
+                <div className="p-4 bg-[var(--bg-secondary)] rounded-lg space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-[var(--status-success)] text-white flex items-center justify-center text-xs font-bold">A</div>
+                    <p className="font-medium text-[var(--text-primary)]">สินค้ามี Barcode อยู่แล้ว</p>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)]">(สินค้าสำเร็จรูป เช่น ขนม เครื่องดื่ม เครื่องสำอาง)</p>
+                  <ol className="list-decimal list-inside text-sm text-[var(--text-secondary)] space-y-1">
+                    <li>ไปที่ <strong>สินค้า → เพิ่มสินค้า</strong></li>
+                    <li>กรอก SKU, ชื่อสินค้า</li>
+                    <li>กรอก <strong>Barcode</strong> (ดูจากซองสินค้า เช่น 8851234567890)</li>
+                    <li>บันทึก → พร้อมสแกนใช้งานได้เลย!</li>
+                  </ol>
+                </div>
+
+                {/* Workflow 2: Product without barcode */}
+                <div className="p-4 bg-[var(--bg-secondary)] rounded-lg space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-[var(--accent-primary)] text-white flex items-center justify-center text-xs font-bold">B</div>
+                    <p className="font-medium text-[var(--text-primary)]">สินค้าไม่มี Barcode</p>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)]">(สินค้าทำเอง เช่น เสื้อ กระเป๋า หรือวัตถุดิบ)</p>
+                  <ol className="list-decimal list-inside text-sm text-[var(--text-secondary)] space-y-1">
+                    <li>ไปที่ <strong>สินค้า → เพิ่มสินค้า</strong></li>
+                    <li>กรอก SKU, ชื่อสินค้า (ไม่ต้องกรอก Barcode)</li>
+                    <li>บันทึก → ไปที่หน้าสินค้านั้น</li>
+                    <li>กด <strong>&quot;พิมพ์ฉลาก&quot;</strong> → พิมพ์สติกเกอร์</li>
+                    <li>แปะสติกเกอร์ที่สินค้า → สแกนได้!</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div className="p-3 bg-[var(--status-info-light)] rounded-lg border border-[var(--status-info)]/30">
+                <p className="text-sm text-[var(--status-info)]">
+                  <strong>💡 สรุป:</strong> ถ้าสินค้าไม่มี Barcode ระบบจะใช้ <strong>SKU</strong> แทน Barcode อัตโนมัติ!
+                </p>
+              </div>
+            </div>
+
+            {/* Troubleshooting */}
+            <div className="space-y-3 pt-4 border-t border-[var(--border-default)]">
+              <h3 className="font-semibold flex items-center gap-2 text-[var(--text-primary)]">
+                <XCircle className="w-5 h-5 text-[var(--status-error)]" />
+                แก้ไขปัญหา
+              </h3>
+              <div className="grid md:grid-cols-2 gap-3 text-sm">
+                <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <p className="font-medium text-[var(--text-primary)] mb-1">สแกนแล้วไม่เกิดอะไร?</p>
+                  <ul className="list-disc list-inside text-[var(--text-muted)] space-y-0.5">
+                    <li>ตรวจสอบว่าหน้านี้ถูกโฟกัส (คลิกที่หน้านี้)</li>
+                    <li>ลองถอดแล้วเสียบสาย USB ใหม่</li>
+                    <li>ตรวจสอบว่าเครื่องสแกนมีไฟเปิด</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <p className="font-medium text-[var(--text-primary)] mb-1">กล้องไม่ทำงาน?</p>
+                  <ul className="list-disc list-inside text-[var(--text-muted)] space-y-0.5">
+                    <li>ตรวจสอบว่าอนุญาตการเข้าถึงกล้องแล้ว</li>
+                    <li>ลองใช้ Browser อื่น (Chrome/Edge)</li>
+                    <li>ตรวจสอบว่าไม่มีแอปอื่นใช้กล้องอยู่</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <p className="font-medium text-[var(--text-primary)] mb-1">ไม่พบสินค้า?</p>
+                  <ul className="list-disc list-inside text-[var(--text-muted)] space-y-0.5">
+                    <li>ตรวจสอบว่าสินค้าถูกสร้างในระบบแล้ว</li>
+                    <li>ตรวจสอบว่า Barcode ตรงกับที่บันทึกไว้</li>
+                    <li>ลองค้นหาด้วย SKU แทน</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <p className="font-medium text-[var(--text-primary)] mb-1">เครื่องสแกนยี่ห้อแนะนำ</p>
+                  <ul className="list-disc list-inside text-[var(--text-muted)] space-y-0.5">
+                    <li>Honeywell, Zebra, Datalogic</li>
+                    <li>เลือกรุ่นที่รองรับ USB HID</li>
+                    <li>ราคาประมาณ 500-2,000 บาท</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowGuide(false)}>
+                ปิดคู่มือ
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Scan Controls */}
       <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
@@ -372,6 +595,13 @@ export default function ScanPage() {
                 <ArrowDownToLine className="w-4 h-4 mr-2" />
                 รับเข้า
               </Button>
+              <PrintLabel
+                product={{
+                  sku: scannedProduct.sku,
+                  name: scannedProduct.name,
+                  barcode: scannedProduct.barcode,
+                }}
+              />
               <Button 
                 onClick={() => {
                   setScannedProduct(null)

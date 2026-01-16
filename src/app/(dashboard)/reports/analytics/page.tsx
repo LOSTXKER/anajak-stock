@@ -262,7 +262,7 @@ export default function AnalyticsPage() {
                   </thead>
                   <tbody>
                     {abcData.slice(0, 50).map((item) => (
-                      <tr key={item.id} className="border-b border-[var(--border-subtle)]">
+                      <tr key={item.id} className="border-b border-[var(--border-light)]">
                         <td className="py-2 px-4 font-mono text-sm">{item.sku}</td>
                         <td className="py-2 px-4">{item.name}</td>
                         <td className="py-2 px-4 text-right">฿{item.totalValue.toLocaleString()}</td>
@@ -349,7 +349,7 @@ export default function AnalyticsPage() {
                     </thead>
                     <tbody>
                       {turnoverData.slice(0, 20).map((item) => (
-                        <tr key={item.id} className="border-b border-[var(--border-subtle)]">
+                        <tr key={item.id} className="border-b border-[var(--border-light)]">
                           <td className="py-2 font-mono text-sm">{item.sku}</td>
                           <td className="py-2 text-right">{item.avgStock.toLocaleString()}</td>
                           <td className="py-2 text-right">{item.totalIssued.toLocaleString()}</td>
@@ -535,7 +535,7 @@ export default function AnalyticsPage() {
                   </thead>
                   <tbody>
                     {supplierData.map((supplier) => (
-                      <tr key={supplier.id} className="border-b border-[var(--border-subtle)]">
+                      <tr key={supplier.id} className="border-b border-[var(--border-light)]">
                         <td className="py-3 px-4">
                           <div>
                             <p className="font-medium">{supplier.name}</p>

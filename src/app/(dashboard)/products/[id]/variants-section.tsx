@@ -23,11 +23,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Layers, Pencil, Trash2, ChevronDown, ChevronRight, Warehouse, Save, Loader2, Plus } from 'lucide-react'
+import { Layers, Pencil, Trash2, ChevronDown, ChevronRight, Warehouse, Save, Loader2, Plus, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateVariant, deleteVariant } from '@/actions/variants'
 import { useRouter } from 'next/navigation'
 import { AddVariantDialog } from './add-variant-dialog'
+import { PrintLabel, BulkPrintLabel } from '@/components/print-label'
 
 interface VariantOption {
   typeName: string
@@ -213,6 +214,14 @@ export function VariantsSection({ productId, productSku, productName, variants: 
                   บันทึกทั้งหมด
                 </Button>
               )}
+              <BulkPrintLabel 
+                products={variants.map(v => ({
+                  sku: v.sku,
+                  name: v.options.map(o => o.value).join(' / ') || v.name || v.sku,
+                  barcode: v.barcode,
+                  price: v.sellingPrice,
+                }))}
+              />
               <Button onClick={() => setAddDialogOpen(true)} size="sm">
                 <Plus className="w-4 h-4 mr-2" />
                 เพิ่มตัวเลือก
@@ -366,6 +375,15 @@ export function VariantsSection({ productId, productSku, productName, variants: 
                                 )}
                               </Button>
                             )}
+                            <PrintLabel 
+                              variant="icon"
+                              product={{
+                                sku: variant.sku,
+                                name: variant.options.map(o => o.value).join(' / ') || variant.name || variant.sku,
+                                barcode: variant.barcode,
+                                price: variant.sellingPrice,
+                              }}
+                            />
                             <Button
                               variant="ghost"
                               size="sm"

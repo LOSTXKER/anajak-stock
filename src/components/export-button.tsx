@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Download, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
+import { showSuccess, showError, showLoading, dismissToast, toastMessages } from '@/lib/toast-helpers'
 
 interface ExportButtonProps {
   endpoint: string
@@ -22,6 +22,8 @@ export function ExportButton({
 
   async function handleExport() {
     setIsExporting(true)
+    const toastId = showLoading(toastMessages.export.loading)
+    
     try {
       const response = await fetch(endpoint)
       if (!response.ok) {
@@ -37,9 +39,12 @@ export function ExportButton({
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-      toast.success('ดาวน์โหลดสำเร็จ')
-    } catch {
-      toast.error('ไม่สามารถ Export ได้')
+      
+      dismissToast(toastId)
+      showSuccess(toastMessages.export.success)
+    } catch (error) {
+      dismissToast(toastId)
+      showError(error)
     } finally {
       setIsExporting(false)
     }

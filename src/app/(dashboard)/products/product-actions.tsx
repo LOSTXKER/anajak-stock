@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { startNavigation } from '@/components/navigation-progress'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,9 +19,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { MoreHorizontal, Edit, Trash2, Eye } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Eye, Loader2 } from 'lucide-react'
 import { deleteProduct } from '@/actions/products'
 import { toast } from 'sonner'
+
 interface ProductActionsProps {
   product: {
     id: string
@@ -31,8 +33,16 @@ interface ProductActionsProps {
 
 export function ProductActions({ product }: ProductActionsProps) {
   const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  function handleNavigate(path: string) {
+    startNavigation()
+    startTransition(() => {
+      router.push(path)
+    })
+  }
 
   async function handleDelete() {
     setIsDeleting(true)
@@ -52,20 +62,29 @@ export function ProductActions({ product }: ProductActionsProps) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
-            <MoreHorizontal className="w-4 h-4" />
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            disabled={isPending}
+          >
+            {isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <MoreHorizontal className="w-4 h-4" />
+            )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
-            onClick={() => router.push(`/products/${product.id}`)}
+            onClick={() => handleNavigate(`/products/${product.id}`)}
             className="cursor-pointer"
           >
             <Eye className="w-4 h-4 mr-2" />
             ดูรายละเอียด
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => router.push(`/products/${product.id}/edit`)}
+            onClick={() => handleNavigate(`/products/${product.id}/edit`)}
             className="cursor-pointer"
           >
             <Edit className="w-4 h-4 mr-2" />
@@ -93,7 +112,11 @@ export function ProductActions({ product }: ProductActionsProps) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+            <Button 
+              variant="outline" 
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
               ยกเลิก
             </Button>
             <Button
@@ -101,7 +124,17 @@ export function ProductActions({ product }: ProductActionsProps) {
               onClick={handleDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? 'กำลังลบ...' : 'ลบสินค้า'}
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  กำลังลบ...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  ลบสินค้า
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,15 +1,10 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { getSession } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-
-// ==================== TYPES ====================
-
-type ActionResult<T = void> = 
-  | { success: true; data: T }
-  | { success: false; error: string }
+import { withAuth, validateInput, success, failure } from '@/lib/action-utils'
+import type { OptionType, OptionValue } from '@/generated/prisma'
 
 // ==================== SCHEMAS ====================
 
@@ -24,40 +19,28 @@ const OptionValueSchema = z.object({
   displayOrder: z.number().int().default(0),
 })
 
+type OptionTypeInput = z.infer<typeof OptionTypeSchema>
+type OptionValueInput = z.infer<typeof OptionValueSchema>
+
 // ==================== OPTION TYPES ====================
 
-export async function getOptionTypes() {
-  const session = await getSession()
-  if (!session) {
-    return { success: false as const, error: 'ไม่ได้รับอนุญาต' }
-  }
-
-  try {
-    const optionTypes = await prisma.optionType.findMany({
-      where: { active: true },
-      include: {
-        values: {
-          where: { active: true },
-          orderBy: { displayOrder: 'asc' },
-        },
+export const getOptionTypes = withAuth(async () => {
+  const optionTypes = await prisma.optionType.findMany({
+    where: { active: true },
+    include: {
+      values: {
+        where: { active: true },
+        orderBy: { displayOrder: 'asc' },
       },
-      orderBy: { displayOrder: 'asc' },
-    })
+    },
+    orderBy: { displayOrder: 'asc' },
+  })
 
-    return { success: true as const, data: optionTypes }
-  } catch (error) {
-    console.error('Get option types error:', error)
-    return { success: false as const, error: 'ไม่สามารถดึงข้อมูลประเภทตัวเลือกได้' }
-  }
-}
+  return success(optionTypes)
+})
 
-export async function getOptionTypeById(id: string) {
-  const session = await getSession()
-  if (!session) {
-    return { success: false as const, error: 'ไม่ได้รับอนุญาต' }
-  }
-
-  try {
+export const getOptionTypeById = withAuth<[string], OptionType & { values: OptionValue[] }>(
+  async (_session, id) => {
     const optionType = await prisma.optionType.findUnique({
       where: { id },
       include: {
@@ -69,24 +52,19 @@ export async function getOptionTypeById(id: string) {
     })
 
     if (!optionType) {
-      return { success: false as const, error: 'ไม่พบประเภทตัวเลือก' }
+      return failure('ไม่พบประเภทตัวเลือก')
     }
 
-    return { success: true as const, data: optionType }
-  } catch (error) {
-    console.error('Get option type by ID error:', error)
-    return { success: false as const, error: 'ไม่สามารถดึงข้อมูลประเภทตัวเลือกได้' }
+    return success(optionType)
   }
-}
+)
 
-export async function createOptionType(input: z.infer<typeof OptionTypeSchema>): Promise<ActionResult<{ id: string }>> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
+export const createOptionType = withAuth<[OptionTypeInput], { id: string }>(
+  async (session, input) => {
+    const validation = validateInput(OptionTypeSchema, input)
+    if (!validation.success) return validation
 
-  try {
-    const validated = OptionTypeSchema.parse(input)
+    const validated = validation.data
 
     // Check for duplicate
     const existing = await prisma.optionType.findUnique({
@@ -94,7 +72,7 @@ export async function createOptionType(input: z.infer<typeof OptionTypeSchema>):
     })
 
     if (existing) {
-      return { success: false, error: 'ประเภทตัวเลือกนี้มีอยู่แล้ว' }
+      return failure('ประเภทตัวเลือกนี้มีอยู่แล้ว')
     }
 
     const optionType = await prisma.optionType.create({
@@ -113,32 +91,23 @@ export async function createOptionType(input: z.infer<typeof OptionTypeSchema>):
     })
 
     revalidatePath('/settings/options')
-
-    return { success: true, data: { id: optionType.id } }
-  } catch (error) {
-    console.error('Create option type error:', error)
-    if (error instanceof z.ZodError) {
-      return { success: false, error: error.issues[0].message }
-    }
-    return { success: false, error: 'ไม่สามารถสร้างประเภทตัวเลือกได้' }
+    return success({ id: optionType.id })
   }
-}
+)
 
-export async function updateOptionType(id: string, input: z.infer<typeof OptionTypeSchema>): Promise<ActionResult> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
+export const updateOptionType = withAuth<[string, OptionTypeInput], void>(
+  async (session, id, input) => {
+    const validation = validateInput(OptionTypeSchema, input)
+    if (!validation.success) return validation
 
-  try {
-    const validated = OptionTypeSchema.parse(input)
+    const validated = validation.data
 
     const existing = await prisma.optionType.findUnique({
       where: { id },
     })
 
     if (!existing) {
-      return { success: false, error: 'ไม่พบประเภทตัวเลือก' }
+      return failure('ไม่พบประเภทตัวเลือก')
     }
 
     // Check for duplicate name
@@ -150,7 +119,7 @@ export async function updateOptionType(id: string, input: z.infer<typeof OptionT
     })
 
     if (duplicate) {
-      return { success: false, error: 'ประเภทตัวเลือกนี้มีอยู่แล้ว' }
+      return failure('ประเภทตัวเลือกนี้มีอยู่แล้ว')
     }
 
     await prisma.optionType.update({
@@ -171,24 +140,12 @@ export async function updateOptionType(id: string, input: z.infer<typeof OptionT
     })
 
     revalidatePath('/settings/options')
-
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error('Update option type error:', error)
-    if (error instanceof z.ZodError) {
-      return { success: false, error: error.issues[0].message }
-    }
-    return { success: false, error: 'ไม่สามารถอัปเดตประเภทตัวเลือกได้' }
+    return success(undefined)
   }
-}
+)
 
-export async function deleteOptionType(id: string): Promise<ActionResult> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
-
-  try {
+export const deleteOptionType = withAuth<[string], void>(
+  async (session, id) => {
     const existing = await prisma.optionType.findUnique({
       where: { id },
       include: {
@@ -201,13 +158,13 @@ export async function deleteOptionType(id: string): Promise<ActionResult> {
     })
 
     if (!existing) {
-      return { success: false, error: 'ไม่พบประเภทตัวเลือก' }
+      return failure('ไม่พบประเภทตัวเลือก')
     }
 
     // Check if any values are in use
     const inUse = existing.values.some(v => v.variantOptions.length > 0)
     if (inUse) {
-      return { success: false, error: 'ไม่สามารถลบได้ เนื่องจากมีสินค้าใช้ตัวเลือกนี้อยู่' }
+      return failure('ไม่สามารถลบได้ เนื่องจากมีสินค้าใช้ตัวเลือกนี้อยู่')
     }
 
     // Soft delete
@@ -228,24 +185,18 @@ export async function deleteOptionType(id: string): Promise<ActionResult> {
     })
 
     revalidatePath('/settings/options')
-
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error('Delete option type error:', error)
-    return { success: false, error: 'ไม่สามารถลบประเภทตัวเลือกได้' }
+    return success(undefined)
   }
-}
+)
 
 // ==================== OPTION VALUES ====================
 
-export async function createOptionValue(input: z.infer<typeof OptionValueSchema>): Promise<ActionResult<{ id: string }>> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
+export const createOptionValue = withAuth<[OptionValueInput], { id: string }>(
+  async (session, input) => {
+    const validation = validateInput(OptionValueSchema, input)
+    if (!validation.success) return validation
 
-  try {
-    const validated = OptionValueSchema.parse(input)
+    const validated = validation.data
 
     // Check for duplicate
     const existing = await prisma.optionValue.findUnique({
@@ -258,7 +209,7 @@ export async function createOptionValue(input: z.infer<typeof OptionValueSchema>
     })
 
     if (existing) {
-      return { success: false, error: 'ค่าตัวเลือกนี้มีอยู่แล้ว' }
+      return failure('ค่าตัวเลือกนี้มีอยู่แล้ว')
     }
 
     const optionValue = await prisma.optionValue.create({
@@ -277,30 +228,18 @@ export async function createOptionValue(input: z.infer<typeof OptionValueSchema>
     })
 
     revalidatePath('/settings/options')
-
-    return { success: true, data: { id: optionValue.id } }
-  } catch (error) {
-    console.error('Create option value error:', error)
-    if (error instanceof z.ZodError) {
-      return { success: false, error: error.issues[0].message }
-    }
-    return { success: false, error: 'ไม่สามารถสร้างค่าตัวเลือกได้' }
+    return success({ id: optionValue.id })
   }
-}
+)
 
-export async function updateOptionValue(id: string, input: Omit<z.infer<typeof OptionValueSchema>, 'optionTypeId'>): Promise<ActionResult> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
-
-  try {
+export const updateOptionValue = withAuth<[string, Omit<OptionValueInput, 'optionTypeId'>], void>(
+  async (session, id, input) => {
     const existing = await prisma.optionValue.findUnique({
       where: { id },
     })
 
     if (!existing) {
-      return { success: false, error: 'ไม่พบค่าตัวเลือก' }
+      return failure('ไม่พบค่าตัวเลือก')
     }
 
     // Check for duplicate
@@ -313,7 +252,7 @@ export async function updateOptionValue(id: string, input: Omit<z.infer<typeof O
     })
 
     if (duplicate) {
-      return { success: false, error: 'ค่าตัวเลือกนี้มีอยู่แล้ว' }
+      return failure('ค่าตัวเลือกนี้มีอยู่แล้ว')
     }
 
     await prisma.optionValue.update({
@@ -334,21 +273,12 @@ export async function updateOptionValue(id: string, input: Omit<z.infer<typeof O
     })
 
     revalidatePath('/settings/options')
-
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error('Update option value error:', error)
-    return { success: false, error: 'ไม่สามารถอัปเดตค่าตัวเลือกได้' }
+    return success(undefined)
   }
-}
+)
 
-export async function deleteOptionValue(id: string): Promise<ActionResult> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
-
-  try {
+export const deleteOptionValue = withAuth<[string], void>(
+  async (session, id) => {
     const existing = await prisma.optionValue.findUnique({
       where: { id },
       include: {
@@ -357,12 +287,12 @@ export async function deleteOptionValue(id: string): Promise<ActionResult> {
     })
 
     if (!existing) {
-      return { success: false, error: 'ไม่พบค่าตัวเลือก' }
+      return failure('ไม่พบค่าตัวเลือก')
     }
 
     // Check if in use
     if (existing.variantOptions.length > 0) {
-      return { success: false, error: 'ไม่สามารถลบได้ เนื่องจากมีสินค้าใช้ค่านี้อยู่' }
+      return failure('ไม่สามารถลบได้ เนื่องจากมีสินค้าใช้ค่านี้อยู่')
     }
 
     // Soft delete
@@ -383,21 +313,12 @@ export async function deleteOptionValue(id: string): Promise<ActionResult> {
     })
 
     revalidatePath('/settings/options')
-
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error('Delete option value error:', error)
-    return { success: false, error: 'ไม่สามารถลบค่าตัวเลือกได้' }
+    return success(undefined)
   }
-}
+)
 
-export async function reorderOptionValues(optionTypeId: string, valueIds: string[]): Promise<ActionResult> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
-
-  try {
+export const reorderOptionValues = withAuth<[string, string[]], void>(
+  async (_session, _optionTypeId, valueIds) => {
     // Update display order for each value
     await prisma.$transaction(
       valueIds.map((id, index) =>
@@ -409,10 +330,6 @@ export async function reorderOptionValues(optionTypeId: string, valueIds: string
     )
 
     revalidatePath('/settings/options')
-
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error('Reorder option values error:', error)
-    return { success: false, error: 'ไม่สามารถจัดเรียงลำดับได้' }
+    return success(undefined)
   }
-}
+)

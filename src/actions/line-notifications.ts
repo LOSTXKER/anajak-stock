@@ -236,7 +236,7 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
     )
 
     if (!result.success) {
-      return { success: false, error: result.error }
+      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
     }
 
     return { success: true, data: undefined }
@@ -278,8 +278,9 @@ export async function sendLinePRPendingAlert(prId: string): Promise<ActionResult
       return { success: false, error: 'PR not found' }
     }
 
-    const totalAmount = pr.lines.reduce(
-      (sum, line) => sum + Number(line.qty) * Number(line.estimatedPrice || 0),
+    // PRLine doesn't have estimatedPrice, just count items
+    const totalItems = pr.lines.reduce(
+      (sum, line) => sum + Number(line.qty),
       0
     )
 
@@ -289,7 +290,7 @@ export async function sendLinePRPendingAlert(prId: string): Promise<ActionResult
         prNumber: pr.prNumber,
         requester: pr.requester.name,
         itemCount: pr.lines.length,
-        totalAmount: totalAmount > 0 ? totalAmount : undefined,
+        totalAmount: undefined, // PRLine doesn't have price info
       },
       appUrl
     )
@@ -301,7 +302,7 @@ export async function sendLinePRPendingAlert(prId: string): Promise<ActionResult
     )
 
     if (!result.success) {
-      return { success: false, error: result.error }
+      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
     }
 
     return { success: true, data: undefined }
@@ -360,7 +361,7 @@ export async function sendLinePOStatusUpdate(poId: string, status: string): Prom
     )
 
     if (!result.success) {
-      return { success: false, error: result.error }
+      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
     }
 
     return { success: true, data: undefined }
@@ -420,7 +421,7 @@ export async function sendLineMovementPosted(movementId: string): Promise<Action
     )
 
     if (!result.success) {
-      return { success: false, error: result.error }
+      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
     }
 
     return { success: true, data: undefined }
@@ -493,7 +494,7 @@ export async function sendLineExpiringAlert(): Promise<ActionResult<void>> {
     )
 
     if (!result.success) {
-      return { success: false, error: result.error }
+      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
     }
 
     return { success: true, data: undefined }
@@ -537,7 +538,7 @@ export async function sendLineCustomMessage(
     )
 
     if (!result.success) {
-      return { success: false, error: result.error }
+      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
     }
 
     return { success: true, data: undefined }
@@ -570,7 +571,7 @@ export async function sendLineTextMessage(text: string): Promise<ActionResult<vo
     const result = await client.sendText(recipientIds, text)
 
     if (!result.success) {
-      return { success: false, error: result.error }
+      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
     }
 
     return { success: true, data: undefined }

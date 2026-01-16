@@ -1,9 +1,10 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { getSession } from '@/lib/auth'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
+import { withAuth, validateInput, success, failure } from '@/lib/action-utils'
+import type { Supplier } from '@/generated/prisma'
 
 // ==================== SCHEMAS ====================
 
@@ -24,37 +25,22 @@ type SupplierInput = z.infer<typeof SupplierSchema>
 
 // ==================== ACTIONS ====================
 
-export async function getSuppliers() {
-  const session = await getSession()
-  if (!session) {
-    return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
-  }
-
-  try {
-    const suppliers = await prisma.supplier.findMany({
-      where: { deletedAt: null },
-      orderBy: { name: 'asc' },
-      include: {
-        _count: {
-          select: { pos: true },
-        },
+export const getSuppliers = withAuth(async () => {
+  const suppliers = await prisma.supplier.findMany({
+    where: { deletedAt: null },
+    orderBy: { name: 'asc' },
+    include: {
+      _count: {
+        select: { pos: true },
       },
-    })
+    },
+  })
 
-    return { success: true as const, data: suppliers }
-  } catch (error) {
-    console.error('Error getting suppliers:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการดึงข้อมูล' }
-  }
-}
+  return success(suppliers)
+})
 
-export async function getSupplier(id: string) {
-  const session = await getSession()
-  if (!session) {
-    return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
-  }
-
-  try {
+export const getSupplier = withAuth<[string], Supplier & { pos: unknown[]; _count: { pos: number } }>(
+  async (_session, id) => {
     const supplier = await prisma.supplier.findUnique({
       where: { id },
       include: {
@@ -74,24 +60,19 @@ export async function getSupplier(id: string) {
     })
 
     if (!supplier) {
-      return { success: false as const, error: 'ไม่พบ Supplier' }
+      return failure('ไม่พบ Supplier')
     }
 
-    return { success: true as const, data: supplier }
-  } catch (error) {
-    console.error('Error getting supplier:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการดึงข้อมูล' }
+    return success(supplier)
   }
-}
+)
 
-export async function createSupplier(input: SupplierInput) {
-  const session = await getSession()
-  if (!session) {
-    return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
-  }
+export const createSupplier = withAuth<[SupplierInput], Supplier>(
+  async (_session, input) => {
+    const validation = validateInput(SupplierSchema, input)
+    if (!validation.success) return validation
 
-  try {
-    const validated = SupplierSchema.parse(input)
+    const validated = validation.data
 
     // Check for duplicate code
     const existing = await prisma.supplier.findFirst({
@@ -99,7 +80,7 @@ export async function createSupplier(input: SupplierInput) {
     })
 
     if (existing) {
-      return { success: false as const, error: 'รหัส Supplier ซ้ำ' }
+      return failure('รหัส Supplier ซ้ำ')
     }
 
     const supplier = await prisma.supplier.create({
@@ -118,29 +99,18 @@ export async function createSupplier(input: SupplierInput) {
     })
 
     revalidatePath('/suppliers')
-    return { success: true as const, data: supplier }
-  } catch (error) {
-    console.error('Error creating supplier:', error)
-    if (error instanceof z.ZodError) {
-      return { success: false as const, error: error.issues[0].message }
-    }
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการสร้าง Supplier' }
+    return success(supplier)
   }
-}
+)
 
-export async function updateSupplier(id: string, input: Partial<SupplierInput>) {
-  const session = await getSession()
-  if (!session) {
-    return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
-  }
-
-  try {
+export const updateSupplier = withAuth<[string, Partial<SupplierInput>], Supplier>(
+  async (_session, id, input) => {
     const supplier = await prisma.supplier.findUnique({
       where: { id },
     })
 
     if (!supplier) {
-      return { success: false as const, error: 'ไม่พบ Supplier' }
+      return failure('ไม่พบ Supplier')
     }
 
     // Check for duplicate code if changing
@@ -149,7 +119,7 @@ export async function updateSupplier(id: string, input: Partial<SupplierInput>) 
         where: { code: input.code, deletedAt: null, id: { not: id } },
       })
       if (existing) {
-        return { success: false as const, error: 'รหัส Supplier ซ้ำ' }
+        return failure('รหัส Supplier ซ้ำ')
       }
     }
 
@@ -171,23 +141,12 @@ export async function updateSupplier(id: string, input: Partial<SupplierInput>) 
 
     revalidatePath('/suppliers')
     revalidatePath(`/suppliers/${id}`)
-    return { success: true as const, data: updated }
-  } catch (error) {
-    console.error('Error updating supplier:', error)
-    if (error instanceof z.ZodError) {
-      return { success: false as const, error: error.issues[0].message }
-    }
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการอัปเดต Supplier' }
+    return success(updated)
   }
-}
+)
 
-export async function deleteSupplier(id: string) {
-  const session = await getSession()
-  if (!session) {
-    return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
-  }
-
-  try {
+export const deleteSupplier = withAuth<[string], void>(
+  async (_session, id) => {
     const supplier = await prisma.supplier.findUnique({
       where: { id },
       include: {
@@ -198,7 +157,7 @@ export async function deleteSupplier(id: string) {
     })
 
     if (!supplier) {
-      return { success: false as const, error: 'ไม่พบ Supplier' }
+      return failure('ไม่พบ Supplier')
     }
 
     if (supplier._count.pos > 0) {
@@ -215,26 +174,18 @@ export async function deleteSupplier(id: string) {
     }
 
     revalidatePath('/suppliers')
-    return { success: true as const, data: undefined }
-  } catch (error) {
-    console.error('Error deleting supplier:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการลบ Supplier' }
+    return success(undefined)
   }
-}
+)
 
-export async function toggleSupplierStatus(id: string) {
-  const session = await getSession()
-  if (!session) {
-    return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
-  }
-
-  try {
+export const toggleSupplierStatus = withAuth<[string], Supplier>(
+  async (_session, id) => {
     const supplier = await prisma.supplier.findUnique({
       where: { id },
     })
 
     if (!supplier) {
-      return { success: false as const, error: 'ไม่พบ Supplier' }
+      return failure('ไม่พบ Supplier')
     }
 
     const updated = await prisma.supplier.update({
@@ -244,9 +195,6 @@ export async function toggleSupplierStatus(id: string) {
 
     revalidatePath('/suppliers')
     revalidatePath(`/suppliers/${id}`)
-    return { success: true as const, data: updated }
-  } catch (error) {
-    console.error('Error toggling supplier status:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาด' }
+    return success(updated)
   }
-}
+)

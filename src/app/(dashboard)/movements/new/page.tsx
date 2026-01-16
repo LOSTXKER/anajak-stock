@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,16 +24,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight } from 'lucide-react'
+import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, Scan } from 'lucide-react'
 import { createMovement, submitMovement, getMovement } from '@/actions/movements'
-import { getProducts } from '@/actions/products'
+import { getProducts, getProductByBarcode } from '@/actions/products'
 import { getLocations } from '@/actions/stock'
 import { toast } from 'sonner'
 import { MovementType } from '@/generated/prisma'
 import type { ProductWithRelations, LocationWithWarehouse } from '@/types'
 import { PageHeader, HelpTooltip } from '@/components/common'
 import { CascadingVariantPicker } from '@/components/variants'
-import { LotSelector } from '@/components/lot-selector'
+import { LotInput } from '@/components/lot-input'
+import { BarcodeInput, useBarcodeScanner, InlineScanButton } from '@/components/barcode-scanner'
 
 interface PageProps {
   searchParams: Promise<{ type?: MovementType; refId?: string }>
@@ -69,8 +70,12 @@ interface MovementLine {
   qty: number
   unitCost: number
   note?: string
+  // Existing lot selection
   lotId?: string
   lotNumber?: string
+  // New lot creation (for RECEIVE)
+  newLotNumber?: string
+  newExpiryDate?: string
 }
 
 const typeConfig: Record<MovementType, { label: string; icon: React.ReactNode; color: string; description: string }> = {
@@ -117,9 +122,65 @@ export default function NewMovementPage(props: PageProps) {
   const [lines, setLines] = useState<MovementLine[]>([])
   const [refId, setRefId] = useState<string | undefined>(searchParams.refId)
   const [refDocNumber, setRefDocNumber] = useState<string | null>(null)
+  const [showBarcodeInput, setShowBarcodeInput] = useState(false)
+  const [isScanningBarcode, setIsScanningBarcode] = useState(false)
 
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [locations, setLocations] = useState<LocationWithWarehouse[]>([])
+
+  // Handle barcode scan - add product to lines
+  const handleBarcodeScan = useCallback(async (barcode: string) => {
+    setIsScanningBarcode(true)
+    try {
+      const result = await getProductByBarcode(barcode)
+      if (!result) {
+        toast.error(`ไม่พบสินค้า: ${barcode}`)
+        return
+      }
+
+      const existingLine = lines.find(l => 
+        l.productId === result.product.id && !l.variantId
+      )
+
+      if (existingLine && !result.product.hasVariants) {
+        // Increment quantity if product already exists (and no variants)
+        setLines(prev => prev.map(l => 
+          l.id === existingLine.id 
+            ? { ...l, qty: l.qty + 1 }
+            : l
+        ))
+        toast.success(`เพิ่มจำนวน: ${result.product.name}`)
+      } else {
+        // Add new line
+        const newLine: MovementLine = {
+          id: Math.random().toString(36).substr(2, 9),
+          productId: result.product.id,
+          productName: result.product.name,
+          qty: 1,
+          unitCost: Number(result.product.lastCost || result.product.standardCost || 0),
+        }
+        setLines(prev => [...prev, newLine])
+        
+        // Load variants if needed
+        if (result.product.hasVariants) {
+          const variants = await loadVariantsForProduct(result.product.id)
+          setProducts(prev => prev.map(p => 
+            p.id === result.product.id ? { ...p, variants } : p
+          ))
+        }
+        
+        toast.success(`เพิ่มสินค้า: ${result.product.name}`)
+      }
+    } catch (error) {
+      console.error('Scan error:', error)
+      toast.error('เกิดข้อผิดพลาดในการสแกน')
+    } finally {
+      setIsScanningBarcode(false)
+    }
+  }, [lines])
+
+  // USB Scanner hook - listen for barcode scans
+  useBarcodeScanner(handleBarcodeScan, !showBarcodeInput)
 
   useEffect(() => {
     async function loadData() {
@@ -285,6 +346,8 @@ export default function NewMovementPage(props: PageProps) {
         unitCost: line.unitCost,
         note: line.note,
         lotId: line.lotId,
+        newLotNumber: line.newLotNumber,
+        newExpiryDate: line.newExpiryDate,
       })),
     })
 
@@ -416,7 +479,7 @@ export default function NewMovementPage(props: PageProps) {
 
         {/* Lines */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <div className="w-1 h-6 bg-[var(--accent-primary)] rounded-full" />
               <CardTitle className="text-base">รายการสินค้า</CardTitle>
@@ -425,16 +488,53 @@ export default function NewMovementPage(props: PageProps) {
                   {lines.length} รายการ
                 </Badge>
               )}
+              {isScanningBarcode && (
+                <Badge variant="secondary" className="bg-[var(--status-info-light)] text-[var(--status-info)] animate-pulse">
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  กำลังค้นหา...
+                </Badge>
+              )}
             </div>
-            <Button
-              type="button"
-              onClick={addLine}
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              เพิ่มรายการ
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={showBarcodeInput ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setShowBarcodeInput(!showBarcodeInput)}
+              >
+                <Scan className="w-4 h-4 mr-1" />
+                สแกน Barcode
+              </Button>
+              <Button
+                type="button"
+                onClick={addLine}
+                size="sm"
+                variant="outline"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                เพิ่มรายการ
+              </Button>
+            </div>
           </CardHeader>
+          
+          {/* Barcode Scanner Input */}
+          {showBarcodeInput && (
+            <CardContent className="pt-0 pb-4 border-b border-[var(--border-default)]">
+              <div className="bg-[var(--accent-light)]/50 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm text-[var(--accent-primary)]">
+                  <Scan className="w-4 h-4" />
+                  <span className="font-medium">สแกน Barcode เพื่อเพิ่มสินค้า</span>
+                </div>
+                <BarcodeInput 
+                  onScan={handleBarcodeScan}
+                  placeholder="สแกน Barcode หรือ SKU แล้วกด Enter..."
+                />
+                <p className="text-xs text-[var(--text-muted)]">
+                  💡 USB Scanner ทำงานอัตโนมัติ หรือพิมพ์รหัสแล้วกด Enter
+                </p>
+              </div>
+            </CardContent>
+          )}
           <CardContent>
             <div className="overflow-x-auto">
               <Table>
@@ -532,18 +632,23 @@ export default function NewMovementPage(props: PageProps) {
                               <div className="text-[var(--text-muted)] text-sm">-</div>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="min-w-[200px]">
                             {line.productId ? (
-                              <LotSelector
+                              <LotInput
                                 productId={line.productId}
                                 variantId={line.variantId}
                                 locationId={type === 'ISSUE' || type === 'TRANSFER' ? line.fromLocationId : undefined}
+                                mode={type === 'RECEIVE' ? 'receive' : type === 'TRANSFER' ? 'transfer' : 'issue'}
                                 selectedLotId={line.lotId}
-                                onSelect={(lot) => {
+                                newLotNumber={line.newLotNumber}
+                                newExpiryDate={line.newExpiryDate}
+                                onSelectExisting={(lot) => {
                                   if (lot) {
                                     updateLine(line.id, {
                                       lotId: lot.id,
                                       lotNumber: lot.lotNumber,
+                                      newLotNumber: undefined,
+                                      newExpiryDate: undefined,
                                     })
                                   } else {
                                     updateLine(line.id, {
@@ -551,6 +656,22 @@ export default function NewMovementPage(props: PageProps) {
                                       lotNumber: undefined,
                                     })
                                   }
+                                }}
+                                onCreateNew={(lotNumber, expiryDate) => {
+                                  updateLine(line.id, {
+                                    lotId: undefined,
+                                    lotNumber: undefined,
+                                    newLotNumber: lotNumber,
+                                    newExpiryDate: expiryDate,
+                                  })
+                                }}
+                                onClear={() => {
+                                  updateLine(line.id, {
+                                    lotId: undefined,
+                                    lotNumber: undefined,
+                                    newLotNumber: undefined,
+                                    newExpiryDate: undefined,
+                                  })
                                 }}
                               />
                             ) : (

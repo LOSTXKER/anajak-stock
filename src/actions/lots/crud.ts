@@ -8,12 +8,14 @@ import { z } from 'zod'
 import { CreateLotSchema, UpdateLotSchema, type CreateLotInput, type UpdateLotInput } from './schemas'
 
 /**
- * Get lots with optional filters
+ * Get lots with optional filters and pagination
  */
 export async function getLots(filters?: {
   productId?: string
   search?: string
   expiringWithinDays?: number
+  status?: 'all' | 'in_stock' | 'expired' | 'expiring_soon'
+  page?: number
   limit?: number
 }) {
   const session = await getSession()
@@ -22,6 +24,10 @@ export async function getLots(filters?: {
   }
 
   try {
+    const page = filters?.page || 1
+    const limit = filters?.limit || 20
+    const skip = (page - 1) * limit
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: any = {}
 
@@ -37,6 +43,21 @@ export async function getLots(filters?: {
       ]
     }
 
+    const now = new Date()
+    const thirtyDaysFromNow = new Date()
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
+
+    // Status filters
+    if (filters?.status === 'in_stock') {
+      where.balances = { some: { qtyOnHand: { gt: 0 } } }
+    } else if (filters?.status === 'expired') {
+      where.expiryDate = { lt: now }
+      where.balances = { some: { qtyOnHand: { gt: 0 } } }
+    } else if (filters?.status === 'expiring_soon') {
+      where.expiryDate = { gte: now, lte: thirtyDaysFromNow }
+      where.balances = { some: { qtyOnHand: { gt: 0 } } }
+    }
+
     if (filters?.expiringWithinDays) {
       const cutoffDate = new Date()
       cutoffDate.setDate(cutoffDate.getDate() + filters.expiringWithinDays)
@@ -46,20 +67,31 @@ export async function getLots(filters?: {
       }
     }
 
-    const lots = await prisma.lot.findMany({
-      where,
-      include: {
-        product: {
-          include: { category: true },
+    const [lots, total] = await Promise.all([
+      prisma.lot.findMany({
+        where,
+        include: {
+          product: {
+            include: { category: true },
+          },
+          variant: true,
+          balances: {
+            include: { 
+              location: {
+                include: { warehouse: true }
+              } 
+            },
+          },
         },
-        variant: true,
-        balances: {
-          include: { location: true },
-        },
-      },
-      orderBy: { expiryDate: 'asc' },
-      take: filters?.limit || 100,
-    })
+        orderBy: [
+          { expiryDate: 'asc' },
+          { createdAt: 'desc' },
+        ],
+        skip,
+        take: limit,
+      }),
+      prisma.lot.count({ where }),
+    ])
 
     // Calculate total qty for each lot
     const result = lots.map((lot) => ({
@@ -72,7 +104,13 @@ export async function getLots(filters?: {
       })),
     }))
 
-    return { success: true as const, data: result }
+    return { 
+      success: true as const, 
+      data: result,
+      total,
+      totalPages: Math.ceil(total / limit),
+      page,
+    }
   } catch (error) {
     return handleActionError(error, 'getLots')
   }
@@ -107,6 +145,8 @@ export async function getLot(id: string) {
             movementLine: {
               include: {
                 movement: true,
+                toLocation: true,
+                fromLocation: true,
               },
             },
           },

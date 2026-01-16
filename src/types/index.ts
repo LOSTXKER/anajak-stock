@@ -1,6 +1,7 @@
 import {
   User,
   Product,
+  ProductVariant,
   Category,
   UnitOfMeasure,
   Warehouse,
@@ -64,6 +65,7 @@ export type MovementWithRelations = StockMovement & {
 
 export type MovementLineWithProduct = MovementLine & {
   product: Product
+  variant: ProductVariant | null
   fromLocation: LocationWithWarehouse | null
   toLocation: LocationWithWarehouse | null
 }

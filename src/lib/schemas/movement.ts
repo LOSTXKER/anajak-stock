@@ -24,6 +24,11 @@ export const movementLineSchema = z.object({
   qty: qtySchema.min(0.0001, 'จำนวนต้องมากกว่า 0'),
   unitCost: priceSchema.default(0),
   note: noteSchema,
+  // Existing lot selection
+  lotId: optionalIdSchema,
+  // New lot creation (for RECEIVE)
+  newLotNumber: optionalStringSchema,
+  newExpiryDate: z.string().optional(),
 })
 
 export type MovementLineInput = z.infer<typeof movementLineSchema>

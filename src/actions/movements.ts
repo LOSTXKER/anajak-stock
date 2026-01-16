@@ -16,6 +16,8 @@ interface MovementLineInput {
   unitCost?: number
   note?: string
   lotId?: string
+  newLotNumber?: string
+  newLotExpiryDate?: string
 }
 
 interface CreateMovementInput {
@@ -79,10 +81,10 @@ export async function getMovements(params: {
       where,
       include: {
         createdBy: {
-          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
         },
         approvedBy: {
-          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
         },
         lines: {
           include: {
@@ -114,10 +116,10 @@ export async function getMovement(id: string): Promise<MovementWithRelations | n
     where: { id },
     include: {
       createdBy: {
-        select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+        select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
       },
       approvedBy: {
-        select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+        select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
       },
       lines: {
         include: {
@@ -149,6 +151,41 @@ export async function createMovement(data: CreateMovementInput): Promise<ActionR
   try {
     const docNumber = await generateDocNumber('MOVEMENT')
 
+    // Create new lots first (for RECEIVE type with newLotNumber)
+    const lotIdMap = new Map<number, string>() // lineIndex -> lotId
+    
+    if (data.type === 'RECEIVE') {
+      for (let i = 0; i < data.lines.length; i++) {
+        const line = data.lines[i]
+        if (line.newLotNumber && !line.lotId) {
+          // Check if lot already exists
+          const existingLot = await prisma.lot.findFirst({
+            where: {
+              lotNumber: line.newLotNumber,
+              productId: line.productId,
+            },
+          })
+
+          if (existingLot) {
+            // Use existing lot
+            lotIdMap.set(i, existingLot.id)
+          } else {
+            // Create new lot
+            const newLot = await prisma.lot.create({
+              data: {
+                lotNumber: line.newLotNumber,
+                productId: line.productId,
+                variantId: line.variantId || null,
+                expiryDate: line.newLotExpiryDate ? new Date(line.newLotExpiryDate) : null,
+                qtyReceived: line.qty,
+              },
+            })
+            lotIdMap.set(i, newLot.id)
+          }
+        }
+      }
+    }
+
     const movement = await prisma.stockMovement.create({
       data: {
         docNumber,
@@ -161,32 +198,35 @@ export async function createMovement(data: CreateMovementInput): Promise<ActionR
         refId: data.refId,
         createdById: session.id,
         lines: {
-          create: data.lines.map((line) => ({
-            productId: line.productId,
-            variantId: line.variantId || null,
-            fromLocationId: line.fromLocationId || null,
-            toLocationId: line.toLocationId || null,
-            qty: line.qty,
-            unitCost: line.unitCost || 0,
-            note: line.note,
-            // Create LotMovementLine if lotId is provided
-            ...(line.lotId && {
-              lotMovementLines: {
-                create: {
-                  lotId: line.lotId,
-                  qty: line.qty,
+          create: data.lines.map((line, index) => {
+            const lotId = line.lotId || lotIdMap.get(index)
+            return {
+              productId: line.productId,
+              variantId: line.variantId || null,
+              fromLocationId: line.fromLocationId || null,
+              toLocationId: line.toLocationId || null,
+              qty: line.qty,
+              unitCost: line.unitCost || 0,
+              note: line.note,
+              // Create LotMovementLine if lotId is provided
+              ...(lotId && {
+                lotMovementLines: {
+                  create: {
+                    lotId: lotId,
+                    qty: line.qty,
+                  },
                 },
-              },
-            }),
-          })),
+              }),
+            }
+          }),
         },
       },
       include: {
         createdBy: {
-          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
         },
         approvedBy: {
-          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
         },
         lines: {
           include: {

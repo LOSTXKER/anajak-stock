@@ -15,7 +15,7 @@ interface LinkedMovement {
   docNumber: string
   type: string
   status: string
-  refType?: string
+  refType?: string | null
   createdAt: Date
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -29,6 +29,7 @@ import {
   Package,
   TrendingUp,
   TrendingDown,
+  Scan,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -40,6 +41,7 @@ import {
   cancelStockTake,
 } from '@/actions/stock-take'
 import { StatCard } from '@/components/common'
+import { BarcodeInput, useBarcodeScanner } from '@/components/barcode-scanner'
 
 const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
   DRAFT: { 
@@ -107,6 +109,49 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [lineEdits, setLineEdits] = useState<Record<string, LineEdit>>({})
+  const [showBarcodeInput, setShowBarcodeInput] = useState(false)
+  const [highlightedLineId, setHighlightedLineId] = useState<string | null>(null)
+  const lineInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+
+  // Handle barcode scan - find product and focus on count input
+  const handleBarcodeScan = useCallback((barcode: string) => {
+    if (!stockTake || stockTake.status !== 'IN_PROGRESS') {
+      toast.error('ไม่สามารถสแกนได้ในสถานะนี้')
+      return
+    }
+
+    // Find line matching the barcode (match SKU or product barcode)
+    const matchedLine = stockTake.lines.find(line => 
+      line.product.sku.toLowerCase() === barcode.toLowerCase() ||
+      line.variant?.sku.toLowerCase() === barcode.toLowerCase()
+    )
+
+    if (!matchedLine) {
+      toast.error(`ไม่พบสินค้า "${barcode}" ในรายการตรวจนับ`)
+      return
+    }
+
+    // Highlight and focus on the matched line
+    setHighlightedLineId(matchedLine.id)
+    toast.success(`พบ: ${matchedLine.product.name}`)
+    
+    // Focus on the input after a short delay
+    setTimeout(() => {
+      const inputRef = lineInputRefs.current[matchedLine.id]
+      if (inputRef) {
+        inputRef.focus()
+        inputRef.select()
+      }
+    }, 100)
+
+    // Remove highlight after 3 seconds
+    setTimeout(() => {
+      setHighlightedLineId(null)
+    }, 3000)
+  }, [stockTake])
+
+  // USB Scanner hook
+  useBarcodeScanner(handleBarcodeScan, stockTake?.status === 'IN_PROGRESS' && !showBarcodeInput)
 
   const loadData = async () => {
     const result = await getStockTake(id)
@@ -289,7 +334,7 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
 
       {/* Actions */}
       <Card>
-        <CardContent className="py-4">
+        <CardContent className="py-4 space-y-4">
           <div className="flex flex-wrap gap-3">
             {stockTake.status === 'DRAFT' && (
               <>
@@ -305,6 +350,13 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
             )}
             {stockTake.status === 'IN_PROGRESS' && (
               <>
+                <Button 
+                  variant={showBarcodeInput ? 'default' : 'outline'}
+                  onClick={() => setShowBarcodeInput(!showBarcodeInput)}
+                >
+                  <Scan className="w-4 h-4 mr-2" />
+                  สแกน Barcode
+                </Button>
                 <Button onClick={handleSave} disabled={isSaving}>
                   {isSaving ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -336,6 +388,23 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
               </>
             )}
           </div>
+
+          {/* Barcode Scanner Input */}
+          {showBarcodeInput && stockTake.status === 'IN_PROGRESS' && (
+            <div className="bg-[var(--accent-light)]/50 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm text-[var(--accent-primary)]">
+                <Scan className="w-4 h-4" />
+                <span className="font-medium">สแกน Barcode เพื่อค้นหาสินค้า</span>
+              </div>
+              <BarcodeInput 
+                onScan={handleBarcodeScan}
+                placeholder="สแกน SKU หรือ Barcode แล้วกด Enter..."
+              />
+              <p className="text-xs text-[var(--text-muted)]">
+                💡 สแกนแล้วระบบจะเลื่อนไปที่รายการนั้นให้กรอกจำนวน | USB Scanner ทำงานอัตโนมัติ
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -389,9 +458,13 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
                   const variance = edit.countedQty !== null 
                     ? edit.countedQty - line.systemQty 
                     : line.variance
+                  const isHighlighted = highlightedLineId === line.id
 
                   return (
-                    <TableRow key={line.id}>
+                    <TableRow 
+                      key={line.id}
+                      className={isHighlighted ? 'bg-[var(--accent-light)] animate-pulse' : ''}
+                    >
                       <TableCell className="font-mono text-sm">
                         <Link href={`/products/${line.productId}`} className="text-[var(--accent-primary)] hover:underline">
                           {line.variant?.sku || line.product.sku}
@@ -410,6 +483,7 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
                       <TableCell className="text-right">
                         {stockTake.status === 'IN_PROGRESS' ? (
                           <Input
+                            ref={(el) => { lineInputRefs.current[line.id] = el }}
                             type="number"
                             min="0"
                             value={edit.countedQty ?? ''}
@@ -418,7 +492,7 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
                               'countedQty',
                               e.target.value ? Number(e.target.value) : null
                             )}
-                            className="w-24 text-right"
+                            className={`w-24 text-right ${isHighlighted ? 'ring-2 ring-[var(--accent-primary)]' : ''}`}
                           />
                         ) : (
                           <span className="font-mono font-medium">

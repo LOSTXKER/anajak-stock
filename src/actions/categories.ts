@@ -1,15 +1,11 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { getSession } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-
-// ==================== TYPES ====================
-
-type ActionResult<T = void> = 
-  | { success: true; data: T }
-  | { success: false; error: string }
+import { withAuth, handleActionError, validateInput, success, failure } from '@/lib/action-utils'
+import { logError } from '@/lib/errors'
+import type { ActionResult } from '@/types'
 
 // ==================== SCHEMAS ====================
 
@@ -17,6 +13,8 @@ const CategoryInputSchema = z.object({
   name: z.string().min(1, 'กรุณากรอกชื่อหมวดหมู่'),
   description: z.string().optional(),
 })
+
+type CategoryInput = z.infer<typeof CategoryInputSchema>
 
 // ==================== GET CATEGORIES ====================
 
@@ -33,7 +31,7 @@ export async function getCategories() {
     })
     return categories
   } catch (error) {
-    console.error('Get categories error:', error)
+    logError(error, { context: 'getCategories' })
     return []
   }
 }
@@ -50,23 +48,19 @@ export async function getCategoryById(id: string) {
     })
     return category
   } catch (error) {
-    console.error('Get category by id error:', error)
+    logError(error, { context: 'getCategoryById', id })
     return null
   }
 }
 
 // ==================== CREATE CATEGORY ====================
 
-export async function createCategory(
-  input: z.infer<typeof CategoryInputSchema>
-): Promise<ActionResult<{ id: string }>> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
+export const createCategory = withAuth<[CategoryInput], { id: string }>(
+  async (session, input) => {
+    const validation = validateInput(CategoryInputSchema, input)
+    if (!validation.success) return validation
 
-  try {
-    const validated = CategoryInputSchema.parse(input)
+    const validated = validation.data
 
     // Check for duplicate name
     const existing = await prisma.category.findFirst({
@@ -76,7 +70,7 @@ export async function createCategory(
       },
     })
     if (existing) {
-      return { success: false, error: 'ชื่อหมวดหมู่นี้มีอยู่แล้ว' }
+      return failure('ชื่อหมวดหมู่นี้มีอยู่แล้ว')
     }
 
     const category = await prisma.category.create({
@@ -98,35 +92,24 @@ export async function createCategory(
     })
 
     revalidatePath('/settings/categories')
-    return { success: true, data: { id: category.id } }
-  } catch (error) {
-    console.error('Create category error:', error)
-    if (error instanceof z.ZodError) {
-      return { success: false, error: error.issues[0].message }
-    }
-    return { success: false, error: 'ไม่สามารถสร้างหมวดหมู่ได้' }
+    return success({ id: category.id })
   }
-}
+)
 
 // ==================== UPDATE CATEGORY ====================
 
-export async function updateCategory(
-  id: string,
-  input: z.infer<typeof CategoryInputSchema>
-): Promise<ActionResult> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
+export const updateCategory = withAuth<[string, CategoryInput], void>(
+  async (session, id, input) => {
+    const validation = validateInput(CategoryInputSchema, input)
+    if (!validation.success) return validation
 
-  try {
-    const validated = CategoryInputSchema.parse(input)
+    const validated = validation.data
 
     const existing = await prisma.category.findUnique({
       where: { id },
     })
     if (!existing) {
-      return { success: false, error: 'ไม่พบหมวดหมู่' }
+      return failure('ไม่พบหมวดหมู่')
     }
 
     // Check for duplicate name (excluding current)
@@ -138,7 +121,7 @@ export async function updateCategory(
       },
     })
     if (duplicate) {
-      return { success: false, error: 'ชื่อหมวดหมู่นี้มีอยู่แล้ว' }
+      return failure('ชื่อหมวดหมู่นี้มีอยู่แล้ว')
     }
 
     await prisma.category.update({
@@ -162,25 +145,14 @@ export async function updateCategory(
     })
 
     revalidatePath('/settings/categories')
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error('Update category error:', error)
-    if (error instanceof z.ZodError) {
-      return { success: false, error: error.issues[0].message }
-    }
-    return { success: false, error: 'ไม่สามารถอัปเดตหมวดหมู่ได้' }
+    return success(undefined)
   }
-}
+)
 
 // ==================== DELETE CATEGORY ====================
 
-export async function deleteCategory(id: string): Promise<ActionResult> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้รับอนุญาต' }
-  }
-
-  try {
+export const deleteCategory = withAuth<[string], void>(
+  async (session, id) => {
     const existing = await prisma.category.findUnique({
       where: { id },
       include: {
@@ -190,12 +162,12 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
       },
     })
     if (!existing) {
-      return { success: false, error: 'ไม่พบหมวดหมู่' }
+      return failure('ไม่พบหมวดหมู่')
     }
 
     // Check if category has products
     if (existing._count.products > 0) {
-      return { success: false, error: `ไม่สามารถลบหมวดหมู่ที่มีสินค้า ${existing._count.products} รายการได้` }
+      return failure(`ไม่สามารถลบหมวดหมู่ที่มีสินค้า ${existing._count.products} รายการได้`)
     }
 
     // Soft delete
@@ -219,9 +191,6 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
     })
 
     revalidatePath('/settings/categories')
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error('Delete category error:', error)
-    return { success: false, error: 'ไม่สามารถลบหมวดหมู่ได้' }
+    return success(undefined)
   }
-}
+)

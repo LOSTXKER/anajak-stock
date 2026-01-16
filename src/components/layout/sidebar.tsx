@@ -25,6 +25,7 @@ import {
   FileStack,
   Scan,
   HelpCircle,
+  Layers,
 } from 'lucide-react'
 import { Role } from '@/generated/prisma'
 import { hasPermission } from '@/lib/permissions'
@@ -77,6 +78,12 @@ const stockMenuItems: MenuItem[] = [
     title: 'คลังสินค้า',
     href: '/stock',
     icon: Warehouse,
+    permission: 'stock:read',
+  },
+  {
+    title: 'Lot / Batch',
+    href: '/lots',
+    icon: Layers,
     permission: 'stock:read',
   },
   {
