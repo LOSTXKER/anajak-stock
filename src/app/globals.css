@@ -442,3 +442,22 @@
   }
 }
 
+/* ==================== Html5 QR Code Scanner ==================== */
+/* Ensure video element displays properly */
+[id^="scanner-"] {
+  width: 100% !important;
+  background: #000;
+}
+
+[id^="scanner-"] video {
+  width: 100% !important;
+  height: auto !important;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+}
+
+[id^="scanner-"] #qr-shaded-region {
+  border-width: 2px !important;
+  border-color: var(--accent-primary) !important;
+}
+
