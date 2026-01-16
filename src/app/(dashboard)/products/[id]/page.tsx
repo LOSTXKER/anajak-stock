@@ -139,18 +139,18 @@ async function ProductDetail({ id }: { id: string }) {
   const isBelowReorderPoint = totalStock <= Number(product.reorderPoint) && Number(product.reorderPoint) > 0
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-4 md:space-y-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-2 md:gap-4 flex-1 min-w-0">
+          <Button variant="ghost" size="icon" className="shrink-0 mt-0.5" asChild>
             <Link href="/products">
               <ArrowLeft className="w-5 h-5" />
             </Link>
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold">{product.name}</h1>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg md:text-2xl font-bold break-words">{product.name}</h1>
               <Badge
                 className={
                   product.active
@@ -167,10 +167,10 @@ async function ProductDetail({ id }: { id: string }) {
                 </Badge>
               )}
             </div>
-            <p className="text-[var(--text-muted)] mt-1 font-mono text-sm">SKU: {product.sku}</p>
+            <p className="text-[var(--text-muted)] mt-1 font-mono text-xs md:text-sm">SKU: {product.sku}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <PrintLabelButton
             product={{
               sku: product.sku,
@@ -180,7 +180,7 @@ async function ProductDetail({ id }: { id: string }) {
               unit: product.unit?.name,
             }}
           />
-          <Button asChild>
+          <Button size="sm" className="w-full sm:w-auto" asChild>
             <Link href={`/products/${product.id}/edit`}>
               <Edit className="w-4 h-4 mr-2" />
               แก้ไข
@@ -233,7 +233,7 @@ async function ProductDetail({ id }: { id: string }) {
       )}
 
       {/* Product Details & Stock by Location */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">ข้อมูลสินค้า</CardTitle>
@@ -287,7 +287,8 @@ async function ProductDetail({ id }: { id: string }) {
                   description="ยังไม่มีสินค้าในคลัง"
                 />
               ) : (
-                <Table>
+                <div className="overflow-x-auto mobile-scroll">
+                  <Table className="min-w-[500px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>คลัง</TableHead>
@@ -314,7 +315,8 @@ async function ProductDetail({ id }: { id: string }) {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -339,7 +341,8 @@ async function ProductDetail({ id }: { id: string }) {
               description="ยังไม่มีประวัติการเคลื่อนไหว"
             />
           ) : (
-            <Table>
+            <div className="overflow-x-auto mobile-scroll">
+              <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>วันที่</TableHead>
@@ -405,7 +408,8 @@ async function ProductDetail({ id }: { id: string }) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

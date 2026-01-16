@@ -32,26 +32,28 @@ async function SuppliersContent() {
   const suppliers = await getSuppliers()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <PageHeader
-          title="ซัพพลายเออร์"
-          description={`จัดการข้อมูลผู้ขาย ${suppliers.length} ราย`}
-          icon={<Truck className="w-6 h-6" />}
-        />
-        <Button asChild>
-          <Link href="/suppliers/new">
-            <Plus className="w-4 h-4 mr-2" />
-            เพิ่ม Supplier
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="ซัพพลายเออร์"
+        description={`จัดการข้อมูลผู้ขาย ${suppliers.length} ราย`}
+        icon={<Truck className="w-6 h-6" />}
+        actions={
+          <Button size="sm" asChild>
+            <Link href="/suppliers/new">
+              <Plus className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">เพิ่ม Supplier</span>
+              <span className="sm:hidden">เพิ่ม</span>
+            </Link>
+          </Button>
+        }
+      />
 
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <div className="overflow-x-auto mobile-scroll">
+            <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
                 <TableHead>รหัส</TableHead>
@@ -153,7 +155,8 @@ async function SuppliersContent() {
                 ))
               )}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

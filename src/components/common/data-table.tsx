@@ -117,11 +117,11 @@ export function DataTable<T extends Record<string, unknown>>({
     <div className={`space-y-4 ${className}`}>
       <div 
         className={cn(
-          "border border-[var(--border-default)] rounded-lg overflow-hidden transition-opacity duration-200",
+          "border border-[var(--border-default)] rounded-lg overflow-x-auto mobile-scroll transition-opacity duration-200",
           isPending && "opacity-60 pointer-events-none"
         )}
       >
-        <Table>
+        <Table className="min-w-[600px]">
           <TableHeader className={stickyHeader ? 'sticky top-0 z-10' : ''}>
             <TableRow className="bg-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)]">
               {columns.map((col) => (
@@ -198,23 +198,23 @@ export function Pagination({
   const end = Math.min(page * limit, total)
 
   return (
-    <div className="flex items-center justify-between px-2">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2">
+      <div className="flex items-center gap-2 order-2 sm:order-1">
         {isLoading && (
           <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-primary)]" />
         )}
         <p className={cn(
-          "text-sm text-[var(--text-muted)] transition-opacity",
+          "text-xs sm:text-sm text-[var(--text-muted)] transition-opacity",
           isLoading && "opacity-50"
         )}>
           แสดง {start}-{end} จาก {total.toLocaleString()} รายการ
         </p>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 order-1 sm:order-2">
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-8 w-8 hidden sm:flex"
           onClick={() => onPageChange(1)}
           disabled={page === 1 || isLoading}
         >
@@ -230,7 +230,7 @@ export function Pagination({
           <ChevronLeft className="w-4 h-4" />
         </Button>
         <span className={cn(
-          "px-3 text-sm text-[var(--text-secondary)] min-w-[100px] text-center transition-opacity",
+          "px-3 text-xs sm:text-sm text-[var(--text-secondary)] min-w-[80px] sm:min-w-[100px] text-center transition-opacity",
           isLoading && "opacity-50"
         )}>
           หน้า {page} / {totalPages}
@@ -247,7 +247,7 @@ export function Pagination({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-8 w-8 hidden sm:flex"
           onClick={() => onPageChange(totalPages)}
           disabled={page === totalPages || isLoading}
         >

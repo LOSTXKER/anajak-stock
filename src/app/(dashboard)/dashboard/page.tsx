@@ -534,28 +534,30 @@ export default async function DashboardPage() {
   const session = await getSession()
   
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Welcome Header - renders immediately */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
             สวัสดี, {session?.name || 'User'}
           </h1>
-          <p className="text-[var(--text-secondary)] mt-1">
+          <p className="text-sm md:text-base text-[var(--text-secondary)] mt-1">
             ยินดีต้อนรับสู่ระบบจัดการสต๊อคสินค้า
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" asChild>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="flex-1 sm:flex-none" asChild>
             <Link href="/movements/new">
               <Plus className="w-4 h-4 mr-2" />
-              เพิ่มเคลื่อนไหว
+              <span className="hidden sm:inline">เพิ่มเคลื่อนไหว</span>
+              <span className="sm:hidden">เคลื่อนไหว</span>
             </Link>
           </Button>
-          <Button asChild>
+          <Button size="sm" className="flex-1 sm:flex-none" asChild>
             <Link href="/products/new">
               <Plus className="w-4 h-4 mr-2" />
-              เพิ่มสินค้า
+              <span className="hidden sm:inline">เพิ่มสินค้า</span>
+              <span className="sm:hidden">สินค้า</span>
             </Link>
           </Button>
         </div>
@@ -567,7 +569,7 @@ export default async function DashboardPage() {
       </Suspense>
 
       {/* Content Grid - Each with own Suspense boundary */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <Suspense fallback={<CardListSkeleton />}>
           <LowStockSection />
         </Suspense>
@@ -578,7 +580,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Charts Section - Each with own Suspense boundary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         <Suspense fallback={<ChartSkeleton height={250} />}>
           <StockValueChartSection />
         </Suspense>

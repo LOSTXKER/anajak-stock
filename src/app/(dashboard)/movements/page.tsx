@@ -113,24 +113,25 @@ async function MovementsContent({ searchParams }: PageProps) {
         description={`รายการเคลื่อนไหวสินค้าทั้งหมด ${total.toLocaleString()} รายการ`}
         icon={<ArrowLeftRight className="w-6 h-6" />}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <ExportButton
               endpoint="/api/export/movements"
               label="Export"
+              className="hidden sm:inline-flex"
             />
-            <Button variant="outline" className="text-[var(--status-success)] border-[var(--status-success)]/30 hover:bg-[var(--status-success-light)]" asChild>
+            <Button variant="outline" size="sm" className="text-xs sm:text-sm text-[var(--status-success)] border-[var(--status-success)]/30 hover:bg-[var(--status-success-light)]" asChild>
               <Link href="/movements/new?type=RECEIVE">
-                <ArrowDownToLine className="w-4 h-4 mr-2" />
-                รับเข้า
+                <ArrowDownToLine className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">รับเข้า</span>
               </Link>
             </Button>
-            <Button variant="outline" className="text-[var(--status-error)] border-[var(--status-error)]/30 hover:bg-[var(--status-error-light)]" asChild>
+            <Button variant="outline" size="sm" className="text-xs sm:text-sm text-[var(--status-error)] border-[var(--status-error)]/30 hover:bg-[var(--status-error-light)]" asChild>
               <Link href="/movements/new?type=ISSUE">
-                <ArrowUpFromLine className="w-4 h-4 mr-2" />
-                เบิกออก
+                <ArrowUpFromLine className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">เบิกออก</span>
               </Link>
             </Button>
-            <Button variant="outline" className="text-[var(--status-info)] border-[var(--status-info)]/30 hover:bg-[var(--status-info-light)]" asChild>
+            <Button variant="outline" size="sm" className="text-xs sm:text-sm text-[var(--status-info)] border-[var(--status-info)]/30 hover:bg-[var(--status-info-light)] hidden md:inline-flex" asChild>
               <Link href="/movements/new?type=TRANSFER">
                 <RefreshCw className="w-4 h-4 mr-2" />
                 โอนย้าย
@@ -142,8 +143,8 @@ async function MovementsContent({ searchParams }: PageProps) {
 
       {/* Quick Filters */}
       <Card>
-        <CardContent className="p-4 space-y-4">
-          <div className="flex flex-wrap gap-2">
+        <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
+          <div className="flex flex-wrap gap-1.5 md:gap-2">
             <Button
               variant={!type && !status ? 'default' : 'outline'}
               size="sm"
@@ -195,7 +196,8 @@ async function MovementsContent({ searchParams }: PageProps) {
               }
             />
           ) : (
-            <Table>
+            <div className="overflow-x-auto mobile-scroll">
+              <Table className="min-w-[800px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>เลขที่เอกสาร</TableHead>
@@ -265,7 +267,8 @@ async function MovementsContent({ searchParams }: PageProps) {
                   )
                 })}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

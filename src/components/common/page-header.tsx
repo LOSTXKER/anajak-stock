@@ -26,17 +26,21 @@ export function PageHeader({
   className = '',
 }: PageHeaderProps) {
   return (
-    <div className={`flex items-center justify-between ${className}`}>
-      <div>
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)] flex items-center gap-2">
+    <div className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}>
+      <div className="flex-1 min-w-0">
+        <h1 className="text-xl md:text-2xl font-semibold text-[var(--text-primary)] flex items-center gap-2">
           {icon && <span className="text-[var(--accent-primary)]">{icon}</span>}
-          {title}
+          <span className="truncate">{title}</span>
         </h1>
         {description && (
-          <p className="text-[var(--text-secondary)] mt-1">{description}</p>
+          <p className="text-sm md:text-base text-[var(--text-secondary)] mt-1">{description}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {actions}
+        </div>
+      )}
     </div>
   )
 }

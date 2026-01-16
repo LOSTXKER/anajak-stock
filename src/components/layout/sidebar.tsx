@@ -34,6 +34,7 @@ import { Button } from '@/components/ui/button'
 interface SidebarProps {
   userRole: Role
   customPermissions?: string[]
+  className?: string
 }
 
 interface MenuItem {
@@ -151,7 +152,7 @@ const helpMenuItem: MenuItem = {
   permission: null,
 }
 
-export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
+export function Sidebar({ userRole, customPermissions = [], className }: SidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -290,7 +291,8 @@ export function Sidebar({ userRole, customPermissions = [] }: SidebarProps) {
     <aside
       className={cn(
         'bg-[var(--bg-secondary)] border-r border-[var(--border-default)] flex flex-col transition-all duration-300',
-        collapsed ? 'w-[72px]' : 'w-[260px]'
+        collapsed ? 'w-[72px]' : 'w-[260px]',
+        className
       )}
     >
       {/* Logo */}

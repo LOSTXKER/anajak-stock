@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
+import { BottomNav } from '@/components/layout/bottom-nav'
 
 export default async function DashboardLayout({
   children,
@@ -16,7 +17,12 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)] flex">
-      <Sidebar userRole={session.role} customPermissions={session.customPermissions} />
+      {/* Sidebar - hidden on mobile */}
+      <Sidebar 
+        userRole={session.role} 
+        customPermissions={session.customPermissions}
+        className="hidden md:flex"
+      />
       <div className="flex-1 flex flex-col min-w-0">
         <Header
           user={{
@@ -25,12 +31,17 @@ export default async function DashboardLayout({
             role: session.role,
           }}
         />
-        <main className="flex-1 p-6 overflow-auto bg-[var(--bg-secondary)]">
+        <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 overflow-auto bg-[var(--bg-secondary)]">
           <div className="max-w-[1600px] mx-auto">
             {children}
           </div>
         </main>
       </div>
+      {/* Bottom Navigation - visible only on mobile */}
+      <BottomNav 
+        userRole={session.role} 
+        customPermissions={session.customPermissions}
+      />
     </div>
   )
 }

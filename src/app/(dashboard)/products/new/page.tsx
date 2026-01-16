@@ -316,10 +316,10 @@ export default function NewProductPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-4 md:space-y-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
+      <div className="flex items-center gap-2 md:gap-4">
+        <Button variant="ghost" size="icon" className="shrink-0" asChild>
           <Link href="/products">
             <ArrowLeft className="w-5 h-5" />
           </Link>
@@ -337,8 +337,8 @@ export default function NewProductPage() {
           <CardHeader>
             <CardTitle className="text-base">ข้อมูลพื้นฐาน</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+          <CardContent className="space-y-3 md:space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
               <div className="space-y-2">
                 <Label>
                   SKU หลัก <span className="text-[var(--status-error)]">*</span>
@@ -382,7 +382,7 @@ export default function NewProductPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
               <div className="space-y-2">
                 <Label>หมวดหมู่</Label>
                 <Select name="categoryId">
@@ -416,7 +416,7 @@ export default function NewProductPage() {
             </div>
 
             {!hasVariants && (
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
                 <div className="space-y-2">
                   <Label>ราคาทุน</Label>
                   <Input
@@ -489,7 +489,7 @@ export default function NewProductPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-[var(--accent-primary)]" />
@@ -527,7 +527,7 @@ export default function NewProductPage() {
                   </div>
                 )}
 
-                <div className="space-y-2">
+                <div className="space-y-2 sm:col-span-2 md:col-span-1">
                   <Label>หมายเหตุ</Label>
                   <Input
                     value={initialNote}
@@ -752,7 +752,8 @@ export default function NewProductPage() {
                   </div>
 
                   {/* Table */}
-                  <Table>
+                  <div className="overflow-x-auto mobile-scroll">
+                    <Table className="min-w-[800px]">
                     <TableHeader>
                       <TableRow>
                         {optionGroups.map(g => (
@@ -854,7 +855,8 @@ export default function NewProductPage() {
                         )
                       })}
                     </TableBody>
-                  </Table>
+                    </Table>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -862,11 +864,11 @@ export default function NewProductPage() {
         </Card>
 
         {/* Submit Buttons */}
-        <div className="flex justify-end gap-3 mt-6">
-          <Button variant="outline" asChild>
+        <div className="flex flex-col sm:flex-row justify-end gap-2 md:gap-3 mt-4 md:mt-6">
+          <Button variant="outline" className="w-full sm:w-auto" asChild>
             <Link href="/products">ยกเลิก</Link>
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />

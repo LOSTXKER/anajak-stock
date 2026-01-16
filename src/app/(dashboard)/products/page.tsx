@@ -46,21 +46,22 @@ async function ProductsContent({ searchParams }: PageProps) {
         description={`จัดการข้อมูลสินค้าทั้งหมด ${total.toLocaleString()} รายการ`}
         icon={<Package className="w-6 h-6" />}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <ExportButton
               endpoint="/api/export/products"
               label="Export"
+              className="hidden sm:inline-flex"
             />
-            <Button variant="outline" asChild>
+            <Button variant="outline" size="sm" className="text-xs sm:text-sm" asChild>
               <Link href="/products/import">
-                <FileUp className="w-4 h-4 mr-2" />
-                นำเข้า CSV
+                <FileUp className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">นำเข้า CSV</span>
               </Link>
             </Button>
-            <Button asChild>
+            <Button size="sm" className="text-xs sm:text-sm" asChild>
               <Link href="/products/new">
-                <Plus className="w-4 h-4 mr-2" />
-                เพิ่มสินค้า
+                <Plus className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">เพิ่มสินค้า</span>
               </Link>
             </Button>
           </div>
@@ -88,7 +89,8 @@ async function ProductsContent({ searchParams }: PageProps) {
               }
             />
           ) : (
-            <Table>
+            <div className="overflow-x-auto mobile-scroll">
+              <Table className="min-w-[800px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>SKU</TableHead>
@@ -161,7 +163,8 @@ async function ProductsContent({ searchParams }: PageProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

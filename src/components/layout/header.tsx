@@ -66,9 +66,9 @@ export function Header({ user }: HeaderProps) {
     .slice(0, 2)
 
   return (
-    <header className="h-16 bg-[var(--bg-primary)] border-b border-[var(--border-default)] flex items-center justify-between px-6">
-      {/* Left side - Search */}
-      <div className="flex items-center gap-4 flex-1 max-w-md">
+    <header className="h-14 md:h-16 bg-[var(--bg-primary)] border-b border-[var(--border-default)] flex items-center justify-between px-3 md:px-6">
+      {/* Left side - Search (hidden on mobile) */}
+      <div className="hidden md:flex items-center gap-4 flex-1 max-w-md">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
           <Input
@@ -79,23 +79,28 @@ export function Header({ user }: HeaderProps) {
         </div>
       </div>
 
+      {/* Mobile: Logo/Title */}
+      <div className="flex md:hidden items-center gap-2">
+        <h1 className="text-base font-bold text-[var(--text-primary)]">Stock</h1>
+      </div>
+
       {/* Right side */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 md:gap-2">
         {/* Theme Toggle */}
         <ThemeToggle />
 
         {/* Notifications */}
         <NotificationBell />
 
-        {/* Separator */}
-        <div className="h-8 w-px bg-[var(--border-default)] mx-1" />
+        {/* Separator (hidden on mobile) */}
+        <div className="hidden md:block h-8 w-px bg-[var(--border-default)] mx-1" />
 
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="flex items-center gap-3 hover:bg-[var(--bg-hover)] pl-2 pr-3 h-9"
+              className="flex items-center gap-2 md:gap-3 hover:bg-[var(--bg-hover)] pl-1.5 md:pl-2 pr-2 md:pr-3 h-9"
             >
               <Avatar className="w-7 h-7">
                 <AvatarFallback

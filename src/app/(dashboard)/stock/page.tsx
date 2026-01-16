@@ -68,7 +68,7 @@ async function StockContent({ searchParams }: PageProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <PageHeader
         title="คลังสินค้า"
@@ -78,6 +78,7 @@ async function StockContent({ searchParams }: PageProps) {
           <ExportButton
             endpoint="/api/export/stock"
             label="Export"
+            className="hidden sm:inline-flex"
           />
         }
       />
@@ -122,7 +123,8 @@ async function StockContent({ searchParams }: PageProps) {
               description="ลองเปลี่ยนเงื่อนไขการค้นหา หรือเพิ่มการเคลื่อนไหวสินค้า"
             />
           ) : (
-            <Table>
+            <div className="overflow-x-auto mobile-scroll">
+              <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>SKU</TableHead>
@@ -199,7 +201,8 @@ async function StockContent({ searchParams }: PageProps) {
                   )
                 })}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
