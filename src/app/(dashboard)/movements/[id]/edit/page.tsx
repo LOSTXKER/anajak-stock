@@ -115,6 +115,7 @@ export default function EditMovementPage(props: PageProps) {
   const [locations, setLocations] = useState<LocationWithWarehouse[]>([])
   const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
   const [showBulkAddModal, setShowBulkAddModal] = useState(false)
+  const [loadedVariants, setLoadedVariants] = useState<Record<string, Variant[]>>({})
 
   useEffect(() => {
     async function loadData() {
@@ -173,10 +174,9 @@ export default function EditMovementPage(props: PageProps) {
   }, [params.id, router])
 
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
-    // Check if already loaded
-    const existingProduct = products.find(p => p.id === productId)
-    if (existingProduct?.variants && existingProduct.variants.length > 0) {
-      return existingProduct.variants
+    // Check if already loaded in separate state
+    if (loadedVariants[productId]) {
+      return loadedVariants[productId]
     }
     
     setLoadingVariantFor(productId)
@@ -184,7 +184,7 @@ export default function EditMovementPage(props: PageProps) {
       const response = await fetch(`/api/products/${productId}/variants`)
       if (response.ok) {
         const data = await response.json()
-        const variants = data.map((v: { 
+        const variants: Variant[] = data.map((v: { 
           id: string
           sku: string
           name: string | null
@@ -203,10 +203,8 @@ export default function EditMovementPage(props: PageProps) {
           costPrice: v.costPrice ? Number(v.costPrice) : undefined,
         }))
         
-        // Update products state with loaded variants
-        setProducts(prev => prev.map(p => 
-          p.id === productId ? { ...p, variants } : p
-        ))
+        // Store in separate loadedVariants state
+        setLoadedVariants(prev => ({ ...prev, [productId]: variants }))
         
         return variants
       }
@@ -367,6 +365,11 @@ export default function EditMovementPage(props: PageProps) {
   }
 
   function getProductVariants(productId: string): Variant[] {
+    // First check loadedVariants state (more reliable)
+    if (loadedVariants[productId]) {
+      return loadedVariants[productId]
+    }
+    // Fallback to products state
     const product = products.find(p => p.id === productId)
     return product?.variants || []
   }

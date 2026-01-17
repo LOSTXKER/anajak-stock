@@ -131,6 +131,7 @@ export default function NewMovementPage(props: PageProps) {
   const [isLoadingProducts, setIsLoadingProducts] = useState(true)
   const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
   const [showBulkAddModal, setShowBulkAddModal] = useState(false)
+  const [loadedVariants, setLoadedVariants] = useState<Record<string, Variant[]>>({})
 
   // Handle barcode scan - add product to lines
   const handleBarcodeScan = useCallback(async (barcode: string) => {
@@ -165,12 +166,9 @@ export default function NewMovementPage(props: PageProps) {
         }
         setLines(prev => [...prev, newLine])
         
-        // Load variants if needed
+        // Load variants if needed (loadVariantsForProduct handles caching)
         if (result.product.hasVariants) {
-          const variants = await loadVariantsForProduct(result.product.id)
-          setProducts(prev => prev.map(p => 
-            p.id === result.product.id ? { ...p, variants } : p
-          ))
+          await loadVariantsForProduct(result.product.id)
         }
         
         toast.success(`เพิ่มสินค้า: ${result.product.name}`)
@@ -230,10 +228,9 @@ export default function NewMovementPage(props: PageProps) {
   }, [searchParams.refId, searchParams.type])
 
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
-    // Check if already loaded
-    const existingProduct = products.find(p => p.id === productId)
-    if (existingProduct?.variants && existingProduct.variants.length > 0) {
-      return existingProduct.variants
+    // Check if already loaded in separate state
+    if (loadedVariants[productId]) {
+      return loadedVariants[productId]
     }
     
     setLoadingVariantFor(productId)
@@ -241,7 +238,7 @@ export default function NewMovementPage(props: PageProps) {
       const response = await fetch(`/api/products/${productId}/variants`)
       if (response.ok) {
         const data = await response.json()
-        const variants = data.map((v: { 
+        const variants: Variant[] = data.map((v: { 
           id: string
           sku: string
           name: string | null
@@ -260,10 +257,8 @@ export default function NewMovementPage(props: PageProps) {
           costPrice: v.costPrice ? Number(v.costPrice) : undefined,
         }))
         
-        // Update products state with loaded variants
-        setProducts(prev => prev.map(p => 
-          p.id === productId ? { ...p, variants } : p
-        ))
+        // Store in separate loadedVariants state
+        setLoadedVariants(prev => ({ ...prev, [productId]: variants }))
         
         return variants
       }
@@ -434,6 +429,11 @@ export default function NewMovementPage(props: PageProps) {
   }
 
   function getProductVariants(productId: string): Variant[] {
+    // First check loadedVariants state (more reliable)
+    if (loadedVariants[productId]) {
+      return loadedVariants[productId]
+    }
+    // Fallback to products state
     const product = products.find(p => p.id === productId)
     return product?.variants || []
   }
