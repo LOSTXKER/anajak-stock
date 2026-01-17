@@ -24,7 +24,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, Scan } from 'lucide-react'
+import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, Scan, ListPlus, Check, Search } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import { createMovement, submitMovement, getMovement } from '@/actions/movements'
 import { getProducts, getProductByBarcode } from '@/actions/products'
 import { getLocations } from '@/actions/stock'
@@ -127,6 +136,10 @@ export default function NewMovementPage(props: PageProps) {
 
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [locations, setLocations] = useState<LocationWithWarehouse[]>([])
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true)
+  const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
+  const [showBulkAddModal, setShowBulkAddModal] = useState(false)
+  const [bulkSelectedProducts, setBulkSelectedProducts] = useState<Set<string>>(new Set())
 
   // Handle barcode scan - add product to lines
   const handleBarcodeScan = useCallback(async (barcode: string) => {
@@ -184,6 +197,7 @@ export default function NewMovementPage(props: PageProps) {
 
   useEffect(() => {
     async function loadData() {
+      setIsLoadingProducts(true)
       const [productsResult, locationsData] = await Promise.all([
         getProducts({ limit: 1000 }),
         getLocations(),
@@ -194,6 +208,7 @@ export default function NewMovementPage(props: PageProps) {
         variants: undefined,
       })))
       setLocations(locationsData as LocationWithWarehouse[])
+      setIsLoadingProducts(false)
 
       // If refId is provided (return from issue), load the original movement
       if (searchParams.refId && searchParams.type === MovementType.RETURN) {
@@ -224,6 +239,7 @@ export default function NewMovementPage(props: PageProps) {
   }, [searchParams.refId, searchParams.type])
 
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
+    setLoadingVariantFor(productId)
     try {
       const response = await fetch(`/api/products/${productId}/variants`)
       if (response.ok) {
@@ -249,6 +265,8 @@ export default function NewMovementPage(props: PageProps) {
       }
     } catch (error) {
       console.error('Failed to load variants:', error)
+    } finally {
+      setLoadingVariantFor(null)
     }
     return []
   }
@@ -263,6 +281,58 @@ export default function NewMovementPage(props: PageProps) {
         unitCost: 0,
       },
     ])
+  }
+
+  // Bulk add multiple products at once
+  async function handleBulkAdd() {
+    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
+    const newLines: MovementLine[] = []
+    
+    for (const product of selectedProducts) {
+      // Skip if product already in lines
+      if (lines.some(l => l.productId === product.id && !product.hasVariants)) continue
+      
+      newLines.push({
+        id: Math.random().toString(36).substr(2, 9),
+        productId: product.id,
+        productName: product.name,
+        qty: 1,
+        unitCost: Number(product.lastCost || product.standardCost || 0),
+      })
+      
+      // Load variants if needed
+      if (product.hasVariants && !product.variants) {
+        const variants = await loadVariantsForProduct(product.id)
+        setProducts(prev => prev.map(p => 
+          p.id === product.id ? { ...p, variants } : p
+        ))
+      }
+    }
+    
+    setLines(prev => [...prev, ...newLines])
+    setBulkSelectedProducts(new Set())
+    setShowBulkAddModal(false)
+    toast.success(`เพิ่ม ${newLines.length} รายการ`)
+  }
+
+  function toggleBulkSelect(productId: string) {
+    setBulkSelectedProducts(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(productId)) {
+        newSet.delete(productId)
+      } else {
+        newSet.add(productId)
+      }
+      return newSet
+    })
+  }
+
+  function toggleSelectAll() {
+    if (bulkSelectedProducts.size === products.length) {
+      setBulkSelectedProducts(new Set())
+    } else {
+      setBulkSelectedProducts(new Set(products.map(p => p.id)))
+    }
   }
 
   function removeLine(id: string) {
@@ -507,6 +577,16 @@ export default function NewMovementPage(props: PageProps) {
               </Button>
               <Button
                 type="button"
+                onClick={() => setShowBulkAddModal(true)}
+                size="sm"
+                variant="outline"
+                disabled={isLoadingProducts}
+              >
+                <ListPlus className="w-4 h-4 mr-1" />
+                เพิ่มหลายรายการ
+              </Button>
+              <Button
+                type="button"
                 onClick={addLine}
                 size="sm"
                 variant="outline"
@@ -579,9 +659,17 @@ export default function NewMovementPage(props: PageProps) {
                             <Select
                               value={line.productId}
                               onValueChange={(v) => handleProductChange(line.id, v)}
+                              disabled={isLoadingProducts}
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="เลือกสินค้า" />
+                                {isLoadingProducts ? (
+                                  <span className="flex items-center gap-2 text-[var(--text-muted)]">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    กำลังโหลด...
+                                  </span>
+                                ) : (
+                                  <SelectValue placeholder="เลือกสินค้า" />
+                                )}
                               </SelectTrigger>
                               <SelectContent className="max-h-60">
                                 {products.map((product) => (
@@ -600,7 +688,12 @@ export default function NewMovementPage(props: PageProps) {
                           </TableCell>
                           <TableCell>
                             {showVariantSelect ? (
-                              variants.length > 0 ? (
+                              loadingVariantFor === line.productId || variants.length === 0 ? (
+                                <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  กำลังโหลดตัวเลือก...
+                                </div>
+                              ) : (
                                 <CascadingVariantPicker
                                   variants={variants}
                                   selectedVariantId={line.variantId}
@@ -625,8 +718,6 @@ export default function NewMovementPage(props: PageProps) {
                                   showStock={true}
                                   placeholder="เลือก สี/ไซส์"
                                 />
-                              ) : (
-                                <div className="text-[var(--text-muted)] text-sm animate-pulse">กำลังโหลด...</div>
                               )
                             ) : (
                               <div className="text-[var(--text-muted)] text-sm">-</div>
@@ -790,6 +881,159 @@ export default function NewMovementPage(props: PageProps) {
           </Button>
         </div>
       </form>
+
+      {/* Bulk Add Modal */}
+      <BulkAddModal
+        open={showBulkAddModal}
+        onOpenChange={setShowBulkAddModal}
+        products={products}
+        selectedProducts={bulkSelectedProducts}
+        onToggleSelect={toggleBulkSelect}
+        onToggleSelectAll={toggleSelectAll}
+        onConfirm={handleBulkAdd}
+        existingProductIds={new Set(lines.map(l => l.productId))}
+      />
     </div>
+  )
+}
+
+// Bulk Add Modal Component
+function BulkAddModal({
+  open,
+  onOpenChange,
+  products,
+  selectedProducts,
+  onToggleSelect,
+  onToggleSelectAll,
+  onConfirm,
+  existingProductIds,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  products: ProductWithVariants[]
+  selectedProducts: Set<string>
+  onToggleSelect: (id: string) => void
+  onToggleSelectAll: () => void
+  onConfirm: () => void
+  existingProductIds: Set<string>
+}) {
+  const [search, setSearch] = useState('')
+  const [isAdding, setIsAdding] = useState(false)
+  
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.sku.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const handleConfirm = async () => {
+    setIsAdding(true)
+    await onConfirm()
+    setIsAdding(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ListPlus className="w-5 h-5" />
+            เพิ่มหลายรายการ
+          </DialogTitle>
+          <DialogDescription>
+            เลือกสินค้าที่ต้องการเพิ่มทั้งหมด แล้วกดยืนยัน
+          </DialogDescription>
+        </DialogHeader>
+        
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+          <Input
+            placeholder="ค้นหาสินค้า..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        {/* Select All */}
+        <div className="flex items-center justify-between py-2 border-b border-[var(--border-default)]">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox
+              checked={selectedProducts.size === products.length && products.length > 0}
+              onCheckedChange={onToggleSelectAll}
+            />
+            <span className="text-sm font-medium">เลือกทั้งหมด</span>
+          </label>
+          <Badge variant="secondary">
+            เลือก {selectedProducts.size} รายการ
+          </Badge>
+        </div>
+
+        {/* Product List */}
+        <div className="flex-1 -mx-6 px-6 overflow-y-auto max-h-[400px]">
+          <div className="space-y-1 py-2">
+            {filteredProducts.length === 0 ? (
+              <div className="text-center py-8 text-[var(--text-muted)]">
+                ไม่พบสินค้า
+              </div>
+            ) : (
+              filteredProducts.map((product) => {
+                const isExisting = existingProductIds.has(product.id)
+                const isSelected = selectedProducts.has(product.id)
+                
+                return (
+                  <label
+                    key={product.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                      isSelected 
+                        ? 'bg-[var(--accent-light)] border border-[var(--accent-primary)]' 
+                        : 'hover:bg-[var(--bg-secondary)] border border-transparent'
+                    } ${isExisting ? 'opacity-50' : ''}`}
+                  >
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={() => onToggleSelect(product.id)}
+                      disabled={isExisting}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{product.name}</span>
+                        {product.hasVariants && (
+                          <Badge variant="secondary" className="text-xs shrink-0">Variants</Badge>
+                        )}
+                        {isExisting && (
+                          <Badge variant="outline" className="text-xs shrink-0">เพิ่มแล้ว</Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)] font-mono">{product.sku}</div>
+                    </div>
+                    {isSelected && (
+                      <Check className="w-5 h-5 text-[var(--accent-primary)] shrink-0" />
+                    )}
+                  </label>
+                )
+              })
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="border-t border-[var(--border-default)] pt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            ยกเลิก
+          </Button>
+          <Button 
+            onClick={handleConfirm} 
+            disabled={selectedProducts.size === 0 || isAdding}
+          >
+            {isAdding ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Plus className="w-4 h-4 mr-2" />
+            )}
+            เพิ่ม {selectedProducts.size} รายการ
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
