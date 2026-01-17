@@ -224,7 +224,7 @@ export default function EditMovementPage(props: PageProps) {
   }
 
   // Bulk add handler - receives selections from modal
-  function handleBulkAdd(selections: BulkAddSelection[]) {
+  async function handleBulkAdd(selections: BulkAddSelection[]) {
     const newLines: MovementLine[] = selections.map(sel => ({
       id: `new-${Math.random().toString(36).substr(2, 9)}`,
       productId: sel.productId,
@@ -238,6 +238,17 @@ export default function EditMovementPage(props: PageProps) {
     setLines(prev => [...prev, ...newLines])
     setShowBulkAddModal(false)
     toast.success(`เพิ่ม ${newLines.length} รายการ`)
+    
+    // Load variants for products that have variants but weren't selected with specific variant
+    const productsNeedingVariants = selections.filter(sel => {
+      const product = products.find(p => p.id === sel.productId)
+      return product?.hasVariants && !sel.variantId && !(sel.productId in loadedVariants)
+    })
+    
+    // Load variants in parallel
+    await Promise.all(
+      productsNeedingVariants.map(sel => loadVariantsForProduct(sel.productId))
+    )
   }
 
   // Load variants for bulk add modal
