@@ -173,12 +173,18 @@ export default function EditMovementPage(props: PageProps) {
   }, [params.id, router])
 
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
+    // Check if already loaded
+    const existingProduct = products.find(p => p.id === productId)
+    if (existingProduct?.variants && existingProduct.variants.length > 0) {
+      return existingProduct.variants
+    }
+    
     setLoadingVariantFor(productId)
     try {
       const response = await fetch(`/api/products/${productId}/variants`)
       if (response.ok) {
-        const variants = await response.json()
-        return variants.map((v: { 
+        const data = await response.json()
+        const variants = data.map((v: { 
           id: string
           sku: string
           name: string | null
@@ -196,6 +202,13 @@ export default function EditMovementPage(props: PageProps) {
           stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
           costPrice: v.costPrice ? Number(v.costPrice) : undefined,
         }))
+        
+        // Update products state with loaded variants
+        setProducts(prev => prev.map(p => 
+          p.id === productId ? { ...p, variants } : p
+        ))
+        
+        return variants
       }
     } catch (error) {
       console.error('Failed to load variants:', error)
@@ -289,14 +302,12 @@ export default function EditMovementPage(props: PageProps) {
       variantLabel: undefined,
     }
 
-    if (product.hasVariants) {
-      const variants = await loadVariantsForProduct(productId)
-      setProducts(prev => prev.map(p => 
-        p.id === productId ? { ...p, variants } : p
-      ))
-    }
-
     updateLine(lineId, updates)
+
+    // Load variants if needed (this updates products state internally)
+    if (product.hasVariants) {
+      await loadVariantsForProduct(productId)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -533,11 +544,13 @@ export default function EditMovementPage(props: PageProps) {
                           </TableCell>
                           <TableCell>
                             {showVariantSelect ? (
-                              loadingVariantFor === line.productId || variants.length === 0 ? (
+                              loadingVariantFor === line.productId ? (
                                 <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
                                   <Loader2 className="w-4 h-4 animate-spin" />
                                   กำลังโหลดตัวเลือก...
                                 </div>
+                              ) : variants.length === 0 ? (
+                                <div className="text-sm text-[var(--text-muted)]">ไม่พบตัวเลือก</div>
                               ) : (
                                 <CascadingVariantPicker
                                   variants={variants}
