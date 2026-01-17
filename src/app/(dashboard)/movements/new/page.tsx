@@ -229,15 +229,20 @@ export default function NewMovementPage(props: PageProps) {
 
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
     // Check if already loaded in separate state
-    if (loadedVariants[productId]) {
+    // Check if already loaded (including empty result)
+    if (productId in loadedVariants) {
+      console.log('[loadVariants] Using cached:', productId, loadedVariants[productId]?.length, 'variants')
       return loadedVariants[productId]
     }
     
+    console.log('[loadVariants] Fetching for:', productId)
     setLoadingVariantFor(productId)
     try {
       const response = await fetch(`/api/products/${productId}/variants`)
+      console.log('[loadVariants] Response status:', response.status)
       if (response.ok) {
         const data = await response.json()
+        console.log('[loadVariants] Raw data:', data)
         const variants: Variant[] = data.map((v: { 
           id: string
           sku: string
@@ -257,13 +262,16 @@ export default function NewMovementPage(props: PageProps) {
           costPrice: v.costPrice ? Number(v.costPrice) : undefined,
         }))
         
+        console.log('[loadVariants] Mapped variants:', variants.length)
         // Store in separate loadedVariants state
         setLoadedVariants(prev => ({ ...prev, [productId]: variants }))
         
         return variants
+      } else {
+        console.error('[loadVariants] Response not ok:', response.status)
       }
     } catch (error) {
-      console.error('Failed to load variants:', error)
+      console.error('[loadVariants] Failed:', error)
     } finally {
       setLoadingVariantFor(null)
     }
@@ -429,8 +437,8 @@ export default function NewMovementPage(props: PageProps) {
   }
 
   function getProductVariants(productId: string): Variant[] {
-    // First check loadedVariants state (more reliable)
-    if (loadedVariants[productId]) {
+    // Check if loaded in loadedVariants state (use 'in' to check for key existence, not value)
+    if (productId in loadedVariants) {
       return loadedVariants[productId]
     }
     // Fallback to products state
