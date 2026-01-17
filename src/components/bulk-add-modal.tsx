@@ -182,6 +182,38 @@ export function BulkAddModal({
   const handleConfirm = async () => {
     setIsAdding(true)
     try {
+      // First, load variants for any selected products that have variants but weren't expanded
+      const productsNeedingVariants = Array.from(selectedItems)
+        .filter(key => !key.includes(':')) // Only product selections (not variant selections)
+        .map(productId => products.find(p => p.id === productId))
+        .filter(product => product?.hasVariants && showVariants && !productVariants[product.id])
+      
+      // Load variants in parallel and collect results
+      const loadedVariantsMap = { ...productVariants }
+      if (loadVariants && productsNeedingVariants.length > 0) {
+        const variantResults = await Promise.all(
+          productsNeedingVariants.map(async (product) => {
+            if (!product) return null
+            try {
+              const variants = await loadVariants(product.id)
+              return { productId: product.id, variants }
+            } catch {
+              return null
+            }
+          })
+        )
+        
+        // Store loaded variants
+        for (const result of variantResults) {
+          if (result) {
+            loadedVariantsMap[result.productId] = result.variants
+          }
+        }
+        
+        // Update local state for consistency
+        setProductVariants(loadedVariantsMap)
+      }
+      
       const selections: BulkAddSelection[] = []
       
       for (const key of selectedItems) {
@@ -189,7 +221,7 @@ export function BulkAddModal({
           // It's a variant selection
           const [productId, variantId] = key.split(':')
           const product = products.find(p => p.id === productId)
-          const variants = productVariants[productId] || []
+          const variants = loadedVariantsMap[productId] || []
           const variant = variants.find(v => v.id === variantId)
           
           if (product && variant) {
@@ -216,7 +248,7 @@ export function BulkAddModal({
       
       await onConfirm({
         selections,
-        loadedVariants: productVariants,
+        loadedVariants: loadedVariantsMap,
       })
       onOpenChange(false)
     } finally {
