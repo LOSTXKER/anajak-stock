@@ -24,7 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { FileText, ArrowLeft, Loader2, Plus, Trash2, Save, Package } from 'lucide-react'
+import { FileText, ArrowLeft, Loader2, Plus, Trash2, Save, Package, ListPlus } from 'lucide-react'
+import { BulkAddModal, useBulkAdd } from '@/components/bulk-add-modal'
 import { getPR, updatePR } from '@/actions/pr'
 import { getProducts } from '@/actions/products'
 import { toast } from 'sonner'
@@ -64,6 +65,16 @@ export default function EditPRPage(props: PageProps) {
   const [lines, setLines] = useState<PRLine[]>([])
   
   const [products, setProducts] = useState<ProductWithRelations[]>([])
+  
+  // Bulk add
+  const {
+    showBulkAddModal,
+    setShowBulkAddModal,
+    bulkSelectedProducts,
+    toggleBulkSelect,
+    toggleSelectAll,
+    resetBulkSelection,
+  } = useBulkAdd()
 
   useEffect(() => {
     async function loadData() {
@@ -141,6 +152,27 @@ export default function EditPRPage(props: PageProps) {
       productId,
       productName: product.name,
     })
+  }
+
+  // Bulk add handler
+  function handleBulkAdd() {
+    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
+    const newLines: PRLine[] = []
+    
+    for (const product of selectedProducts) {
+      if (lines.some(l => l.productId === product.id)) continue
+      
+      newLines.push({
+        id: `new-${Math.random().toString(36).substr(2, 9)}`,
+        productId: product.id,
+        productName: product.name,
+        qty: 1,
+      })
+    }
+    
+    setLines(prev => [...prev, ...newLines])
+    resetBulkSelection()
+    toast.success(`เพิ่ม ${newLines.length} รายการ`)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -266,14 +298,25 @@ export default function EditPRPage(props: PageProps) {
                 </Badge>
               )}
             </div>
-            <Button
-              type="button"
-              onClick={addLine}
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              เพิ่มรายการ
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => setShowBulkAddModal(true)}
+                size="sm"
+                variant="outline"
+              >
+                <ListPlus className="w-4 h-4 mr-1" />
+                เพิ่มหลายรายการ
+              </Button>
+              <Button
+                type="button"
+                onClick={addLine}
+                size="sm"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                เพิ่มรายการ
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -370,6 +413,19 @@ export default function EditPRPage(props: PageProps) {
           </Button>
         </div>
       </form>
+
+      {/* Bulk Add Modal */}
+      <BulkAddModal
+        open={showBulkAddModal}
+        onOpenChange={setShowBulkAddModal}
+        products={products}
+        selectedProducts={bulkSelectedProducts}
+        onToggleSelect={toggleBulkSelect}
+        onToggleSelectAll={() => toggleSelectAll(products)}
+        onConfirm={handleBulkAdd}
+        existingProductIds={new Set(lines.map(l => l.productId))}
+        showVariantsBadge={false}
+      />
     </div>
   )
 }

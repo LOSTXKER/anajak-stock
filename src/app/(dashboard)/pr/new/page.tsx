@@ -24,7 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { FileText, ArrowLeft, Loader2, Plus, Trash2, Send, Save } from 'lucide-react'
+import { FileText, ArrowLeft, Loader2, Plus, Trash2, Send, Save, ListPlus } from 'lucide-react'
+import { BulkAddModal, useBulkAdd } from '@/components/bulk-add-modal'
 import { createPR, submitPR } from '@/actions/pr'
 import { getProducts } from '@/actions/products'
 import { toast } from 'sonner'
@@ -49,19 +50,53 @@ const priorityOptions = [
 export default function NewPRPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true)
   const [needByDate, setNeedByDate] = useState('')
   const [priority, setPriority] = useState('NORMAL')
   const [note, setNote] = useState('')
   const [lines, setLines] = useState<PRLine[]>([])
   const [products, setProducts] = useState<ProductWithRelations[]>([])
+  
+  // Bulk add
+  const {
+    showBulkAddModal,
+    setShowBulkAddModal,
+    bulkSelectedProducts,
+    toggleBulkSelect,
+    toggleSelectAll,
+    resetBulkSelection,
+  } = useBulkAdd()
 
   useEffect(() => {
     async function loadProducts() {
+      setIsLoadingProducts(true)
       const result = await getProducts({ limit: 1000 })
       setProducts(result.items)
+      setIsLoadingProducts(false)
     }
     loadProducts()
   }, [])
+
+  // Bulk add handler
+  function handleBulkAdd() {
+    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
+    const newLines: PRLine[] = []
+    
+    for (const product of selectedProducts) {
+      if (lines.some(l => l.productId === product.id)) continue
+      
+      newLines.push({
+        id: Math.random().toString(36).substr(2, 9),
+        productId: product.id,
+        productName: product.name,
+        qty: 1,
+      })
+    }
+    
+    setLines(prev => [...prev, ...newLines])
+    resetBulkSelection()
+    toast.success(`เพิ่ม ${newLines.length} รายการ`)
+  }
 
   function addLine() {
     setLines([
@@ -207,14 +242,26 @@ export default function NewPRPage() {
                 </Badge>
               )}
             </div>
-            <Button
-              type="button"
-              onClick={addLine}
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              เพิ่มรายการ
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => setShowBulkAddModal(true)}
+                size="sm"
+                variant="outline"
+                disabled={isLoadingProducts}
+              >
+                <ListPlus className="w-4 h-4 mr-1" />
+                เพิ่มหลายรายการ
+              </Button>
+              <Button
+                type="button"
+                onClick={addLine}
+                size="sm"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                เพิ่มรายการ
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -247,9 +294,17 @@ export default function NewPRPage() {
                             const product = products.find((p) => p.id === v)
                             updateLine(line.id, { productId: v, productName: product?.name })
                           }}
+                          disabled={isLoadingProducts}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="เลือกสินค้า" />
+                            {isLoadingProducts ? (
+                              <span className="flex items-center gap-2 text-[var(--text-muted)]">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                กำลังโหลด...
+                              </span>
+                            ) : (
+                              <SelectValue placeholder="เลือกสินค้า" />
+                            )}
                           </SelectTrigger>
                           <SelectContent className="max-h-60">
                             {products.map((product) => (
@@ -319,6 +374,19 @@ export default function NewPRPage() {
           </Button>
         </div>
       </form>
+
+      {/* Bulk Add Modal */}
+      <BulkAddModal
+        open={showBulkAddModal}
+        onOpenChange={setShowBulkAddModal}
+        products={products}
+        selectedProducts={bulkSelectedProducts}
+        onToggleSelect={toggleBulkSelect}
+        onToggleSelectAll={() => toggleSelectAll(products)}
+        onConfirm={handleBulkAdd}
+        existingProductIds={new Set(lines.map(l => l.productId))}
+        showVariantsBadge={false}
+      />
     </div>
   )
 }

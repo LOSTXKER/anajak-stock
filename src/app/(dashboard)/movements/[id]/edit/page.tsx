@@ -24,7 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight } from 'lucide-react'
+import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, ListPlus } from 'lucide-react'
+import { BulkAddModal, useBulkAdd } from '@/components/bulk-add-modal'
 import { getMovement, updateMovement } from '@/actions/movements'
 import { getProducts } from '@/actions/products'
 import { getLocations } from '@/actions/stock'
@@ -112,6 +113,17 @@ export default function EditMovementPage(props: PageProps) {
 
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [locations, setLocations] = useState<LocationWithWarehouse[]>([])
+  const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
+  
+  // Bulk add
+  const {
+    showBulkAddModal,
+    setShowBulkAddModal,
+    bulkSelectedProducts,
+    toggleBulkSelect,
+    toggleSelectAll,
+    resetBulkSelection,
+  } = useBulkAdd()
 
   useEffect(() => {
     async function loadData() {
@@ -170,6 +182,7 @@ export default function EditMovementPage(props: PageProps) {
   }, [params.id, router])
 
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
+    setLoadingVariantFor(productId)
     try {
       const response = await fetch(`/api/products/${productId}/variants`)
       if (response.ok) {
@@ -195,8 +208,39 @@ export default function EditMovementPage(props: PageProps) {
       }
     } catch (error) {
       console.error('Failed to load variants:', error)
+    } finally {
+      setLoadingVariantFor(null)
     }
     return []
+  }
+
+  // Bulk add handler
+  async function handleBulkAdd() {
+    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
+    const newLines: MovementLine[] = []
+    
+    for (const product of selectedProducts) {
+      if (lines.some(l => l.productId === product.id && !product.hasVariants)) continue
+      
+      newLines.push({
+        id: `new-${Math.random().toString(36).substr(2, 9)}`,
+        productId: product.id,
+        productName: product.name,
+        qty: 1,
+        unitCost: Number(product.lastCost || product.standardCost || 0),
+      })
+      
+      if (product.hasVariants && !product.variants) {
+        const variants = await loadVariantsForProduct(product.id)
+        setProducts(prev => prev.map(p => 
+          p.id === product.id ? { ...p, variants } : p
+        ))
+      }
+    }
+    
+    setLines(prev => [...prev, ...newLines])
+    resetBulkSelection()
+    toast.success(`เพิ่ม ${newLines.length} รายการ`)
   }
 
   function addLine() {
@@ -395,14 +439,25 @@ export default function EditMovementPage(props: PageProps) {
                 </Badge>
               )}
             </div>
-            <Button
-              type="button"
-              onClick={addLine}
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              เพิ่มรายการ
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => setShowBulkAddModal(true)}
+                size="sm"
+                variant="outline"
+              >
+                <ListPlus className="w-4 h-4 mr-1" />
+                เพิ่มหลายรายการ
+              </Button>
+              <Button
+                type="button"
+                onClick={addLine}
+                size="sm"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                เพิ่มรายการ
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -468,7 +523,12 @@ export default function EditMovementPage(props: PageProps) {
                           </TableCell>
                           <TableCell>
                             {showVariantSelect ? (
-                              variants.length > 0 ? (
+                              loadingVariantFor === line.productId || variants.length === 0 ? (
+                                <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  กำลังโหลดตัวเลือก...
+                                </div>
+                              ) : (
                                 <CascadingVariantPicker
                                   variants={variants}
                                   selectedVariantId={line.variantId}
@@ -489,8 +549,6 @@ export default function EditMovementPage(props: PageProps) {
                                   showStock={true}
                                   placeholder="เลือก สี/ไซส์"
                                 />
-                              ) : (
-                                <div className="text-[var(--text-muted)] text-sm animate-pulse">กำลังโหลด...</div>
                               )
                             ) : (
                               <div className="text-[var(--text-muted)] text-sm">-</div>
@@ -598,6 +656,18 @@ export default function EditMovementPage(props: PageProps) {
           </Button>
         </div>
       </form>
+
+      {/* Bulk Add Modal */}
+      <BulkAddModal
+        open={showBulkAddModal}
+        onOpenChange={setShowBulkAddModal}
+        products={products}
+        selectedProducts={bulkSelectedProducts}
+        onToggleSelect={toggleBulkSelect}
+        onToggleSelectAll={() => toggleSelectAll(products)}
+        onConfirm={handleBulkAdd}
+        existingProductIds={new Set(lines.map(l => l.productId))}
+      />
     </div>
   )
 }

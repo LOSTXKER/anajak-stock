@@ -24,7 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Calculator, FileText } from 'lucide-react'
+import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Calculator, FileText, ListPlus } from 'lucide-react'
+import { BulkAddModal, useBulkAdd } from '@/components/bulk-add-modal'
 import { createPO, getSuppliers } from '@/actions/po'
 import { getProducts } from '@/actions/products'
 import { getPR } from '@/actions/pr'
@@ -68,15 +69,28 @@ export default function NewPOPage() {
 
   const [products, setProducts] = useState<ProductWithRelations[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true)
+  
+  // Bulk add
+  const {
+    showBulkAddModal,
+    setShowBulkAddModal,
+    bulkSelectedProducts,
+    toggleBulkSelect,
+    toggleSelectAll,
+    resetBulkSelection,
+  } = useBulkAdd()
 
   useEffect(() => {
     async function loadData() {
+      setIsLoadingProducts(true)
       const [productsResult, suppliersData] = await Promise.all([
         getProducts({ limit: 1000 }),
         getSuppliers(),
       ])
       setProducts(productsResult.items)
       setSuppliers(suppliersData)
+      setIsLoadingProducts(false)
 
       // If prId is provided, load PR data and pre-fill lines
       if (prId) {
@@ -104,6 +118,28 @@ export default function NewPOPage() {
     }
     loadData()
   }, [prId])
+
+  // Bulk add handler
+  function handleBulkAdd() {
+    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
+    const newLines: POLine[] = []
+    
+    for (const product of selectedProducts) {
+      if (lines.some(l => l.productId === product.id)) continue
+      
+      newLines.push({
+        id: Math.random().toString(36).substr(2, 9),
+        productId: product.id,
+        productName: product.name,
+        qty: 1,
+        unitPrice: Number(product.lastCost || product.standardCost || 0),
+      })
+    }
+    
+    setLines(prev => [...prev, ...newLines])
+    resetBulkSelection()
+    toast.success(`เพิ่ม ${newLines.length} รายการ`)
+  }
 
   function addLine() {
     setLines([
@@ -334,14 +370,26 @@ export default function NewPOPage() {
                     </Badge>
                   )}
                 </div>
-                <Button
-                  type="button"
-                  onClick={addLine}
-                  size="sm"
-                >
-                  <Plus className="w-4 h-4 mr-1" />
-                  เพิ่มรายการ
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => setShowBulkAddModal(true)}
+                    size="sm"
+                    variant="outline"
+                    disabled={isLoadingProducts}
+                  >
+                    <ListPlus className="w-4 h-4 mr-1" />
+                    เพิ่มหลายรายการ
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={addLine}
+                    size="sm"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    เพิ่มรายการ
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -379,9 +427,17 @@ export default function NewPOPage() {
                                   unitPrice: Number(product?.lastCost || product?.standardCost || 0),
                                 })
                               }}
+                              disabled={isLoadingProducts}
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="เลือกสินค้า" />
+                                {isLoadingProducts ? (
+                                  <span className="flex items-center gap-2 text-[var(--text-muted)]">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    กำลังโหลด...
+                                  </span>
+                                ) : (
+                                  <SelectValue placeholder="เลือกสินค้า" />
+                                )}
                               </SelectTrigger>
                               <SelectContent className="max-h-60">
                                 {products.map((product) => (
@@ -487,6 +543,19 @@ export default function NewPOPage() {
           </div>
         </div>
       </form>
+
+      {/* Bulk Add Modal */}
+      <BulkAddModal
+        open={showBulkAddModal}
+        onOpenChange={setShowBulkAddModal}
+        products={products}
+        selectedProducts={bulkSelectedProducts}
+        onToggleSelect={toggleBulkSelect}
+        onToggleSelectAll={() => toggleSelectAll(products)}
+        onConfirm={handleBulkAdd}
+        existingProductIds={new Set(lines.map(l => l.productId))}
+        showVariantsBadge={false}
+      />
     </div>
   )
 }

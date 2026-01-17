@@ -6,6 +6,8 @@ import { handleActionError } from '@/lib/action-utils'
 import { revalidatePath } from 'next/cache'
 import { POStatus } from '@/generated/prisma'
 import type { ActionResult } from '@/types'
+import { createNotification, sendPOApprovalNotification } from '@/actions/notifications'
+import { sendLinePOStatusUpdate } from '@/actions/line-notifications'
 
 /**
  * Approve a PO
@@ -53,6 +55,11 @@ export async function approvePO(id: string): Promise<ActionResult> {
       }),
     ])
 
+    // Send notifications to PO creator
+    notifyPOApproved(id, po.poNumber, po.createdById, session.name).catch((err) =>
+      console.error('Failed to send PO approval notifications:', err)
+    )
+
     revalidatePath('/po')
     revalidatePath(`/po/${id}`)
     return { success: true, data: undefined }
@@ -97,6 +104,11 @@ export async function sendPO(id: string): Promise<ActionResult> {
         },
       }),
     ])
+
+    // Send LINE notification for PO status update
+    sendLinePOStatusUpdate(id, 'ส่งให้ Supplier แล้ว').catch((err) =>
+      console.error('Failed to send PO sent notification:', err)
+    )
 
     revalidatePath('/po')
     revalidatePath(`/po/${id}`)
@@ -152,10 +164,43 @@ export async function cancelPO(id: string, reason?: string): Promise<ActionResul
       }),
     ])
 
+    // Send LINE notification for PO cancellation
+    sendLinePOStatusUpdate(id, 'ยกเลิกแล้ว').catch((err) =>
+      console.error('Failed to send PO cancellation notification:', err)
+    )
+
     revalidatePath('/po')
     revalidatePath(`/po/${id}`)
     return { success: true, data: undefined }
   } catch (error) {
     return handleActionError(error, 'cancelPO')
   }
+}
+
+// ============================================
+// Notification Helpers
+// ============================================
+
+/**
+ * Send notifications when a PO is approved
+ * Sends via in-app notification, email, and LINE
+ */
+async function notifyPOApproved(poId: string, poNumber: string, creatorId: string, approverName: string) {
+  // Create in-app notification for PO creator
+  const inAppPromise = createNotification({
+    userId: creatorId,
+    type: 'po_pending',
+    title: `PO ${poNumber} อนุมัติแล้ว`,
+    message: `ใบสั่งซื้อ ${poNumber} ได้รับการอนุมัติโดย ${approverName}`,
+    url: `/po/${poId}`,
+  })
+
+  // Send email to PO creator
+  const emailPromise = sendPOApprovalNotification(poId)
+
+  // Send LINE notification
+  const linePromise = sendLinePOStatusUpdate(poId, 'อนุมัติแล้ว')
+
+  // Execute all in parallel
+  await Promise.allSettled([inAppPromise, emailPromise, linePromise])
 }

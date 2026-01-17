@@ -24,7 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Save, Package } from 'lucide-react'
+import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Save, Package, ListPlus } from 'lucide-react'
+import { BulkAddModal, useBulkAdd } from '@/components/bulk-add-modal'
 import { getPO, updatePO } from '@/actions/po'
 import { getProducts } from '@/actions/products'
 import { toast } from 'sonner'
@@ -60,6 +61,16 @@ export default function EditPOPage(props: PageProps) {
   const [lines, setLines] = useState<POLine[]>([])
   
   const [products, setProducts] = useState<ProductWithRelations[]>([])
+  
+  // Bulk add
+  const {
+    showBulkAddModal,
+    setShowBulkAddModal,
+    bulkSelectedProducts,
+    toggleBulkSelect,
+    toggleSelectAll,
+    resetBulkSelection,
+  } = useBulkAdd()
 
   useEffect(() => {
     async function loadData() {
@@ -143,6 +154,28 @@ export default function EditPOPage(props: PageProps) {
       productName: product.name,
       unitPrice: Number(product.lastCost || product.standardCost || 0),
     })
+  }
+
+  // Bulk add handler
+  function handleBulkAdd() {
+    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
+    const newLines: POLine[] = []
+    
+    for (const product of selectedProducts) {
+      if (lines.some(l => l.productId === product.id)) continue
+      
+      newLines.push({
+        id: `new-${Math.random().toString(36).substr(2, 9)}`,
+        productId: product.id,
+        productName: product.name,
+        qty: 1,
+        unitPrice: Number(product.lastCost || product.standardCost || 0),
+      })
+    }
+    
+    setLines(prev => [...prev, ...newLines])
+    resetBulkSelection()
+    toast.success(`เพิ่ม ${newLines.length} รายการ`)
   }
 
   // Calculate totals
@@ -297,14 +330,25 @@ export default function EditPOPage(props: PageProps) {
                 </Badge>
               )}
             </div>
-            <Button
-              type="button"
-              onClick={addLine}
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              เพิ่มรายการ
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => setShowBulkAddModal(true)}
+                size="sm"
+                variant="outline"
+              >
+                <ListPlus className="w-4 h-4 mr-1" />
+                เพิ่มหลายรายการ
+              </Button>
+              <Button
+                type="button"
+                onClick={addLine}
+                size="sm"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                เพิ่มรายการ
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -445,6 +489,19 @@ export default function EditPOPage(props: PageProps) {
           </Button>
         </div>
       </form>
+
+      {/* Bulk Add Modal */}
+      <BulkAddModal
+        open={showBulkAddModal}
+        onOpenChange={setShowBulkAddModal}
+        products={products}
+        selectedProducts={bulkSelectedProducts}
+        onToggleSelect={toggleBulkSelect}
+        onToggleSelectAll={() => toggleSelectAll(products)}
+        onConfirm={handleBulkAdd}
+        existingProductIds={new Set(lines.map(l => l.productId))}
+        showVariantsBadge={false}
+      />
     </div>
   )
 }
