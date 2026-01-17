@@ -25,7 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { FileText, ArrowLeft, Loader2, Plus, Trash2, Save, Package, ListPlus } from 'lucide-react'
-import { BulkAddModal, BulkAddSelection } from '@/components/bulk-add-modal'
+import { BulkAddModal, BulkAddResult } from '@/components/bulk-add-modal'
 import { getPR, updatePR } from '@/actions/pr'
 import { getProducts } from '@/actions/products'
 import { toast } from 'sonner'
@@ -145,8 +145,9 @@ export default function EditPRPage(props: PageProps) {
     })
   }
 
-  // Bulk add handler - receives selections from modal
-  function handleBulkAdd(selections: BulkAddSelection[]) {
+  // Bulk add handler - receives result from modal
+  function handleBulkAdd(result: BulkAddResult) {
+    const { selections } = result
     const newLines: PRLine[] = selections.map(sel => ({
       id: `new-${Math.random().toString(36).substr(2, 9)}`,
       productId: sel.productId,

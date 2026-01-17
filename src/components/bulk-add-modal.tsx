@@ -44,13 +44,18 @@ export interface BulkAddSelection {
   unitCost: number
 }
 
+export interface BulkAddResult {
+  selections: BulkAddSelection[]
+  loadedVariants: Record<string, BulkAddVariant[]>
+}
+
 interface BulkAddModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   products: BulkAddProduct[]
   existingProductIds: Set<string>
   existingVariantIds?: Set<string>
-  onConfirm: (selections: BulkAddSelection[]) => void | Promise<void>
+  onConfirm: (result: BulkAddResult) => void | Promise<void>
   loadVariants?: (productId: string) => Promise<BulkAddVariant[]>
   title?: string
   description?: string
@@ -209,7 +214,10 @@ export function BulkAddModal({
         }
       }
       
-      await onConfirm(selections)
+      await onConfirm({
+        selections,
+        loadedVariants: productVariants,
+      })
       onOpenChange(false)
     } finally {
       setIsAdding(false)

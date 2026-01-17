@@ -25,7 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, Scan, ListPlus } from 'lucide-react'
-import { BulkAddModal, BulkAddSelection, BulkAddVariant } from '@/components/bulk-add-modal'
+import { BulkAddModal, BulkAddResult, BulkAddVariant } from '@/components/bulk-add-modal'
 import { createMovement, submitMovement, getMovement } from '@/actions/movements'
 import { getProducts, getProductByBarcode } from '@/actions/products'
 import { getLocations } from '@/actions/stock'
@@ -228,21 +228,16 @@ export default function NewMovementPage(props: PageProps) {
   }, [searchParams.refId, searchParams.type])
 
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
-    // Check if already loaded in separate state
     // Check if already loaded (including empty result)
     if (productId in loadedVariants) {
-      console.log('[loadVariants] Using cached:', productId, loadedVariants[productId]?.length, 'variants')
       return loadedVariants[productId]
     }
     
-    console.log('[loadVariants] Fetching for:', productId)
     setLoadingVariantFor(productId)
     try {
       const response = await fetch(`/api/products/${productId}/variants`)
-      console.log('[loadVariants] Response status:', response.status)
       if (response.ok) {
         const data = await response.json()
-        console.log('[loadVariants] Raw data:', data)
         const variants: Variant[] = data.map((v: { 
           id: string
           sku: string
@@ -262,16 +257,13 @@ export default function NewMovementPage(props: PageProps) {
           costPrice: v.costPrice ? Number(v.costPrice) : undefined,
         }))
         
-        console.log('[loadVariants] Mapped variants:', variants.length)
         // Store in separate loadedVariants state
         setLoadedVariants(prev => ({ ...prev, [productId]: variants }))
         
         return variants
-      } else {
-        console.error('[loadVariants] Response not ok:', response.status)
       }
     } catch (error) {
-      console.error('[loadVariants] Failed:', error)
+      console.error('Failed to load variants:', error)
     } finally {
       setLoadingVariantFor(null)
     }
@@ -290,8 +282,22 @@ export default function NewMovementPage(props: PageProps) {
     ])
   }
 
-  // Bulk add handler - receives selections from modal
-  async function handleBulkAdd(selections: BulkAddSelection[]) {
+  // Convert BulkAddVariant to Variant format
+  function convertBulkAddVariants(variants: BulkAddVariant[]): Variant[] {
+    return variants.map(v => ({
+      id: v.id,
+      sku: v.sku,
+      name: v.name,
+      options: v.options || [],
+      stock: v.stock || 0,
+      costPrice: v.costPrice,
+    }))
+  }
+
+  // Bulk add handler - receives result from modal with selections and loaded variants
+  function handleBulkAdd(result: BulkAddResult) {
+    const { selections, loadedVariants: modalVariants } = result
+    
     const newLines: MovementLine[] = selections.map(sel => ({
       id: Math.random().toString(36).substr(2, 9),
       productId: sel.productId,
@@ -304,18 +310,15 @@ export default function NewMovementPage(props: PageProps) {
     
     setLines(prev => [...prev, ...newLines])
     setShowBulkAddModal(false)
+    
+    // Store loaded variants from modal into page state
+    const convertedVariants: Record<string, Variant[]> = {}
+    for (const [productId, variants] of Object.entries(modalVariants)) {
+      convertedVariants[productId] = convertBulkAddVariants(variants)
+    }
+    setLoadedVariants(prev => ({ ...prev, ...convertedVariants }))
+    
     toast.success(`เพิ่ม ${newLines.length} รายการ`)
-    
-    // Load variants for products that have variants but weren't selected with specific variant
-    const productsNeedingVariants = selections.filter(sel => {
-      const product = products.find(p => p.id === sel.productId)
-      return product?.hasVariants && !sel.variantId && !(sel.productId in loadedVariants)
-    })
-    
-    // Load variants in parallel
-    await Promise.all(
-      productsNeedingVariants.map(sel => loadVariantsForProduct(sel.productId))
-    )
   }
 
   // Load variants for bulk add modal

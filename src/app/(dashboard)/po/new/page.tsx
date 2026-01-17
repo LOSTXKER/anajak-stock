@@ -25,7 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Calculator, FileText, ListPlus } from 'lucide-react'
-import { BulkAddModal, BulkAddSelection } from '@/components/bulk-add-modal'
+import { BulkAddModal, BulkAddResult } from '@/components/bulk-add-modal'
 import { createPO, getSuppliers } from '@/actions/po'
 import { getProducts } from '@/actions/products'
 import { getPR } from '@/actions/pr'
@@ -110,8 +110,9 @@ export default function NewPOPage() {
     loadData()
   }, [prId])
 
-  // Bulk add handler - receives selections from modal
-  function handleBulkAdd(selections: BulkAddSelection[]) {
+  // Bulk add handler - receives result from modal
+  function handleBulkAdd(result: BulkAddResult) {
+    const { selections } = result
     const newLines: POLine[] = selections.map(sel => ({
       id: Math.random().toString(36).substr(2, 9),
       productId: sel.productId,
