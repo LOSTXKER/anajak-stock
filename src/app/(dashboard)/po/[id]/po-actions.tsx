@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useOptimistic, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -25,57 +25,65 @@ interface POActionsProps {
   canEdit: boolean
 }
 
-export function POActions({ poId, poStatus, canApprove, canEdit }: POActionsProps) {
+export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }: POActionsProps) {
   const router = useRouter()
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  
+  // Optimistic status update - shows new status immediately while server processes
+  const [optimisticStatus, setOptimisticStatus] = useOptimistic(initialStatus)
+  
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
   const [sendDialogOpen, setSendDialogOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
 
+  // Use optimistic status for display
+  const poStatus = optimisticStatus
+  const isProcessing = isPending
+
   // Approve PO (DRAFT → APPROVED)
   async function handleApprove() {
-    setIsProcessing(true)
-    const result = await approvePO(poId)
-    setIsProcessing(false)
-
-    if (result.success) {
-      toast.success('อนุมัติใบสั่งซื้อเรียบร้อย')
-      setApproveDialogOpen(false)
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    setApproveDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('APPROVED')
+      const result = await approvePO(poId)
+      if (result.success) {
+        toast.success('อนุมัติใบสั่งซื้อเรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Send PO to Supplier (APPROVED → SENT)
   async function handleSend() {
-    setIsProcessing(true)
-    const result = await sendPO(poId)
-    setIsProcessing(false)
-
-    if (result.success) {
-      toast.success('ส่ง PO ให้ Supplier เรียบร้อย')
-      setSendDialogOpen(false)
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    setSendDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('SENT')
+      const result = await sendPO(poId)
+      if (result.success) {
+        toast.success('ส่ง PO ให้ Supplier เรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Cancel PO
   async function handleCancel() {
-    setIsProcessing(true)
-    const result = await cancelPO(poId, cancelReason)
-    setIsProcessing(false)
-
-    if (result.success) {
-      toast.success('ยกเลิก PO เรียบร้อย')
-      setCancelDialogOpen(false)
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    setCancelDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('CANCELLED')
+      const result = await cancelPO(poId, cancelReason)
+      if (result.success) {
+        toast.success('ยกเลิก PO เรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   return (

@@ -50,14 +50,29 @@ export async function getPOs(params: {
     prisma.pO.findMany({
       where,
       include: {
-        supplier: true,
-        pr: true,
-        createdBy: { select: userSelect },
-        approvedBy: { select: userSelect },
-        lines: {
-          include: { product: true },
+        supplier: {
+          select: { id: true, name: true, code: true },
         },
-        grns: true,
+        pr: {
+          select: { id: true, prNumber: true },
+        },
+        createdBy: { select: { id: true, name: true } },
+        approvedBy: { select: { id: true, name: true } },
+        lines: {
+          select: {
+            id: true,
+            productId: true,
+            qty: true,
+            qtyReceived: true,
+            unitPrice: true,
+            product: {
+              select: { id: true, name: true, sku: true },
+            },
+          },
+        },
+        grns: {
+          select: { id: true, grnNumber: true, status: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
@@ -172,7 +187,8 @@ export async function createPO(data: CreatePOInput): Promise<ActionResult<POWith
       })
     }
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'CREATE',
@@ -180,7 +196,7 @@ export async function createPO(data: CreatePOInput): Promise<ActionResult<POWith
         refId: po.id,
         newData: { poNumber },
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/po')
     revalidatePath('/pr')
@@ -269,14 +285,15 @@ export async function updatePO(id: string, data: UpdatePOInput): Promise<ActionR
       },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'UPDATE',
         refType: 'PO',
         refId: id,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/po')
     revalidatePath(`/po/${id}`)

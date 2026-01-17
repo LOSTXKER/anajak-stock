@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { MovementType, DocStatus } from '@/generated/prisma'
 import { serialize } from '@/lib/serialize'
 import type { ActionResult, PaginatedResult, MovementWithRelations } from '@/types'
+import { sendLineMovementPosted } from '@/actions/line-notifications'
 
 interface MovementLineInput {
   productId: string
@@ -81,17 +82,35 @@ export async function getMovements(params: {
       where,
       include: {
         createdBy: {
-          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
+          select: { id: true, name: true },
         },
         approvedBy: {
-          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
+          select: { id: true, name: true },
         },
         lines: {
-          include: {
-            product: true,
-            variant: true,
-            fromLocation: { include: { warehouse: true } },
-            toLocation: { include: { warehouse: true } },
+          select: {
+            id: true,
+            productId: true,
+            variantId: true,
+            qty: true,
+            product: {
+              select: { id: true, name: true, sku: true },
+            },
+            variant: {
+              select: { id: true, name: true, sku: true },
+            },
+            fromLocation: {
+              select: {
+                id: true, name: true, code: true,
+                warehouse: { select: { id: true, name: true } },
+              },
+            },
+            toLocation: {
+              select: {
+                id: true, name: true, code: true,
+                warehouse: { select: { id: true, name: true } },
+              },
+            },
           },
         },
       },
@@ -116,17 +135,31 @@ export async function getMovement(id: string): Promise<MovementWithRelations | n
     where: { id },
     include: {
       createdBy: {
-        select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
+        select: { id: true, name: true, username: true, role: true },
       },
       approvedBy: {
-        select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true, supabaseId: true, customPermissions: true },
+        select: { id: true, name: true, username: true, role: true },
       },
       lines: {
         include: {
-          product: true,
-          variant: true,
-          fromLocation: { include: { warehouse: true } },
-          toLocation: { include: { warehouse: true } },
+          product: {
+            select: { id: true, name: true, sku: true, barcode: true, standardCost: true },
+          },
+          variant: {
+            select: { id: true, name: true, sku: true, barcode: true },
+          },
+          fromLocation: {
+            select: {
+              id: true, name: true, code: true,
+              warehouse: { select: { id: true, name: true, code: true } },
+            },
+          },
+          toLocation: {
+            select: {
+              id: true, name: true, code: true,
+              warehouse: { select: { id: true, name: true, code: true } },
+            },
+          },
         },
       },
     },
@@ -238,8 +271,8 @@ export async function createMovement(data: CreateMovementInput): Promise<ActionR
       },
     })
 
-    // Audit log
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'CREATE',
@@ -247,7 +280,7 @@ export async function createMovement(data: CreateMovementInput): Promise<ActionR
         refId: movement.id,
         newData: { docNumber, type: data.type },
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/movements')
     return { success: true, data: movement as unknown as MovementWithRelations }
@@ -286,14 +319,15 @@ export async function submitMovement(id: string): Promise<ActionResult> {
       data: { status: DocStatus.SUBMITTED },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'SUBMIT',
         refType: 'MOVEMENT',
         refId: id,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/movements')
     revalidatePath(`/movements/${id}`)
@@ -331,14 +365,15 @@ export async function approveMovement(id: string): Promise<ActionResult> {
       },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'APPROVE',
         refType: 'MOVEMENT',
         refId: id,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/movements')
     revalidatePath(`/movements/${id}`)
@@ -558,6 +593,11 @@ export async function postMovement(id: string): Promise<ActionResult> {
       return movement
     })
 
+    // Send LINE notification for movement posted (if enabled)
+    sendLineMovementPosted(id).catch((err) =>
+      console.error('Failed to send movement posted notification:', err)
+    )
+
     revalidatePath('/movements')
     revalidatePath(`/movements/${id}`)
     revalidatePath('/stock')
@@ -596,7 +636,8 @@ export async function rejectMovement(id: string, reason?: string): Promise<Actio
       },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'REJECT',
@@ -604,7 +645,7 @@ export async function rejectMovement(id: string, reason?: string): Promise<Actio
         refId: id,
         newData: { reason },
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/movements')
     revalidatePath(`/movements/${id}`)
@@ -679,14 +720,15 @@ export async function updateMovement(id: string, data: UpdateMovementInput): Pro
       },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'UPDATE',
         refType: 'MOVEMENT',
         refId: id,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/movements')
     revalidatePath(`/movements/${id}`)
@@ -729,7 +771,8 @@ export async function cancelMovement(id: string, reason?: string): Promise<Actio
       },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'CANCEL',
@@ -737,7 +780,7 @@ export async function cancelMovement(id: string, reason?: string): Promise<Actio
         refId: id,
         newData: { reason },
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/movements')
     revalidatePath(`/movements/${id}`)
@@ -865,8 +908,8 @@ export async function reverseMovement(id: string): Promise<ActionResult<{ id: st
       },
     })
 
-    // Audit log
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'CREATE_REVERSAL',
@@ -874,7 +917,7 @@ export async function reverseMovement(id: string): Promise<ActionResult<{ id: st
         refId: reversedMovement.id,
         newData: { originalMovementId: id, originalDocNumber: movement.docNumber },
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/movements')
     revalidatePath(`/movements/${id}`)
@@ -989,8 +1032,8 @@ export async function createReturnFromIssue(
       },
     })
 
-    // Audit log
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'CREATE_RETURN',
@@ -998,7 +1041,7 @@ export async function createReturnFromIssue(
         refId: returnMovement.id,
         newData: { issueMovementId: issueId, issueDocNumber: issueMovement.docNumber },
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/movements')
     revalidatePath(`/movements/${issueId}`)

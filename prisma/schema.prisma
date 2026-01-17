@@ -167,6 +167,9 @@ model Product {
   @@index([unitId])
   @@index([sku])
   @@index([barcode])
+  @@index([active, deletedAt])          // Compound for active product queries
+  @@index([categoryId, active])         // Compound for category filter with active
+  @@index([name])                       // Index for name search
   @@map("products")
 }
 
@@ -339,6 +342,8 @@ model StockBalance {
   @@index([productId])
   @@index([variantId])
   @@index([locationId])
+  @@index([productId, locationId])          // Compound for product+location queries
+  @@index([locationId, qtyOnHand])          // Compound for location stock queries
   @@map("stock_balances")
 }
 
@@ -368,6 +373,9 @@ model StockMovement {
   @@index([status])
   @@index([createdById])
   @@index([docNumber])
+  @@index([type, status])        // Compound index for filtering by type AND status
+  @@index([createdAt, type])     // Compound index for date range + type filter
+  @@index([status, createdAt])   // Compound index for status filter with date ordering
   @@map("stock_movements")
 }
 
@@ -425,6 +433,7 @@ model PR {
   @@index([requesterId])
   @@index([status])
   @@index([prNumber])
+  @@index([status, createdAt])    // Compound for status filter with date ordering
   @@map("prs")
 }
 
@@ -486,6 +495,8 @@ model PO {
   @@index([prId])
   @@index([status])
   @@index([poNumber])
+  @@index([status, createdAt])    // Compound for status filter with date ordering
+  @@index([supplierId, status])   // Compound for supplier + status filter
   @@map("pos")
 }
 

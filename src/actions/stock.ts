@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@/generated/prisma'
 import type { PaginatedResult, StockBalanceWithProduct } from '@/types'
 
 export async function getStockBalances(params: {
@@ -12,6 +13,11 @@ export async function getStockBalances(params: {
   lowStockOnly?: boolean
 }): Promise<PaginatedResult<StockBalanceWithProduct>> {
   const { page = 1, limit = 20, search, warehouseId, categoryId, lowStockOnly } = params
+
+  // For lowStockOnly, use raw SQL to efficiently filter at database level
+  if (lowStockOnly) {
+    return getLowStockBalances({ page, limit, search, warehouseId, categoryId })
+  }
 
   const where = {
     // Only show items with stock > 0
@@ -34,41 +40,125 @@ export async function getStockBalances(params: {
     },
   }
 
-  let items = await prisma.stockBalance.findMany({
-    where,
-    include: {
-      product: {
-        include: {
-          category: true,
-          unit: true,
+  const [items, total] = await Promise.all([
+    prisma.stockBalance.findMany({
+      where,
+      include: {
+        product: {
+          select: {
+            id: true, name: true, sku: true, reorderPoint: true, standardCost: true,
+            category: { select: { id: true, name: true } },
+            unit: { select: { id: true, name: true, code: true } },
+          },
+        },
+        location: {
+          select: {
+            id: true, name: true, code: true,
+            warehouse: { select: { id: true, name: true, code: true } },
+          },
         },
       },
-      location: {
-        include: {
-          warehouse: true,
-        },
-      },
-    },
-    orderBy: [
-      { product: { name: 'asc' } },
-      { location: { code: 'asc' } },
-    ],
-  })
-
-  // Filter low stock if needed
-  if (lowStockOnly) {
-    items = items.filter(
-      (item) =>
-        Number(item.product.reorderPoint) > 0 &&
-        Number(item.qtyOnHand) <= Number(item.product.reorderPoint)
-    )
-  }
-
-  const total = items.length
-  const paginatedItems = items.slice((page - 1) * limit, page * limit)
+      orderBy: [
+        { product: { name: 'asc' } },
+        { location: { code: 'asc' } },
+      ],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.stockBalance.count({ where }),
+  ])
 
   return {
-    items: paginatedItems as StockBalanceWithProduct[],
+    items: items as StockBalanceWithProduct[],
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  }
+}
+
+// Efficient low stock query using raw SQL for the comparison
+async function getLowStockBalances(params: {
+  page: number
+  limit: number
+  search?: string
+  warehouseId?: string
+  categoryId?: string
+}): Promise<PaginatedResult<StockBalanceWithProduct>> {
+  const { page, limit, search, warehouseId, categoryId } = params
+  const offset = (page - 1) * limit
+  const searchPattern = search ? `%${search}%` : null
+
+  // Get IDs with proper pagination using raw SQL
+  // This allows us to compare qtyOnHand <= reorderPoint at database level
+  const idsResult = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT sb.id
+    FROM stock_balances sb
+    JOIN products p ON sb."productId" = p.id
+    JOIN locations l ON sb."locationId" = l.id
+    WHERE p.active = true
+      AND p."deletedAt" IS NULL
+      AND l.active = true
+      AND l."deletedAt" IS NULL
+      AND p."reorderPoint" > 0
+      AND sb."qtyOnHand" <= p."reorderPoint"
+      AND sb."qtyOnHand" > 0
+      AND (${searchPattern}::text IS NULL OR (p.name ILIKE ${searchPattern} OR p.sku ILIKE ${searchPattern}))
+      AND (${warehouseId}::text IS NULL OR l."warehouseId" = ${warehouseId})
+      AND (${categoryId}::text IS NULL OR p."categoryId" = ${categoryId})
+    ORDER BY p.name ASC, l.code ASC
+    LIMIT ${limit} OFFSET ${offset}
+  `
+
+  // Count query
+  const countResult = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(*) as count
+    FROM stock_balances sb
+    JOIN products p ON sb."productId" = p.id
+    JOIN locations l ON sb."locationId" = l.id
+    WHERE p.active = true
+      AND p."deletedAt" IS NULL
+      AND l.active = true
+      AND l."deletedAt" IS NULL
+      AND p."reorderPoint" > 0
+      AND sb."qtyOnHand" <= p."reorderPoint"
+      AND sb."qtyOnHand" > 0
+      AND (${searchPattern}::text IS NULL OR (p.name ILIKE ${searchPattern} OR p.sku ILIKE ${searchPattern}))
+      AND (${warehouseId}::text IS NULL OR l."warehouseId" = ${warehouseId})
+      AND (${categoryId}::text IS NULL OR p."categoryId" = ${categoryId})
+  `
+  const total = Number(countResult[0]?.count ?? 0)
+
+  const ids = idsResult.map((r) => r.id)
+
+  // Fetch full data using Prisma for the filtered IDs
+  const items = ids.length > 0
+    ? await prisma.stockBalance.findMany({
+        where: { id: { in: ids } },
+        include: {
+          product: {
+            select: {
+              id: true, name: true, sku: true, reorderPoint: true, standardCost: true,
+              category: { select: { id: true, name: true } },
+              unit: { select: { id: true, name: true, code: true } },
+            },
+          },
+          location: {
+            select: {
+              id: true, name: true, code: true,
+              warehouse: { select: { id: true, name: true, code: true } },
+            },
+          },
+        },
+        orderBy: [
+          { product: { name: 'asc' } },
+          { location: { code: 'asc' } },
+        ],
+      })
+    : []
+
+  return {
+    items: items as StockBalanceWithProduct[],
     total,
     page,
     limit,

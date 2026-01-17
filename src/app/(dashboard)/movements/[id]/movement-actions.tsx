@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useOptimistic, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Loader2, CheckCircle, XCircle, Send, PackageCheck, FileEdit, Ban, RotateCcw, CornerDownRight } from 'lucide-react'
-import { submitMovement, approveMovement, rejectMovement, postMovement, cancelMovement, reverseMovement, createReturnFromIssue } from '@/actions/movements'
+import { submitMovement, approveMovement, rejectMovement, postMovement, cancelMovement, reverseMovement } from '@/actions/movements'
 import { toast } from 'sonner'
 
 interface MovementActionsProps {
@@ -26,9 +26,12 @@ interface MovementActionsProps {
   canEdit: boolean
 }
 
-export function MovementActions({ movementId, status, type, canApprove, canEdit }: MovementActionsProps) {
+export function MovementActions({ movementId, status: initialStatus, type, canApprove, canEdit }: MovementActionsProps) {
   const router = useRouter()
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  
+  // Optimistic status update - shows new status immediately while server processes
+  const [optimisticStatus, setOptimisticStatus] = useOptimistic(initialStatus)
   
   // Dialogs
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
@@ -42,94 +45,97 @@ export function MovementActions({ movementId, status, type, canApprove, canEdit 
   const [rejectReason, setRejectReason] = useState('')
   const [cancelReason, setCancelReason] = useState('')
 
+  // Use optimistic status for display
+  const status = optimisticStatus
+
   // Submit for approval (DRAFT → SUBMITTED)
   async function handleSubmit() {
-    setIsProcessing(true)
-    const result = await submitMovement(movementId)
-    setIsProcessing(false)
-
-    if (result.success) {
-      toast.success('ส่งขออนุมัติเรียบร้อย')
-      setSubmitDialogOpen(false)
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    setSubmitDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('SUBMITTED')
+      const result = await submitMovement(movementId)
+      if (result.success) {
+        toast.success('ส่งขออนุมัติเรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Approve (SUBMITTED → APPROVED)
   async function handleApprove() {
-    setIsProcessing(true)
-    const result = await approveMovement(movementId)
-    setIsProcessing(false)
-
-    if (result.success) {
-      toast.success('อนุมัติเรียบร้อย')
-      setApproveDialogOpen(false)
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    setApproveDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('APPROVED')
+      const result = await approveMovement(movementId)
+      if (result.success) {
+        toast.success('อนุมัติเรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Reject (SUBMITTED → REJECTED)
   async function handleReject() {
-    setIsProcessing(true)
-    const result = await rejectMovement(movementId, rejectReason)
-    setIsProcessing(false)
-
-    if (result.success) {
-      toast.success('ปฏิเสธรายการเรียบร้อย')
-      setRejectDialogOpen(false)
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    setRejectDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('REJECTED')
+      const result = await rejectMovement(movementId, rejectReason)
+      if (result.success) {
+        toast.success('ปฏิเสธรายการเรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Post to stock (APPROVED → POSTED)
   async function handlePost() {
-    setIsProcessing(true)
-    const result = await postMovement(movementId)
-    setIsProcessing(false)
-
-    if (result.success) {
-      toast.success('บันทึกเข้าสต๊อคเรียบร้อย')
-      setPostDialogOpen(false)
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    setPostDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('POSTED')
+      const result = await postMovement(movementId)
+      if (result.success) {
+        toast.success('บันทึกเข้าสต๊อคเรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Cancel movement
   async function handleCancel() {
-    setIsProcessing(true)
-    const result = await cancelMovement(movementId, cancelReason)
-    setIsProcessing(false)
-
-    if (result.success) {
-      toast.success('ยกเลิกรายการเรียบร้อย')
-      setCancelDialogOpen(false)
-      router.push('/movements')
-    } else {
-      toast.error(result.error)
-    }
+    setCancelDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('CANCELLED')
+      const result = await cancelMovement(movementId, cancelReason)
+      if (result.success) {
+        toast.success('ยกเลิกรายการเรียบร้อย')
+        router.push('/movements')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Reverse movement (create opposite entry)
   async function handleReverse() {
-    setIsProcessing(true)
-    const result = await reverseMovement(movementId)
-    setIsProcessing(false)
-
-    if (result.success) {
-      toast.success('สร้างรายการกลับรายการเรียบร้อย')
-      setReverseDialogOpen(false)
-      router.push(`/movements/${result.data.id}`)
-    } else {
-      toast.error(result.error)
-    }
+    setReverseDialogOpen(false)
+    startTransition(async () => {
+      const result = await reverseMovement(movementId)
+      if (result.success) {
+        toast.success('สร้างรายการกลับรายการเรียบร้อย')
+        router.push(`/movements/${result.data.id}`)
+      } else {
+        toast.error(result.error)
+      }
+    })
   }
 
   // Create return from issue - navigate to return form
@@ -138,6 +144,9 @@ export function MovementActions({ movementId, status, type, canApprove, canEdit 
     // Navigate to new movement page with return type and reference
     router.push(`/movements/new?type=RETURN&refId=${movementId}`)
   }
+
+  // Common processing state
+  const isProcessing = isPending
 
   return (
     <>

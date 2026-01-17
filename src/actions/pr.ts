@@ -5,6 +5,8 @@ import { getSession } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { PRStatus } from '@/generated/prisma'
 import type { ActionResult, PaginatedResult, PRWithRelations } from '@/types'
+import { createNotification, sendPRApprovalRequest } from '@/actions/notifications'
+import { sendLinePRPendingAlert } from '@/actions/line-notifications'
 
 interface PRLineInput {
   productId: string
@@ -84,14 +86,20 @@ export async function getPRs(params: {
       where,
       include: {
         requester: {
-          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+          select: { id: true, name: true },
         },
         approver: {
-          select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+          select: { id: true, name: true },
         },
         lines: {
-          include: {
-            product: true,
+          select: {
+            id: true,
+            productId: true,
+            qty: true,
+            note: true,
+            product: {
+              select: { id: true, name: true, sku: true, standardCost: true, reorderPoint: true },
+            },
           },
         },
       },
@@ -116,14 +124,16 @@ export async function getPR(id: string): Promise<PRWithRelations | null> {
     where: { id },
     include: {
       requester: {
-        select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+        select: { id: true, name: true, username: true, role: true },
       },
       approver: {
-        select: { id: true, name: true, username: true, role: true, email: true, active: true, createdAt: true, updatedAt: true, deletedAt: true },
+        select: { id: true, name: true, username: true, role: true },
       },
       lines: {
         include: {
-          product: true,
+          product: {
+            select: { id: true, name: true, sku: true, standardCost: true, reorderPoint: true, minQty: true, maxQty: true },
+          },
         },
       },
     },
@@ -176,7 +186,8 @@ export async function createPR(data: CreatePRInput): Promise<ActionResult<PRWith
       },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'CREATE',
@@ -184,7 +195,7 @@ export async function createPR(data: CreatePRInput): Promise<ActionResult<PRWith
         refId: pr.id,
         newData: { prNumber },
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/pr')
     return { success: true, data: serializePR(pr) }
@@ -203,7 +214,7 @@ export async function submitPR(id: string): Promise<ActionResult> {
   try {
     const pr = await prisma.pR.findUnique({
       where: { id },
-      include: { lines: true },
+      include: { lines: true, requester: true },
     })
 
     if (!pr) {
@@ -223,14 +234,21 @@ export async function submitPR(id: string): Promise<ActionResult> {
       data: { status: PRStatus.SUBMITTED },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'SUBMIT',
         refType: 'PR',
         refId: id,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
+
+    // Send notifications to approvers (in-app, email, LINE)
+    // Run in background to not block the main action
+    notifyPRSubmitted(id, pr.prNumber, pr.requester.name).catch((err) =>
+      console.error('Failed to send PR submission notifications:', err)
+    )
 
     revalidatePath('/pr')
     revalidatePath(`/pr/${id}`)
@@ -267,14 +285,24 @@ export async function approvePR(id: string): Promise<ActionResult> {
       },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'APPROVE',
         refType: 'PR',
         refId: id,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
+
+    // Send notification to requester (already in background)
+    createNotification({
+      userId: pr.requesterId,
+      type: 'pr_pending',
+      title: `PR ${pr.prNumber} อนุมัติแล้ว`,
+      message: `ใบขอซื้อ ${pr.prNumber} ได้รับการอนุมัติโดย ${session.name}`,
+      url: `/pr/${id}`,
+    }).catch((err) => console.error('Failed to create approval notification:', err))
 
     revalidatePath('/pr')
     revalidatePath(`/pr/${id}`)
@@ -312,7 +340,8 @@ export async function rejectPR(id: string, reason?: string): Promise<ActionResul
       },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'REJECT',
@@ -320,7 +349,18 @@ export async function rejectPR(id: string, reason?: string): Promise<ActionResul
         refId: id,
         newData: { reason },
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
+
+    // Send notification to requester (already in background)
+    createNotification({
+      userId: pr.requesterId,
+      type: 'pr_pending',
+      title: `PR ${pr.prNumber} ถูกปฏิเสธ`,
+      message: reason 
+        ? `ใบขอซื้อ ${pr.prNumber} ถูกปฏิเสธโดย ${session.name}: ${reason}`
+        : `ใบขอซื้อ ${pr.prNumber} ถูกปฏิเสธโดย ${session.name}`,
+      url: `/pr/${id}`,
+    }).catch((err) => console.error('Failed to create rejection notification:', err))
 
     revalidatePath('/pr')
     revalidatePath(`/pr/${id}`)
@@ -387,14 +427,15 @@ export async function updatePR(id: string, data: UpdatePRInput): Promise<ActionR
       },
     })
 
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'UPDATE',
         refType: 'PR',
         refId: id,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/pr')
     revalidatePath(`/pr/${id}`)
@@ -404,4 +445,44 @@ export async function updatePR(id: string, data: UpdatePRInput): Promise<ActionR
     console.error('Update PR error:', error)
     return { success: false, error: 'ไม่สามารถแก้ไข PR ได้' }
   }
+}
+
+// ============================================
+// Notification Helpers
+// ============================================
+
+/**
+ * Send notifications to all approvers when a PR is submitted
+ * Sends via in-app notification, email, and LINE
+ */
+async function notifyPRSubmitted(prId: string, prNumber: string, requesterName: string) {
+  // Get all approvers (ADMIN and APPROVER roles)
+  const approvers = await prisma.user.findMany({
+    where: {
+      active: true,
+      deletedAt: null,
+      role: { in: ['ADMIN', 'APPROVER'] },
+    },
+    select: { id: true },
+  })
+
+  // Create in-app notifications for all approvers
+  const notificationPromises = approvers.map((approver) =>
+    createNotification({
+      userId: approver.id,
+      type: 'pr_pending',
+      title: `PR ใหม่รออนุมัติ: ${prNumber}`,
+      message: `${requesterName} ส่งใบขอซื้อ ${prNumber} รออนุมัติ`,
+      url: `/pr/${prId}`,
+    })
+  )
+
+  // Send email to approvers
+  const emailPromise = sendPRApprovalRequest(prId)
+
+  // Send LINE notification
+  const linePromise = sendLinePRPendingAlert(prId)
+
+  // Execute all in parallel
+  await Promise.allSettled([...notificationPromises, emailPromise, linePromise])
 }

@@ -350,8 +350,8 @@ export async function createProduct(data: ProductInput): Promise<ActionResult<Pr
       return newProduct
     })
 
-    // Audit log for product
-    await prisma.auditLog.create({
+    // Audit log for product (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'CREATE',
@@ -359,7 +359,7 @@ export async function createProduct(data: ProductInput): Promise<ActionResult<Pr
         refId: product.id,
         newData: product,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/products')
     revalidatePath('/movements')
@@ -429,8 +429,8 @@ export async function updateProduct(
       },
     })
 
-    // Audit log
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'UPDATE',
@@ -439,7 +439,7 @@ export async function updateProduct(
         oldData: existing,
         newData: product,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/products')
     revalidatePath(`/products/${id}`)
@@ -471,8 +471,8 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
       },
     })
 
-    // Audit log
-    await prisma.auditLog.create({
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
       data: {
         actorId: session.id,
         action: 'DELETE',
@@ -480,7 +480,7 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
         refId: id,
         oldData: existing,
       },
-    })
+    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/products')
     return { success: true, data: undefined }

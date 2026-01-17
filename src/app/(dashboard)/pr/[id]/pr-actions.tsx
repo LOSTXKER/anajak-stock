@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useOptimistic, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -38,42 +38,50 @@ interface PRActionsProps {
   suppliers: Supplier[]
 }
 
-export function PRActions({ prId, prStatus, canApprove, canEdit, suppliers }: PRActionsProps) {
+export function PRActions({ prId, prStatus: initialStatus, canApprove, canEdit, suppliers }: PRActionsProps) {
   const router = useRouter()
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  
+  // Optimistic status update - shows new status immediately while server processes
+  const [optimisticStatus, setOptimisticStatus] = useOptimistic(initialStatus)
+  
   const [convertDialogOpen, setConvertDialogOpen] = useState(false)
   const [selectedSupplier, setSelectedSupplier] = useState('')
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
 
+  // Use optimistic status for display
+  const prStatus = optimisticStatus
+  const isSubmitting = isPending
+
   // Submit PR (DRAFT → SUBMITTED)
   async function handleSubmit() {
-    setIsSubmitting(true)
-    const result = await submitPR(prId)
-    setIsSubmitting(false)
-
-    if (result.success) {
-      toast.success('ส่งใบขอซื้อเรียบร้อย')
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    startTransition(async () => {
+      setOptimisticStatus('SUBMITTED')
+      const result = await submitPR(prId)
+      if (result.success) {
+        toast.success('ส่งใบขอซื้อเรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Approve PR
   async function handleApprove() {
-    setIsSubmitting(true)
-    const result = await approvePR(prId)
-    setIsSubmitting(false)
-
-    if (result.success) {
-      toast.success('อนุมัติใบขอซื้อเรียบร้อย')
-      setApproveDialogOpen(false)
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    setApproveDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('APPROVED')
+      const result = await approvePR(prId)
+      if (result.success) {
+        toast.success('อนุมัติใบขอซื้อเรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Reject PR
@@ -83,17 +91,17 @@ export function PRActions({ prId, prStatus, canApprove, canEdit, suppliers }: PR
       return
     }
 
-    setIsSubmitting(true)
-    const result = await rejectPR(prId, rejectReason)
-    setIsSubmitting(false)
-
-    if (result.success) {
-      toast.success('ปฏิเสธใบขอซื้อเรียบร้อย')
-      setRejectDialogOpen(false)
-      router.refresh()
-    } else {
-      toast.error(result.error)
-    }
+    setRejectDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('REJECTED')
+      const result = await rejectPR(prId, rejectReason)
+      if (result.success) {
+        toast.success('ปฏิเสธใบขอซื้อเรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
   }
 
   // Convert to PO - redirect to PO creation page with PR data
