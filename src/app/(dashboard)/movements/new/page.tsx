@@ -24,16 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, Scan, ListPlus, Check, Search } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Checkbox } from '@/components/ui/checkbox'
+import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, Scan, ListPlus } from 'lucide-react'
+import { BulkAddModal, BulkAddSelection, BulkAddVariant } from '@/components/bulk-add-modal'
 import { createMovement, submitMovement, getMovement } from '@/actions/movements'
 import { getProducts, getProductByBarcode } from '@/actions/products'
 import { getLocations } from '@/actions/stock'
@@ -139,7 +131,6 @@ export default function NewMovementPage(props: PageProps) {
   const [isLoadingProducts, setIsLoadingProducts] = useState(true)
   const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
   const [showBulkAddModal, setShowBulkAddModal] = useState(false)
-  const [bulkSelectedProducts, setBulkSelectedProducts] = useState<Set<string>>(new Set())
 
   // Handle barcode scan - add product to lines
   const handleBarcodeScan = useCallback(async (barcode: string) => {
@@ -283,56 +274,52 @@ export default function NewMovementPage(props: PageProps) {
     ])
   }
 
-  // Bulk add multiple products at once
-  async function handleBulkAdd() {
-    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
-    const newLines: MovementLine[] = []
-    
-    for (const product of selectedProducts) {
-      // Skip if product already in lines
-      if (lines.some(l => l.productId === product.id && !product.hasVariants)) continue
-      
-      newLines.push({
-        id: Math.random().toString(36).substr(2, 9),
-        productId: product.id,
-        productName: product.name,
-        qty: 1,
-        unitCost: Number(product.lastCost || product.standardCost || 0),
-      })
-      
-      // Load variants if needed
-      if (product.hasVariants && !product.variants) {
-        const variants = await loadVariantsForProduct(product.id)
-        setProducts(prev => prev.map(p => 
-          p.id === product.id ? { ...p, variants } : p
-        ))
-      }
-    }
+  // Bulk add handler - receives selections from modal
+  function handleBulkAdd(selections: BulkAddSelection[]) {
+    const newLines: MovementLine[] = selections.map(sel => ({
+      id: Math.random().toString(36).substr(2, 9),
+      productId: sel.productId,
+      variantId: sel.variantId,
+      productName: sel.productName,
+      variantLabel: sel.variantLabel,
+      qty: 1,
+      unitCost: sel.unitCost,
+    }))
     
     setLines(prev => [...prev, ...newLines])
-    setBulkSelectedProducts(new Set())
     setShowBulkAddModal(false)
     toast.success(`เพิ่ม ${newLines.length} รายการ`)
   }
 
-  function toggleBulkSelect(productId: string) {
-    setBulkSelectedProducts(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(productId)) {
-        newSet.delete(productId)
-      } else {
-        newSet.add(productId)
+  // Load variants for bulk add modal
+  const loadVariantsForBulkAdd = async (productId: string): Promise<BulkAddVariant[]> => {
+    try {
+      const response = await fetch(`/api/products/${productId}/variants`)
+      if (response.ok) {
+        const variants = await response.json()
+        return variants.map((v: { 
+          id: string
+          sku: string
+          name: string | null
+          costPrice?: number
+          optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+          stockBalances?: { qtyOnHand: number }[]
+        }) => ({
+          id: v.id,
+          sku: v.sku,
+          name: v.name,
+          options: v.optionValues?.map((ov) => ({
+            optionName: ov.optionValue.optionType.name,
+            value: ov.optionValue.value,
+          })) || [],
+          stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+        }))
       }
-      return newSet
-    })
-  }
-
-  function toggleSelectAll() {
-    if (bulkSelectedProducts.size === products.length) {
-      setBulkSelectedProducts(new Set())
-    } else {
-      setBulkSelectedProducts(new Set(products.map(p => p.id)))
+    } catch (error) {
+      console.error('Failed to load variants:', error)
     }
+    return []
   }
 
   function removeLine(id: string) {
@@ -887,153 +874,12 @@ export default function NewMovementPage(props: PageProps) {
         open={showBulkAddModal}
         onOpenChange={setShowBulkAddModal}
         products={products}
-        selectedProducts={bulkSelectedProducts}
-        onToggleSelect={toggleBulkSelect}
-        onToggleSelectAll={toggleSelectAll}
+        existingProductIds={new Set(lines.filter(l => !l.variantId).map(l => l.productId))}
+        existingVariantIds={new Set(lines.filter(l => l.variantId).map(l => l.variantId!))}
         onConfirm={handleBulkAdd}
-        existingProductIds={new Set(lines.map(l => l.productId))}
+        loadVariants={loadVariantsForBulkAdd}
+        showVariants={true}
       />
     </div>
-  )
-}
-
-// Bulk Add Modal Component
-function BulkAddModal({
-  open,
-  onOpenChange,
-  products,
-  selectedProducts,
-  onToggleSelect,
-  onToggleSelectAll,
-  onConfirm,
-  existingProductIds,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  products: ProductWithVariants[]
-  selectedProducts: Set<string>
-  onToggleSelect: (id: string) => void
-  onToggleSelectAll: () => void
-  onConfirm: () => void
-  existingProductIds: Set<string>
-}) {
-  const [search, setSearch] = useState('')
-  const [isAdding, setIsAdding] = useState(false)
-  
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.sku.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const handleConfirm = async () => {
-    setIsAdding(true)
-    await onConfirm()
-    setIsAdding(false)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ListPlus className="w-5 h-5" />
-            เพิ่มหลายรายการ
-          </DialogTitle>
-          <DialogDescription>
-            เลือกสินค้าที่ต้องการเพิ่มทั้งหมด แล้วกดยืนยัน
-          </DialogDescription>
-        </DialogHeader>
-        
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-          <Input
-            placeholder="ค้นหาสินค้า..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
-        {/* Select All */}
-        <div className="flex items-center justify-between py-2 border-b border-[var(--border-default)]">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <Checkbox
-              checked={selectedProducts.size === products.length && products.length > 0}
-              onCheckedChange={onToggleSelectAll}
-            />
-            <span className="text-sm font-medium">เลือกทั้งหมด</span>
-          </label>
-          <Badge variant="secondary">
-            เลือก {selectedProducts.size} รายการ
-          </Badge>
-        </div>
-
-        {/* Product List */}
-        <div className="flex-1 -mx-6 px-6 overflow-y-auto max-h-[400px]">
-          <div className="space-y-1 py-2">
-            {filteredProducts.length === 0 ? (
-              <div className="text-center py-8 text-[var(--text-muted)]">
-                ไม่พบสินค้า
-              </div>
-            ) : (
-              filteredProducts.map((product) => {
-                const isExisting = existingProductIds.has(product.id)
-                const isSelected = selectedProducts.has(product.id)
-                
-                return (
-                  <label
-                    key={product.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                      isSelected 
-                        ? 'bg-[var(--accent-light)] border border-[var(--accent-primary)]' 
-                        : 'hover:bg-[var(--bg-secondary)] border border-transparent'
-                    } ${isExisting ? 'opacity-50' : ''}`}
-                  >
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={() => onToggleSelect(product.id)}
-                      disabled={isExisting}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{product.name}</span>
-                        {product.hasVariants && (
-                          <Badge variant="secondary" className="text-xs shrink-0">Variants</Badge>
-                        )}
-                        {isExisting && (
-                          <Badge variant="outline" className="text-xs shrink-0">เพิ่มแล้ว</Badge>
-                        )}
-                      </div>
-                      <div className="text-xs text-[var(--text-muted)] font-mono">{product.sku}</div>
-                    </div>
-                    {isSelected && (
-                      <Check className="w-5 h-5 text-[var(--accent-primary)] shrink-0" />
-                    )}
-                  </label>
-                )
-              })
-            )}
-          </div>
-        </div>
-
-        <DialogFooter className="border-t border-[var(--border-default)] pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            ยกเลิก
-          </Button>
-          <Button 
-            onClick={handleConfirm} 
-            disabled={selectedProducts.size === 0 || isAdding}
-          >
-            {isAdding ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4 mr-2" />
-            )}
-            เพิ่ม {selectedProducts.size} รายการ
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

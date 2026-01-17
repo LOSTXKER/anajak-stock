@@ -25,7 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, ListPlus } from 'lucide-react'
-import { BulkAddModal, useBulkAdd } from '@/components/bulk-add-modal'
+import { BulkAddModal, BulkAddSelection, BulkAddVariant } from '@/components/bulk-add-modal'
 import { getMovement, updateMovement } from '@/actions/movements'
 import { getProducts } from '@/actions/products'
 import { getLocations } from '@/actions/stock'
@@ -114,16 +114,7 @@ export default function EditMovementPage(props: PageProps) {
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [locations, setLocations] = useState<LocationWithWarehouse[]>([])
   const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
-  
-  // Bulk add
-  const {
-    showBulkAddModal,
-    setShowBulkAddModal,
-    bulkSelectedProducts,
-    toggleBulkSelect,
-    toggleSelectAll,
-    resetBulkSelection,
-  } = useBulkAdd()
+  const [showBulkAddModal, setShowBulkAddModal] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -214,33 +205,52 @@ export default function EditMovementPage(props: PageProps) {
     return []
   }
 
-  // Bulk add handler
-  async function handleBulkAdd() {
-    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
-    const newLines: MovementLine[] = []
-    
-    for (const product of selectedProducts) {
-      if (lines.some(l => l.productId === product.id && !product.hasVariants)) continue
-      
-      newLines.push({
-        id: `new-${Math.random().toString(36).substr(2, 9)}`,
-        productId: product.id,
-        productName: product.name,
-        qty: 1,
-        unitCost: Number(product.lastCost || product.standardCost || 0),
-      })
-      
-      if (product.hasVariants && !product.variants) {
-        const variants = await loadVariantsForProduct(product.id)
-        setProducts(prev => prev.map(p => 
-          p.id === product.id ? { ...p, variants } : p
-        ))
-      }
-    }
+  // Bulk add handler - receives selections from modal
+  function handleBulkAdd(selections: BulkAddSelection[]) {
+    const newLines: MovementLine[] = selections.map(sel => ({
+      id: `new-${Math.random().toString(36).substr(2, 9)}`,
+      productId: sel.productId,
+      variantId: sel.variantId,
+      productName: sel.productName,
+      variantLabel: sel.variantLabel,
+      qty: 1,
+      unitCost: sel.unitCost,
+    }))
     
     setLines(prev => [...prev, ...newLines])
-    resetBulkSelection()
+    setShowBulkAddModal(false)
     toast.success(`เพิ่ม ${newLines.length} รายการ`)
+  }
+
+  // Load variants for bulk add modal
+  const loadVariantsForBulkAdd = async (productId: string): Promise<BulkAddVariant[]> => {
+    try {
+      const response = await fetch(`/api/products/${productId}/variants`)
+      if (response.ok) {
+        const variants = await response.json()
+        return variants.map((v: { 
+          id: string
+          sku: string
+          name: string | null
+          costPrice?: number
+          optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+          stockBalances?: { qtyOnHand: number }[]
+        }) => ({
+          id: v.id,
+          sku: v.sku,
+          name: v.name,
+          options: v.optionValues?.map((ov) => ({
+            optionName: ov.optionValue.optionType.name,
+            value: ov.optionValue.value,
+          })) || [],
+          stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to load variants:', error)
+    }
+    return []
   }
 
   function addLine() {
@@ -662,11 +672,11 @@ export default function EditMovementPage(props: PageProps) {
         open={showBulkAddModal}
         onOpenChange={setShowBulkAddModal}
         products={products}
-        selectedProducts={bulkSelectedProducts}
-        onToggleSelect={toggleBulkSelect}
-        onToggleSelectAll={() => toggleSelectAll(products)}
+        existingProductIds={new Set(lines.filter(l => !l.variantId).map(l => l.productId))}
+        existingVariantIds={new Set(lines.filter(l => l.variantId).map(l => l.variantId!))}
         onConfirm={handleBulkAdd}
-        existingProductIds={new Set(lines.map(l => l.productId))}
+        loadVariants={loadVariantsForBulkAdd}
+        showVariants={true}
       />
     </div>
   )

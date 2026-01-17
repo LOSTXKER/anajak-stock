@@ -25,7 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { FileText, ArrowLeft, Loader2, Plus, Trash2, Send, Save, ListPlus } from 'lucide-react'
-import { BulkAddModal, useBulkAdd } from '@/components/bulk-add-modal'
+import { BulkAddModal, BulkAddSelection } from '@/components/bulk-add-modal'
 import { createPR, submitPR } from '@/actions/pr'
 import { getProducts } from '@/actions/products'
 import { toast } from 'sonner'
@@ -56,16 +56,7 @@ export default function NewPRPage() {
   const [note, setNote] = useState('')
   const [lines, setLines] = useState<PRLine[]>([])
   const [products, setProducts] = useState<ProductWithRelations[]>([])
-  
-  // Bulk add
-  const {
-    showBulkAddModal,
-    setShowBulkAddModal,
-    bulkSelectedProducts,
-    toggleBulkSelect,
-    toggleSelectAll,
-    resetBulkSelection,
-  } = useBulkAdd()
+  const [showBulkAddModal, setShowBulkAddModal] = useState(false)
 
   useEffect(() => {
     async function loadProducts() {
@@ -77,24 +68,17 @@ export default function NewPRPage() {
     loadProducts()
   }, [])
 
-  // Bulk add handler
-  function handleBulkAdd() {
-    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
-    const newLines: PRLine[] = []
-    
-    for (const product of selectedProducts) {
-      if (lines.some(l => l.productId === product.id)) continue
-      
-      newLines.push({
-        id: Math.random().toString(36).substr(2, 9),
-        productId: product.id,
-        productName: product.name,
-        qty: 1,
-      })
-    }
+  // Bulk add handler - receives selections from modal
+  function handleBulkAdd(selections: BulkAddSelection[]) {
+    const newLines: PRLine[] = selections.map(sel => ({
+      id: Math.random().toString(36).substr(2, 9),
+      productId: sel.productId,
+      productName: sel.productName,
+      qty: 1,
+    }))
     
     setLines(prev => [...prev, ...newLines])
-    resetBulkSelection()
+    setShowBulkAddModal(false)
     toast.success(`เพิ่ม ${newLines.length} รายการ`)
   }
 
@@ -380,12 +364,9 @@ export default function NewPRPage() {
         open={showBulkAddModal}
         onOpenChange={setShowBulkAddModal}
         products={products}
-        selectedProducts={bulkSelectedProducts}
-        onToggleSelect={toggleBulkSelect}
-        onToggleSelectAll={() => toggleSelectAll(products)}
-        onConfirm={handleBulkAdd}
         existingProductIds={new Set(lines.map(l => l.productId))}
-        showVariantsBadge={false}
+        onConfirm={handleBulkAdd}
+        showVariants={false}
       />
     </div>
   )

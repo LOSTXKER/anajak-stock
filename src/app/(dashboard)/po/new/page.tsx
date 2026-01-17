@@ -25,7 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Calculator, FileText, ListPlus } from 'lucide-react'
-import { BulkAddModal, useBulkAdd } from '@/components/bulk-add-modal'
+import { BulkAddModal, BulkAddSelection } from '@/components/bulk-add-modal'
 import { createPO, getSuppliers } from '@/actions/po'
 import { getProducts } from '@/actions/products'
 import { getPR } from '@/actions/pr'
@@ -70,16 +70,7 @@ export default function NewPOPage() {
   const [products, setProducts] = useState<ProductWithRelations[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [isLoadingProducts, setIsLoadingProducts] = useState(true)
-  
-  // Bulk add
-  const {
-    showBulkAddModal,
-    setShowBulkAddModal,
-    bulkSelectedProducts,
-    toggleBulkSelect,
-    toggleSelectAll,
-    resetBulkSelection,
-  } = useBulkAdd()
+  const [showBulkAddModal, setShowBulkAddModal] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -119,25 +110,18 @@ export default function NewPOPage() {
     loadData()
   }, [prId])
 
-  // Bulk add handler
-  function handleBulkAdd() {
-    const selectedProducts = products.filter(p => bulkSelectedProducts.has(p.id))
-    const newLines: POLine[] = []
-    
-    for (const product of selectedProducts) {
-      if (lines.some(l => l.productId === product.id)) continue
-      
-      newLines.push({
-        id: Math.random().toString(36).substr(2, 9),
-        productId: product.id,
-        productName: product.name,
-        qty: 1,
-        unitPrice: Number(product.lastCost || product.standardCost || 0),
-      })
-    }
+  // Bulk add handler - receives selections from modal
+  function handleBulkAdd(selections: BulkAddSelection[]) {
+    const newLines: POLine[] = selections.map(sel => ({
+      id: Math.random().toString(36).substr(2, 9),
+      productId: sel.productId,
+      productName: sel.productName,
+      qty: 1,
+      unitPrice: sel.unitCost,
+    }))
     
     setLines(prev => [...prev, ...newLines])
-    resetBulkSelection()
+    setShowBulkAddModal(false)
     toast.success(`เพิ่ม ${newLines.length} รายการ`)
   }
 
@@ -549,12 +533,9 @@ export default function NewPOPage() {
         open={showBulkAddModal}
         onOpenChange={setShowBulkAddModal}
         products={products}
-        selectedProducts={bulkSelectedProducts}
-        onToggleSelect={toggleBulkSelect}
-        onToggleSelectAll={() => toggleSelectAll(products)}
-        onConfirm={handleBulkAdd}
         existingProductIds={new Set(lines.map(l => l.productId))}
-        showVariantsBadge={false}
+        onConfirm={handleBulkAdd}
+        showVariants={false}
       />
     </div>
   )
