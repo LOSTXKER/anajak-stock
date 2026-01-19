@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useOptimistic, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,8 +13,8 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Send, Truck, Loader2, CheckCircle, XCircle, Edit } from 'lucide-react'
-import { approvePO, sendPO, cancelPO } from '@/actions/po'
+import { Send, Truck, Loader2, CheckCircle, XCircle, Edit, SendHorizontal, Ban } from 'lucide-react'
+import { submitPO, approvePO, rejectPO, sendPO, cancelPO } from '@/actions/po'
 import { toast } from 'sonner'
 
 interface POActionsProps {
@@ -26,22 +25,39 @@ interface POActionsProps {
 }
 
 export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }: POActionsProps) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   
   // Optimistic status update - shows new status immediately while server processes
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(initialStatus)
   
+  const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [sendDialogOpen, setSendDialogOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
   const [cancelReason, setCancelReason] = useState('')
 
   // Use optimistic status for display
   const poStatus = optimisticStatus
   const isProcessing = isPending
 
-  // Approve PO (DRAFT → APPROVED)
+  // Submit PO for approval (DRAFT → SUBMITTED)
+  async function handleSubmit() {
+    setSubmitDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('SUBMITTED')
+      const result = await submitPO(poId)
+      if (result.success) {
+        toast.success('ส่งอนุมัติเรียบร้อยแล้ว')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
+  }
+
+  // Approve PO (SUBMITTED → APPROVED)
   async function handleApprove() {
     setApproveDialogOpen(false)
     startTransition(async () => {
@@ -49,6 +65,22 @@ export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }
       const result = await approvePO(poId)
       if (result.success) {
         toast.success('อนุมัติใบสั่งซื้อเรียบร้อย')
+      } else {
+        setOptimisticStatus(initialStatus) // rollback
+        toast.error(result.error)
+      }
+    })
+  }
+
+  // Reject PO (SUBMITTED → REJECTED)
+  async function handleReject() {
+    setRejectDialogOpen(false)
+    startTransition(async () => {
+      setOptimisticStatus('REJECTED')
+      const result = await rejectPO(poId, rejectReason)
+      if (result.success) {
+        toast.success('ไม่อนุมัติใบสั่งซื้อแล้ว')
+        setRejectReason('')
       } else {
         setOptimisticStatus(initialStatus) // rollback
         toast.error(result.error)
@@ -79,6 +111,7 @@ export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }
       const result = await cancelPO(poId, cancelReason)
       if (result.success) {
         toast.success('ยกเลิก PO เรียบร้อย')
+        setCancelReason('')
       } else {
         setOptimisticStatus(initialStatus) // rollback
         toast.error(result.error)
@@ -89,7 +122,7 @@ export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }
   return (
     <>
       <div className="flex items-center gap-2">
-        {/* DRAFT: Edit + Approve */}
+        {/* DRAFT: Edit + Submit for approval */}
         {poStatus === 'DRAFT' && (
           <>
             {canEdit && (
@@ -100,15 +133,55 @@ export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }
                 </Link>
               </Button>
             )}
-            {canApprove && (
-              <Button
-                onClick={() => setApproveDialogOpen(true)}
-                className="bg-[var(--status-success)] hover:bg-[var(--status-success)]/90 text-white"
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                อนุมัติ
+            <Button
+              onClick={() => setSubmitDialogOpen(true)}
+              className="bg-[var(--status-info)] hover:bg-[var(--status-info)]/90 text-white"
+            >
+              <SendHorizontal className="w-4 h-4 mr-2" />
+              ส่งอนุมัติ
+            </Button>
+          </>
+        )}
+
+        {/* REJECTED: Edit + Submit for approval again */}
+        {poStatus === 'REJECTED' && (
+          <>
+            {canEdit && (
+              <Button variant="outline" asChild>
+                <Link href={`/po/${poId}/edit`}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  แก้ไข
+                </Link>
               </Button>
             )}
+            <Button
+              onClick={() => setSubmitDialogOpen(true)}
+              className="bg-[var(--status-info)] hover:bg-[var(--status-info)]/90 text-white"
+            >
+              <SendHorizontal className="w-4 h-4 mr-2" />
+              ส่งอนุมัติอีกครั้ง
+            </Button>
+          </>
+        )}
+
+        {/* SUBMITTED: Approve + Reject (for approvers) */}
+        {poStatus === 'SUBMITTED' && canApprove && (
+          <>
+            <Button
+              onClick={() => setApproveDialogOpen(true)}
+              className="bg-[var(--status-success)] hover:bg-[var(--status-success)]/90 text-white"
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              อนุมัติ
+            </Button>
+            <Button
+              onClick={() => setRejectDialogOpen(true)}
+              variant="outline"
+              className="border-[var(--status-error)]/30 text-[var(--status-error)] hover:bg-[var(--status-error)]/10"
+            >
+              <Ban className="w-4 h-4 mr-2" />
+              ไม่อนุมัติ
+            </Button>
           </>
         )}
 
@@ -146,6 +219,35 @@ export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }
         )}
       </div>
 
+      {/* Submit Dialog */}
+      <Dialog open={submitDialogOpen} onOpenChange={setSubmitDialogOpen}>
+        <DialogContent className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+          <DialogHeader>
+            <DialogTitle>ส่งอนุมัติใบสั่งซื้อ</DialogTitle>
+            <DialogDescription>
+              คุณต้องการส่งใบสั่งซื้อนี้เพื่อรออนุมัติหรือไม่?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSubmitDialogOpen(false)}>
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isProcessing}
+              className="bg-[var(--status-info)] hover:bg-[var(--status-info)]/90 text-white"
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <SendHorizontal className="w-4 h-4 mr-2" />
+              )}
+              ส่งอนุมัติ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Approve Dialog */}
       <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
         <DialogContent className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
@@ -170,6 +272,46 @@ export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }
                 <CheckCircle className="w-4 h-4 mr-2" />
               )}
               อนุมัติ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+          <DialogHeader>
+            <DialogTitle>ไม่อนุมัติใบสั่งซื้อ</DialogTitle>
+            <DialogDescription>
+              กรุณาระบุเหตุผลในการไม่อนุมัติ
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>เหตุผล</Label>
+              <Textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="ระบุเหตุผลในการไม่อนุมัติ..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleReject}
+              disabled={isProcessing}
+              variant="destructive"
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Ban className="w-4 h-4 mr-2" />
+              )}
+              ไม่อนุมัติ
             </Button>
           </DialogFooter>
         </DialogContent>

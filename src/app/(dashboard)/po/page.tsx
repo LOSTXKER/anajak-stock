@@ -29,7 +29,9 @@ interface PageProps {
 
 const statusConfig: Record<POStatus, { label: string; color: string }> = {
   DRAFT: { label: 'ร่าง', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
+  SUBMITTED: { label: 'รออนุมัติ', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
   APPROVED: { label: 'อนุมัติแล้ว', color: 'bg-[var(--accent-light)] text-[var(--accent-primary)]' },
+  REJECTED: { label: 'ไม่อนุมัติ', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
   SENT: { label: 'ส่งแล้ว', color: 'bg-[var(--status-info-light)] text-[var(--status-info)]' },
   IN_PROGRESS: { label: 'กำลังดำเนินการ', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
   PARTIALLY_RECEIVED: { label: 'รับบางส่วน', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
@@ -87,7 +89,7 @@ async function POContent({ searchParams }: PageProps) {
             >
               <Link href="/po">ทั้งหมด</Link>
             </Button>
-            {Object.entries(statusConfig).slice(0, 5).map(([key, config]) => (
+            {Object.entries(statusConfig).slice(0, 6).map(([key, config]) => (
               <Button
                 key={key}
                 variant={status === key ? 'default' : 'outline'}

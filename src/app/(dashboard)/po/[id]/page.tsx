@@ -28,10 +28,20 @@ const statusConfig: Record<string, { color: string; icon: React.ReactNode; label
     icon: <Clock className="w-3.5 h-3.5" />,
     label: 'แบบร่าง'
   },
+  SUBMITTED: { 
+    color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]',
+    icon: <Clock className="w-3.5 h-3.5" />,
+    label: 'รออนุมัติ'
+  },
   APPROVED: { 
     color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
     icon: <CheckCircle2 className="w-3.5 h-3.5" />,
     label: 'อนุมัติแล้ว'
+  },
+  REJECTED: { 
+    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
+    icon: <XCircle className="w-3.5 h-3.5" />,
+    label: 'ไม่อนุมัติ'
   },
   SENT: { 
     color: 'bg-[var(--status-info-light)] text-[var(--status-info)]',
@@ -121,12 +131,12 @@ async function PODetail({ id }: { id: string }) {
   const canApprove =
     session &&
     (session.role === 'ADMIN' || session.role === 'APPROVER' || session.role === 'PURCHASING') &&
-    po.status === 'DRAFT'
+    po.status === 'SUBMITTED'
 
   const canEdit =
     session &&
     (session.role === 'ADMIN' || session.role === 'PURCHASING') &&
-    po.status === 'DRAFT'
+    (po.status === 'DRAFT' || po.status === 'REJECTED')
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">

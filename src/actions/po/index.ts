@@ -15,7 +15,7 @@ export { generatePONumber, generateGRNNumber, getSuppliers } from './helpers'
 export { getPOs, getPO, createPO, updatePO } from './crud'
 
 // Workflow actions
-export { approvePO, sendPO, cancelPO } from './workflow'
+export { submitPO, approvePO, rejectPO, sendPO, cancelPO } from './workflow'
 
 // GRN operations
 export { createGRN, postGRN, cancelGRN } from './grn'

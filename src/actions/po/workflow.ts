@@ -10,7 +10,69 @@ import { createNotification, sendPOApprovalNotification } from '@/actions/notifi
 import { sendLinePOStatusUpdate } from '@/actions/line-notifications'
 
 /**
- * Approve a PO
+ * Submit a PO for approval (DRAFT → SUBMITTED)
+ */
+export async function submitPO(id: string): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const po = await prisma.pO.findUnique({
+      where: { id },
+      include: { lines: true, createdBy: true },
+    })
+
+    if (!po) {
+      return { success: false, error: 'ไม่พบ PO' }
+    }
+
+    if (po.status !== POStatus.DRAFT && po.status !== POStatus.REJECTED) {
+      return { success: false, error: 'ไม่สามารถส่งอนุมัติ PO นี้ได้' }
+    }
+
+    if (po.lines.length === 0) {
+      return { success: false, error: 'กรุณาเพิ่มรายการสินค้าก่อนส่งอนุมัติ' }
+    }
+
+    await prisma.$transaction([
+      prisma.pO.update({
+        where: { id },
+        data: { status: POStatus.SUBMITTED },
+      }),
+      prisma.pOTimeline.create({
+        data: {
+          poId: id,
+          action: 'ส่งอนุมัติ',
+          note: `ส่งอนุมัติโดย ${session.name}`,
+        },
+      }),
+      prisma.auditLog.create({
+        data: {
+          actorId: session.id,
+          action: 'SUBMIT',
+          refType: 'PO',
+          refId: id,
+        },
+      }),
+    ])
+
+    // Send notifications to approvers
+    notifyPOSubmitted(id, po.poNumber, po.createdBy.name).catch((err) =>
+      console.error('Failed to send PO submission notifications:', err)
+    )
+
+    revalidatePath('/po')
+    revalidatePath(`/po/${id}`)
+    return { success: true, data: undefined }
+  } catch (error) {
+    return handleActionError(error, 'submitPO')
+  }
+}
+
+/**
+ * Approve a PO (SUBMITTED → APPROVED)
  */
 export async function approvePO(id: string): Promise<ActionResult> {
   const session = await getSession()
@@ -25,8 +87,8 @@ export async function approvePO(id: string): Promise<ActionResult> {
       return { success: false, error: 'ไม่พบ PO' }
     }
 
-    if (po.status !== POStatus.DRAFT) {
-      return { success: false, error: 'ไม่สามารถอนุมัติ PO ที่ไม่ใช่ Draft ได้' }
+    if (po.status !== POStatus.SUBMITTED) {
+      return { success: false, error: 'ไม่สามารถอนุมัติ PO ที่ไม่ได้รออนุมัติได้' }
     }
 
     await prisma.$transaction([
@@ -119,6 +181,77 @@ export async function sendPO(id: string): Promise<ActionResult> {
 }
 
 /**
+ * Reject a PO (SUBMITTED → REJECTED)
+ */
+export async function rejectPO(id: string, reason?: string): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const po = await prisma.pO.findUnique({ where: { id } })
+
+    if (!po) {
+      return { success: false, error: 'ไม่พบ PO' }
+    }
+
+    if (po.status !== POStatus.SUBMITTED) {
+      return { success: false, error: 'ไม่สามารถปฏิเสธ PO ที่ไม่ได้รออนุมัติได้' }
+    }
+
+    await prisma.$transaction([
+      prisma.pO.update({
+        where: { id },
+        data: { 
+          status: POStatus.REJECTED,
+          approvedById: session.id,
+          approvedAt: new Date(),
+        },
+      }),
+      prisma.pOTimeline.create({
+        data: {
+          poId: id,
+          action: 'ไม่อนุมัติ',
+          note: reason ? `ไม่อนุมัติโดย ${session.name}: ${reason}` : `ไม่อนุมัติโดย ${session.name}`,
+        },
+      }),
+      prisma.auditLog.create({
+        data: {
+          actorId: session.id,
+          action: 'REJECT',
+          refType: 'PO',
+          refId: id,
+          newData: { reason },
+        },
+      }),
+    ])
+
+    // Send notification to PO creator
+    createNotification({
+      userId: po.createdById,
+      type: 'po_pending',
+      title: `PO ${po.poNumber} ไม่อนุมัติ`,
+      message: reason
+        ? `ใบสั่งซื้อ ${po.poNumber} ไม่ได้รับการอนุมัติโดย ${session.name}: ${reason}`
+        : `ใบสั่งซื้อ ${po.poNumber} ไม่ได้รับการอนุมัติโดย ${session.name}`,
+      url: `/po/${id}`,
+    }).catch((err) => console.error('Failed to create rejection notification:', err))
+
+    // Send LINE notification
+    sendLinePOStatusUpdate(id, 'ไม่อนุมัติ').catch((err) =>
+      console.error('Failed to send PO rejection notification:', err)
+    )
+
+    revalidatePath('/po')
+    revalidatePath(`/po/${id}`)
+    return { success: true, data: undefined }
+  } catch (error) {
+    return handleActionError(error, 'rejectPO')
+  }
+}
+
+/**
  * Cancel a PO
  */
 export async function cancelPO(id: string, reason?: string): Promise<ActionResult> {
@@ -180,6 +313,39 @@ export async function cancelPO(id: string, reason?: string): Promise<ActionResul
 // ============================================
 // Notification Helpers
 // ============================================
+
+/**
+ * Send notifications when a PO is submitted for approval
+ * Sends via in-app notification and LINE to all approvers
+ */
+async function notifyPOSubmitted(poId: string, poNumber: string, requesterName: string) {
+  // Get all approvers (ADMIN and APPROVER roles)
+  const approvers = await prisma.user.findMany({
+    where: {
+      active: true,
+      deletedAt: null,
+      role: { in: ['ADMIN', 'APPROVER'] },
+    },
+    select: { id: true },
+  })
+
+  // Create in-app notifications for all approvers
+  const notificationPromises = approvers.map((approver) =>
+    createNotification({
+      userId: approver.id,
+      type: 'po_pending',
+      title: `PO ใหม่รออนุมัติ: ${poNumber}`,
+      message: `${requesterName} ส่งใบสั่งซื้อ ${poNumber} รออนุมัติ`,
+      url: `/po/${poId}`,
+    })
+  )
+
+  // Send LINE notification
+  const linePromise = sendLinePOStatusUpdate(poId, 'รออนุมัติ')
+
+  // Execute all in parallel
+  await Promise.allSettled([...notificationPromises, linePromise])
+}
 
 /**
  * Send notifications when a PO is approved
