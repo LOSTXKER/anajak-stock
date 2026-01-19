@@ -2,13 +2,35 @@ import { Resend } from 'resend'
 
 const FROM_EMAIL = process.env.EMAIL_FROM || 'noreply@example.com'
 
+// Check if email service is configured
+export function isEmailConfigured(): boolean {
+  const apiKey = process.env.RESEND_API_KEY
+  // Check if it's a valid key (not placeholder)
+  return !!apiKey && apiKey !== 'your_resend_api_key' && apiKey.startsWith('re_')
+}
+
+// Get email configuration status for display
+export function getEmailStatus(): { 
+  configured: boolean
+  fromEmail: string
+  message: string 
+} {
+  const configured = isEmailConfigured()
+  return {
+    configured,
+    fromEmail: FROM_EMAIL,
+    message: configured 
+      ? 'Email service พร้อมใช้งาน' 
+      : 'กรุณาตั้งค่า RESEND_API_KEY ใน .env',
+  }
+}
+
 // Lazy initialization to avoid build-time errors
 function getResendClient() {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
+  if (!isEmailConfigured()) {
     return null
   }
-  return new Resend(apiKey)
+  return new Resend(process.env.RESEND_API_KEY!)
 }
 
 interface EmailOptions {
@@ -21,11 +43,25 @@ export async function sendEmail(options: EmailOptions) {
   const resend = getResendClient()
   
   if (!resend) {
-    console.warn('RESEND_API_KEY not set, skipping email')
-    return { success: false, error: 'Email service not configured' }
+    // Graceful degradation - log warning but return success with skipped flag
+    console.warn('[Email] RESEND_API_KEY not configured, email skipped:', {
+      to: Array.isArray(options.to) ? options.to.length + ' recipients' : options.to,
+      subject: options.subject,
+    })
+    return { 
+      success: true, 
+      skipped: true,
+      message: 'Email service not configured - notification skipped' 
+    }
   }
 
   try {
+    console.log('[Email] Sending email:', {
+      from: FROM_EMAIL,
+      to: Array.isArray(options.to) ? options.to.length + ' recipients' : options.to,
+      subject: options.subject,
+    })
+    
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: options.to,
@@ -34,13 +70,14 @@ export async function sendEmail(options: EmailOptions) {
     })
 
     if (error) {
-      console.error('Send email error:', error)
+      console.error('[Email] Send error:', error)
       return { success: false, error: error.message }
     }
 
+    console.log('[Email] Sent successfully:', data?.id)
     return { success: true, data }
   } catch (error) {
-    console.error('Send email exception:', error)
+    console.error('[Email] Exception:', error)
     return { success: false, error: 'Failed to send email' }
   }
 }

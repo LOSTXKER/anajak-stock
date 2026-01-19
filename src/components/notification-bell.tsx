@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Bell, BellOff, Check, X, ExternalLink, Settings } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Bell, BellOff, Check, X, ExternalLink, Settings, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -32,29 +32,54 @@ import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
 
+// Polling interval in milliseconds (15 seconds)
+const POLL_INTERVAL = 15000
+
 export function NotificationBell() {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [permissionStatus, setPermissionStatus] = useState<NotificationPermission | 'unsupported'>('default')
   const [showSettings, setShowSettings] = useState(false)
+  const originalTitle = useRef<string>('')
 
   // Load notifications
-  const loadNotifications = useCallback(async () => {
+  const loadNotifications = useCallback(async (showRefreshState = false) => {
+    if (showRefreshState) setIsRefreshing(true)
     try {
       const result = await getNotifications()
       if (result.success && result.data) {
         setNotifications(result.data)
-        setUnreadCount(result.data.filter((n) => !n.read).length)
+        const newUnreadCount = result.data.filter((n) => !n.read).length
+        setUnreadCount(newUnreadCount)
       }
     } catch (error) {
       console.error('Error loading notifications:', error)
     } finally {
       setIsLoading(false)
+      if (showRefreshState) setIsRefreshing(false)
     }
   }, [])
 
-  // Initialize
+  // Update page title with unread count
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    
+    // Store original title on first render
+    if (!originalTitle.current) {
+      originalTitle.current = document.title.replace(/^\(\d+\)\s*/, '')
+    }
+    
+    // Update title with unread count
+    if (unreadCount > 0) {
+      document.title = `(${unreadCount}) ${originalTitle.current}`
+    } else {
+      document.title = originalTitle.current
+    }
+  }, [unreadCount])
+
+  // Initialize and setup polling
   useEffect(() => {
     loadNotifications()
 
@@ -67,10 +92,28 @@ export function NotificationBell() {
       registerServiceWorker()
     }
 
-    // Poll for new notifications every 60 seconds
-    const interval = setInterval(loadNotifications, 60000)
+    // Poll for new notifications every 15 seconds
+    const interval = setInterval(() => loadNotifications(), POLL_INTERVAL)
     return () => clearInterval(interval)
   }, [loadNotifications])
+
+  // Refresh when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadNotifications()
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [loadNotifications])
+
+  // Manual refresh
+  async function handleRefresh() {
+    await loadNotifications(true)
+    toast.success('รีเฟรชการแจ้งเตือนแล้ว')
+  }
 
   async function handleEnablePush() {
     const permission = await requestNotificationPermission()
@@ -137,6 +180,15 @@ export function NotificationBell() {
                   อ่านทั้งหมด
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"

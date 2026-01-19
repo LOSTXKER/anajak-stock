@@ -35,6 +35,8 @@ import {
   TestTube,
   Link as LinkIcon,
   Eye,
+  Mail,
+  Info,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/common'
@@ -47,9 +49,17 @@ import {
   sendLineLowStockAlert,
   type LineSettings,
 } from '@/actions/line-notifications'
+import { getEmailStatus } from '@/actions/notifications'
+
+interface EmailStatus {
+  configured: boolean
+  fromEmail: string
+  message: string
+}
 
 export default function NotificationSettingsPage() {
   const [settings, setSettings] = useState<LineSettings | null>(null)
+  const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
@@ -68,6 +78,7 @@ export default function NotificationSettingsPage() {
 
   useEffect(() => {
     loadSettings()
+    loadEmailStatus()
   }, [])
 
   async function loadSettings() {
@@ -80,6 +91,13 @@ export default function NotificationSettingsPage() {
       }
     }
     setIsLoading(false)
+  }
+
+  async function loadEmailStatus() {
+    const result = await getEmailStatus()
+    if (result.success && result.data) {
+      setEmailStatus(result.data)
+    }
   }
 
   async function checkConnection(token: string) {
@@ -221,9 +239,112 @@ export default function NotificationSettingsPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <PageHeader
         title="ตั้งค่าการแจ้งเตือน"
-        description="จัดการการแจ้งเตือนผ่าน LINE Messaging API"
+        description="จัดการการแจ้งเตือนผ่าน Email และ LINE Messaging API"
         icon={<Bell className="w-6 h-6" />}
       />
+
+      {/* Notification Channels Status */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Email Status */}
+        <Card className={emailStatus?.configured ? 'border-[var(--status-success)]/30' : 'border-[var(--status-warning)]/30'}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  emailStatus?.configured 
+                    ? 'bg-[var(--status-success-light)]' 
+                    : 'bg-[var(--status-warning-light)]'
+                }`}>
+                  <Mail className={`w-5 h-5 ${
+                    emailStatus?.configured 
+                      ? 'text-[var(--status-success)]' 
+                      : 'text-[var(--status-warning)]'
+                  }`} />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Email (Resend)</CardTitle>
+                  <CardDescription className="text-xs">
+                    {emailStatus?.fromEmail || 'ไม่ได้ตั้งค่า'}
+                  </CardDescription>
+                </div>
+              </div>
+              {emailStatus?.configured ? (
+                <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)]">
+                  <Check className="w-3 h-3 mr-1" />
+                  พร้อมใช้งาน
+                </Badge>
+              ) : (
+                <Badge className="bg-[var(--status-warning-light)] text-[var(--status-warning)]">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  ไม่ได้ตั้งค่า
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          {!emailStatus?.configured && (
+            <CardContent className="pt-0">
+              <div className="flex items-start gap-2 p-3 bg-[var(--status-warning-light)]/50 rounded-lg text-sm">
+                <Info className="w-4 h-4 text-[var(--status-warning)] mt-0.5 shrink-0" />
+                <div className="text-[var(--text-muted)]">
+                  <p className="font-medium text-[var(--status-warning)]">ตั้งค่า Email ใน .env</p>
+                  <code className="text-xs">RESEND_API_KEY=re_xxxxx</code>
+                  <p className="text-xs mt-1">
+                    รับ API key ได้จาก{' '}
+                    <a href="https://resend.com" target="_blank" rel="noopener noreferrer" className="text-[var(--accent-primary)] hover:underline">
+                      resend.com
+                    </a>
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+
+        {/* LINE Status Summary */}
+        <Card className={settings?.enabled && connectionStatus === 'connected' ? 'border-[var(--status-success)]/30' : 'border-[var(--border-default)]'}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  settings?.enabled && connectionStatus === 'connected'
+                    ? 'bg-[#00B900]' 
+                    : 'bg-[var(--bg-tertiary)]'
+                }`}>
+                  <MessageSquare className={`w-5 h-5 ${
+                    settings?.enabled && connectionStatus === 'connected'
+                      ? 'text-white' 
+                      : 'text-[var(--text-muted)]'
+                  }`} />
+                </div>
+                <div>
+                  <CardTitle className="text-base">LINE Messaging</CardTitle>
+                  <CardDescription className="text-xs">
+                    {botName || 'ไม่ได้เชื่อมต่อ'}
+                  </CardDescription>
+                </div>
+              </div>
+              {settings?.enabled && connectionStatus === 'connected' ? (
+                <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)]">
+                  <Check className="w-3 h-3 mr-1" />
+                  {settings.recipientUserIds.length} ผู้รับ
+                </Badge>
+              ) : (
+                <Badge variant="secondary">
+                  <X className="w-3 h-3 mr-1" />
+                  ไม่ได้เปิดใช้
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          {(!settings?.enabled || connectionStatus !== 'connected') && (
+            <CardContent className="pt-0">
+              <p className="text-xs text-[var(--text-muted)]">
+                ตั้งค่า Channel Access Token ด้านล่าง
+              </p>
+            </CardContent>
+          )}
+        </Card>
+      </div>
 
       {/* LINE Connection Status */}
       <Card>

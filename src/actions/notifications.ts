@@ -1,11 +1,29 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { sendEmail, lowStockAlertEmail, prApprovalRequestEmail } from '@/lib/email'
+import { sendEmail, lowStockAlertEmail, prApprovalRequestEmail, getEmailStatus as getEmailStatusLib } from '@/lib/email'
 import { getSession } from '@/lib/auth'
 import type { AppNotification, NotificationType } from '@/lib/notifications'
 import type { ActionResult } from '@/types'
 import { serialize } from '@/lib/serialize'
+
+// ============================================
+// Service Status
+// ============================================
+
+export async function getEmailStatus(): Promise<ActionResult<{ 
+  configured: boolean
+  fromEmail: string
+  message: string 
+}>> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  const status = getEmailStatusLib()
+  return { success: true, data: status }
+}
 
 // ============================================
 // In-App Notifications
@@ -122,9 +140,17 @@ export async function createNotification({
       },
     })
 
+    // Log successful notification creation
+    console.log(`[Notification] Created: type=${type}, userId=${userId || 'broadcast'}, title="${title}"`)
+
     return { success: true, data: { id: notification.id } }
   } catch (error) {
-    console.error('Error creating notification:', error)
+    console.error('[Notification] Failed to create:', {
+      type,
+      userId: userId || 'broadcast',
+      title,
+      error,
+    })
     return { success: false, error: 'ไม่สามารถสร้างการแจ้งเตือนได้' }
   }
 }
@@ -154,6 +180,8 @@ export async function cleanupOldNotifications(daysOld: number = 30): Promise<Act
 // ============================================
 
 export async function sendLowStockAlert() {
+  console.log('[Email] Starting low stock alert...')
+  
   // Find admins and approvers to notify
   const recipients = await prisma.user.findMany({
     where: {
@@ -166,6 +194,7 @@ export async function sendLowStockAlert() {
   })
 
   if (recipients.length === 0) {
+    console.log('[Email] Low stock alert: No recipients found')
     return { success: false, error: 'No recipients found' }
   }
 
@@ -193,22 +222,33 @@ export async function sendLowStockAlert() {
     }))
 
   if (criticalItems.length === 0) {
+    console.log('[Email] Low stock alert: No items below reorder point')
     return { success: true, message: 'No low stock items' }
   }
 
   const emails = recipients.map((r) => r.email).filter((e): e is string => e !== null)
   const html = lowStockAlertEmail(criticalItems)
 
+  console.log(`[Email] Sending low stock alert to ${emails.length} recipients for ${criticalItems.length} items`)
+  
   const result = await sendEmail({
     to: emails,
     subject: `[แจ้งเตือน] สินค้าใกล้หมด ${criticalItems.length} รายการ`,
     html,
   })
 
+  if (result.success) {
+    console.log('[Email] Low stock alert sent successfully')
+  } else {
+    console.error('[Email] Low stock alert failed:', result.error)
+  }
+
   return result
 }
 
 export async function sendPRApprovalRequest(prId: string) {
+  console.log(`[Email] Starting PR approval request for prId=${prId}`)
+  
   const pr = await prisma.pR.findUnique({
     where: { id: prId },
     include: {
@@ -218,6 +258,7 @@ export async function sendPRApprovalRequest(prId: string) {
   })
 
   if (!pr) {
+    console.error(`[Email] PR approval request failed: PR not found (prId=${prId})`)
     return { success: false, error: 'PR not found' }
   }
 
@@ -233,6 +274,7 @@ export async function sendPRApprovalRequest(prId: string) {
   })
 
   if (approvers.length === 0) {
+    console.log(`[Email] PR approval request: No approvers with email found`)
     return { success: false, error: 'No approvers found' }
   }
 
@@ -246,16 +288,26 @@ export async function sendPRApprovalRequest(prId: string) {
 
   const emails = approvers.map((a) => a.email).filter((e): e is string => e !== null)
 
+  console.log(`[Email] Sending PR approval request for ${pr.prNumber} to ${emails.length} approvers`)
+  
   const result = await sendEmail({
     to: emails,
     subject: `[รออนุมัติ] ใบขอซื้อ ${pr.prNumber}`,
     html,
   })
 
+  if (result.success) {
+    console.log(`[Email] PR approval request sent successfully for ${pr.prNumber}`)
+  } else {
+    console.error(`[Email] PR approval request failed for ${pr.prNumber}:`, result.error)
+  }
+
   return result
 }
 
 export async function sendPOApprovalNotification(poId: string) {
+  console.log(`[Email] Starting PO approval notification for poId=${poId}`)
+  
   const po = await prisma.pO.findUnique({
     where: { id: poId },
     include: {
@@ -265,10 +317,12 @@ export async function sendPOApprovalNotification(poId: string) {
   })
 
   if (!po) {
+    console.error(`[Email] PO approval notification failed: PO not found (poId=${poId})`)
     return { success: false, error: 'PO not found' }
   }
 
   if (!po.createdBy.email) {
+    console.log(`[Email] PO approval notification: Creator has no email (${po.poNumber})`)
     return { success: false, error: 'No creator email' }
   }
 
@@ -279,11 +333,19 @@ export async function sendPOApprovalNotification(poId: string) {
     total: Number(po.total),
   })
 
+  console.log(`[Email] Sending PO approval notification for ${po.poNumber} to ${po.createdBy.email}`)
+  
   const result = await sendEmail({
     to: po.createdBy.email,
     subject: `[อนุมัติแล้ว] ใบสั่งซื้อ ${po.poNumber}`,
     html,
   })
+
+  if (result.success) {
+    console.log(`[Email] PO approval notification sent successfully for ${po.poNumber}`)
+  } else {
+    console.error(`[Email] PO approval notification failed for ${po.poNumber}:`, result.error)
+  }
 
   return result
 }
