@@ -37,7 +37,7 @@ interface PO {
   id: string
   poNumber: string
   status: POStatus
-  totalAmount: number
+  total: number | null
   createdAt: Date
   eta: Date | null
   supplier: { id: string; name: string; code: string } | null
@@ -143,7 +143,7 @@ export function POList() {
                       {po.supplier?.name || '-'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ฿{Number(po.totalAmount).toLocaleString()}
+                      ฿{Number(po.total || 0).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge className={statusConfig[po.status].color}>

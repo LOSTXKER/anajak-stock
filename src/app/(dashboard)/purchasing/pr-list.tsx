@@ -29,15 +29,20 @@ const statusConfig: Record<PRStatus, { label: string; color: string }> = {
   CANCELLED: { label: 'ยกเลิก', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
 }
 
+interface PRLine {
+  qty: number
+  product: { standardCost: number | null }
+}
+
 interface PR {
   id: string
   prNumber: string
   title: string | null
   status: PRStatus
-  totalAmount: number
   createdAt: Date
   requiredDate: Date | null
   requestedBy: { id: string; name: string | null; username: string } | null
+  lines: PRLine[]
   _count: { lines: number }
 }
 
@@ -143,7 +148,7 @@ export function PRList() {
                       {pr.requestedBy?.name || pr.requestedBy?.username || '-'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ฿{Number(pr.totalAmount).toLocaleString()}
+                      ฿{pr.lines?.reduce((sum, line) => sum + Number(line.qty) * Number(line.product?.standardCost || 0), 0).toLocaleString() || '0'}
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge className={statusConfig[pr.status].color}>

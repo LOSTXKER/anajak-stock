@@ -160,7 +160,7 @@ async function POContent({ searchParams }: PageProps) {
                         {po.lines.length} รายการ
                       </TableCell>
                       <TableCell className="text-right font-mono text-[var(--text-primary)]">
-                        ฿{Number(po.total).toLocaleString()}
+                        ฿{Number(po.total || 0).toLocaleString()}
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] text-sm">
                         {po.eta
