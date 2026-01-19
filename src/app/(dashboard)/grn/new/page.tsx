@@ -264,7 +264,7 @@ export default function NewGRNPage() {
   const totalToReceive = lines.reduce((sum, line) => sum + line.qtyToReceive, 0)
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>

@@ -139,7 +139,7 @@ async function ProductDetail({ id }: { id: string }) {
   const isBelowReorderPoint = totalStock <= Number(product.reorderPoint) && Number(product.reorderPoint) > 0
 
   return (
-    <div className="space-y-4 md:space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-2 md:gap-4 flex-1 min-w-0">

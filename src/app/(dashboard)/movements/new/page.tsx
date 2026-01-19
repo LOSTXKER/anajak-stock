@@ -463,7 +463,7 @@ export default function NewMovementPage(props: PageProps) {
   const currentType = typeConfig[type]
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>

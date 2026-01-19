@@ -236,7 +236,7 @@ export default function NotificationSettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6">
       <PageHeader
         title="ตั้งค่าการแจ้งเตือน"
         description="จัดการการแจ้งเตือนผ่าน Email และ LINE Messaging API"

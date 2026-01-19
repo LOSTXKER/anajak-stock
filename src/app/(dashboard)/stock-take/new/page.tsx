@@ -73,7 +73,7 @@ export default function NewStockTakePage() {
   const selectedWh = warehouses.find(w => w.id === selectedWarehouse)
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>

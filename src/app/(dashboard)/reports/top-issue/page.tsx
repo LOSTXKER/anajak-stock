@@ -80,7 +80,7 @@ export default function TopIssuePage() {
   const totalIssued = data.reduce((sum, item) => sum + item.totalQty, 0)
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <PageHeader

@@ -312,7 +312,7 @@ export default function HelpPage() {
   )
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
+    <div className="space-y-8">
       {/* Header */}
       <div className="text-center space-y-4">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--accent-light)] text-[var(--accent-primary)]">

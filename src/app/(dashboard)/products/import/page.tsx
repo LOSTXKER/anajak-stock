@@ -278,7 +278,7 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/products">
