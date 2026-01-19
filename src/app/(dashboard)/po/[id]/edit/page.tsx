@@ -25,21 +25,43 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Save, Package, ListPlus } from 'lucide-react'
-import { BulkAddModal, BulkAddResult } from '@/components/bulk-add-modal'
+import { BulkAddModal, BulkAddResult, BulkAddVariant } from '@/components/bulk-add-modal'
 import { getPO, updatePO } from '@/actions/po'
 import { getProducts } from '@/actions/products'
 import { toast } from 'sonner'
 import type { ProductWithRelations } from '@/types'
 import { PageHeader } from '@/components/common'
+import { CascadingVariantPicker } from '@/components/variants'
 
 interface PageProps {
   params: Promise<{ id: string }>
 }
 
+interface VariantOption {
+  optionName: string
+  value: string
+}
+
+interface Variant {
+  id: string
+  sku: string
+  name: string | null
+  options: VariantOption[]
+  stock?: number
+  costPrice?: number
+}
+
+interface ProductWithVariants extends ProductWithRelations {
+  hasVariants: boolean
+  variants?: Variant[]
+}
+
 interface POLine {
   id: string
   productId: string
+  variantId?: string
   productName?: string
+  variantLabel?: string
   qty: number
   unitPrice: number
   note?: string
@@ -60,8 +82,10 @@ export default function EditPOPage(props: PageProps) {
   const [vatRate, setVatRate] = useState(7)
   const [lines, setLines] = useState<POLine[]>([])
   
-  const [products, setProducts] = useState<ProductWithRelations[]>([])
+  const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [showBulkAddModal, setShowBulkAddModal] = useState(false)
+  const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
+  const [loadedVariants, setLoadedVariants] = useState<Record<string, Variant[]>>({})
 
   useEffect(() => {
     async function loadData() {
@@ -92,16 +116,36 @@ export default function EditPOPage(props: PageProps) {
         setNote(po.note || '')
         setVatType(po.vatType || 'NO_VAT')
         setVatRate(Number(po.vatRate) || 7)
-        setLines(po.lines.map(line => ({
-          id: line.id,
-          productId: line.productId,
-          productName: line.product.name,
-          qty: Number(line.qty),
-          unitPrice: Number(line.unitPrice),
-          note: line.note || undefined,
-        })))
+        
+        // Build variant label from existing data
+        setLines(po.lines.map(line => {
+          // Build variant label from optionValues if variant exists
+          let variantLabel: string | undefined
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const lineWithVariant = line as any
+          if (lineWithVariant.variant?.optionValues) {
+            variantLabel = lineWithVariant.variant.optionValues
+              .map((ov: { optionValue: { value: string } }) => ov.optionValue.value)
+              .join(' / ')
+          }
+          
+          return {
+            id: line.id,
+            productId: line.productId,
+            variantId: lineWithVariant.variantId || undefined,
+            productName: line.product.name,
+            variantLabel,
+            qty: Number(line.qty),
+            unitPrice: Number(line.unitPrice),
+            note: line.note || undefined,
+          }
+        }))
 
-        setProducts(productsResult.items)
+        setProducts(productsResult.items.map(p => ({
+          ...p,
+          hasVariants: p.hasVariants || false,
+          variants: undefined,
+        })))
       } catch (error) {
         console.error('Error loading data:', error)
         toast.error('เกิดข้อผิดพลาดในการโหลดข้อมูล')
@@ -111,6 +155,93 @@ export default function EditPOPage(props: PageProps) {
     }
     loadData()
   }, [params.id, router])
+
+  // Load variants for a product
+  const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
+    // Check if already loaded (including empty result)
+    if (productId in loadedVariants) {
+      return loadedVariants[productId]
+    }
+    
+    setLoadingVariantFor(productId)
+    try {
+      const response = await fetch(`/api/products/${productId}/variants`)
+      if (response.ok) {
+        const data = await response.json()
+        const variants: Variant[] = data.map((v: { 
+          id: string
+          sku: string
+          name: string | null
+          costPrice?: number
+          optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+          stockBalances?: { qtyOnHand: number }[]
+        }) => ({
+          id: v.id,
+          sku: v.sku,
+          name: v.name,
+          options: v.optionValues?.map((ov) => ({
+            optionName: ov.optionValue.optionType.name,
+            value: ov.optionValue.value,
+          })) || [],
+          stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+        }))
+        
+        // Store in loadedVariants state
+        setLoadedVariants(prev => ({ ...prev, [productId]: variants }))
+        
+        return variants
+      }
+    } catch (error) {
+      console.error('Failed to load variants:', error)
+    } finally {
+      setLoadingVariantFor(null)
+    }
+    return []
+  }
+
+  // Load variants for bulk add modal
+  const loadVariantsForBulkAdd = async (productId: string): Promise<BulkAddVariant[]> => {
+    try {
+      const response = await fetch(`/api/products/${productId}/variants`)
+      if (response.ok) {
+        const variants = await response.json()
+        return variants.map((v: { 
+          id: string
+          sku: string
+          name: string | null
+          costPrice?: number
+          optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+          stockBalances?: { qtyOnHand: number }[]
+        }) => ({
+          id: v.id,
+          sku: v.sku,
+          name: v.name,
+          options: v.optionValues?.map((ov) => ({
+            optionName: ov.optionValue.optionType.name,
+            value: ov.optionValue.value,
+          })) || [],
+          stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to load variants:', error)
+    }
+    return []
+  }
+
+  // Convert BulkAddVariant to Variant format
+  function convertBulkAddVariants(variants: BulkAddVariant[]): Variant[] {
+    return variants.map(v => ({
+      id: v.id,
+      sku: v.sku,
+      name: v.name,
+      options: v.options || [],
+      stock: v.stock || 0,
+      costPrice: v.costPrice,
+    }))
+  }
 
   function addLine() {
     setLines([
@@ -136,30 +267,60 @@ export default function EditPOPage(props: PageProps) {
     )
   }
 
-  function handleProductChange(lineId: string, productId: string) {
+  async function handleProductChange(lineId: string, productId: string) {
     const product = products.find((p) => p.id === productId)
     if (!product) return
 
-    updateLine(lineId, {
+    const updates: Partial<POLine> = {
       productId,
       productName: product.name,
       unitPrice: Number(product.lastCost || product.standardCost || 0),
-    })
+      variantId: undefined,
+      variantLabel: undefined,
+    }
+
+    updateLine(lineId, updates)
+
+    // Load variants if needed
+    if (product.hasVariants) {
+      await loadVariantsForProduct(productId)
+    }
   }
 
-  // Bulk add handler - receives result from modal
+  function getProductVariants(productId: string): Variant[] {
+    // Check if loaded in loadedVariants state
+    if (productId in loadedVariants) {
+      return loadedVariants[productId]
+    }
+    // Fallback to products state
+    const product = products.find(p => p.id === productId)
+    return product?.variants || []
+  }
+
+  // Bulk add handler - receives result from modal with selections and loaded variants
   function handleBulkAdd(result: BulkAddResult) {
-    const { selections } = result
+    const { selections, loadedVariants: modalVariants } = result
+    
     const newLines: POLine[] = selections.map(sel => ({
       id: `new-${Math.random().toString(36).substr(2, 9)}`,
       productId: sel.productId,
+      variantId: sel.variantId,
       productName: sel.productName,
+      variantLabel: sel.variantLabel,
       qty: 1,
       unitPrice: sel.unitCost,
     }))
     
     setLines(prev => [...prev, ...newLines])
     setShowBulkAddModal(false)
+    
+    // Store loaded variants from modal into page state
+    const convertedVariants: Record<string, Variant[]> = {}
+    for (const [productId, variants] of Object.entries(modalVariants)) {
+      convertedVariants[productId] = convertBulkAddVariants(variants)
+    }
+    setLoadedVariants(prev => ({ ...prev, ...convertedVariants }))
+    
     toast.success(`เพิ่ม ${newLines.length} รายการ`)
   }
 
@@ -183,6 +344,12 @@ export default function EditPOPage(props: PageProps) {
         toast.error('กรุณาเลือกสินค้าทุกรายการ')
         return
       }
+      // Validate variant selection for products with variants
+      const product = products.find(p => p.id === line.productId)
+      if (product?.hasVariants && !line.variantId) {
+        toast.error(`กรุณาเลือกตัวเลือก (สี/ไซส์) สำหรับ "${product.name}"`)
+        return
+      }
       if (line.qty <= 0) {
         toast.error('จำนวนต้องมากกว่า 0')
         return
@@ -200,6 +367,7 @@ export default function EditPOPage(props: PageProps) {
       lines: lines.map((line) => ({
         id: line.id.startsWith('new-') ? undefined : line.id,
         productId: line.productId,
+        variantId: line.variantId,
         qty: line.qty,
         unitPrice: line.unitPrice,
         note: line.note,
@@ -340,7 +508,8 @@ export default function EditPOPage(props: PageProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[300px]">สินค้า</TableHead>
+                    <TableHead className="min-w-[200px]">สินค้า</TableHead>
+                    <TableHead className="min-w-[200px]">ตัวเลือก (สี/ไซส์)</TableHead>
                     <TableHead className="w-24">จำนวน</TableHead>
                     <TableHead className="w-32">ราคา/หน่วย</TableHead>
                     <TableHead className="w-32">รวม</TableHead>
@@ -350,7 +519,7 @@ export default function EditPOPage(props: PageProps) {
                 <TableBody>
                   {lines.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-12">
+                      <TableCell colSpan={6} className="text-center py-12">
                         <div className="flex flex-col items-center gap-2 text-[var(--text-muted)]">
                           <Package className="w-10 h-10 opacity-50" />
                           <p>ยังไม่มีรายการ</p>
@@ -359,72 +528,127 @@ export default function EditPOPage(props: PageProps) {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    lines.map((line) => (
-                      <TableRow key={line.id}>
-                        <TableCell>
-                          <Select
-                            value={line.productId}
-                            onValueChange={(v) => handleProductChange(line.id, v)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="เลือกสินค้า" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-60">
-                              {products.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono text-xs text-[var(--text-muted)]">{product.sku}</span>
-                                    <span>{product.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="1"
-                            value={line.qty}
-                            onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
-                            className="w-20"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            <span className="text-[var(--text-muted)] bg-[var(--bg-secondary)] border border-r-0 border-[var(--border-default)] rounded-l px-2 py-1.5 text-sm">฿</span>
+                    lines.map((line) => {
+                      const product = products.find(p => p.id === line.productId)
+                      const variants = getProductVariants(line.productId)
+                      const showVariantSelect = product?.hasVariants
+
+                      return (
+                        <TableRow key={line.id}>
+                          <TableCell>
+                            <Select
+                              value={line.productId}
+                              onValueChange={(v) => handleProductChange(line.id, v)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="เลือกสินค้า" />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {products.map((product) => (
+                                  <SelectItem key={product.id} value={product.id}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-xs text-[var(--text-muted)]">{product.sku}</span>
+                                      <span>{product.name}</span>
+                                      {product.hasVariants && (
+                                        <Badge variant="secondary" className="text-xs">Variants</Badge>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            {showVariantSelect ? (
+                              loadingVariantFor === line.productId ? (
+                                <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  กำลังโหลดตัวเลือก...
+                                </div>
+                              ) : variants.length === 0 && !line.variantId ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => loadVariantsForProduct(line.productId)}
+                                >
+                                  โหลดตัวเลือก
+                                </Button>
+                              ) : variants.length === 0 && line.variantId ? (
+                                <div className="text-sm">
+                                  {line.variantLabel || 'กำลังโหลด...'}
+                                </div>
+                              ) : (
+                                <CascadingVariantPicker
+                                  variants={variants}
+                                  selectedVariantId={line.variantId}
+                                  onSelect={(variant) => {
+                                    if (variant) {
+                                      updateLine(line.id, {
+                                        variantId: variant.id,
+                                        variantLabel: variant.options.map(o => o.value).join(' / '),
+                                        unitPrice: variant.costPrice || line.unitPrice,
+                                      })
+                                    } else {
+                                      updateLine(line.id, {
+                                        variantId: undefined,
+                                        variantLabel: undefined,
+                                      })
+                                    }
+                                  }}
+                                  showStock={true}
+                                  placeholder="เลือก สี/ไซส์"
+                                />
+                              )
+                            ) : (
+                              <div className="text-[var(--text-muted)] text-sm">-</div>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             <Input
                               type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.unitPrice}
-                              onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value) })}
-                              className="w-24 rounded-l-none"
+                              min="1"
+                              value={line.qty}
+                              onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
+                              className="w-20"
                             />
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-right">
-                          ฿{(line.qty * line.unitPrice).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeLine(line.id)}
-                            className="text-[var(--status-error)] hover:text-[var(--status-error)] hover:bg-[var(--status-error-light)]"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center">
+                              <span className="text-[var(--text-muted)] bg-[var(--bg-secondary)] border border-r-0 border-[var(--border-default)] rounded-l px-2 py-1.5 text-sm">฿</span>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={line.unitPrice}
+                                onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value) })}
+                                className="w-24 rounded-l-none"
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-mono text-right">
+                            ฿{(line.qty * line.unitPrice).toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeLine(line.id)}
+                              className="text-[var(--status-error)] hover:text-[var(--status-error)] hover:bg-[var(--status-error-light)]"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
                   )}
                   {/* Totals */}
                   {lines.length > 0 && (
                     <>
                       <TableRow className="bg-[var(--bg-secondary)]">
-                        <TableCell colSpan={3} className="text-right font-medium">
+                        <TableCell colSpan={4} className="text-right font-medium">
                           ยอดรวม
                         </TableCell>
                         <TableCell className="font-mono text-right">
@@ -434,7 +658,7 @@ export default function EditPOPage(props: PageProps) {
                       </TableRow>
                       {vatType !== 'NO_VAT' && (
                         <TableRow className="bg-[var(--bg-secondary)]">
-                          <TableCell colSpan={3} className="text-right font-medium">
+                          <TableCell colSpan={4} className="text-right font-medium">
                             VAT {vatRate}%
                           </TableCell>
                           <TableCell className="font-mono text-right">
@@ -444,7 +668,7 @@ export default function EditPOPage(props: PageProps) {
                         </TableRow>
                       )}
                       <TableRow className="bg-[var(--bg-secondary)]">
-                        <TableCell colSpan={3} className="text-right font-bold">
+                        <TableCell colSpan={4} className="text-right font-bold">
                           รวมทั้งสิ้น
                         </TableCell>
                         <TableCell className="font-mono text-right font-bold text-[var(--accent-primary)] text-lg">
@@ -480,9 +704,11 @@ export default function EditPOPage(props: PageProps) {
         open={showBulkAddModal}
         onOpenChange={setShowBulkAddModal}
         products={products}
-        existingProductIds={new Set(lines.map(l => l.productId))}
+        existingProductIds={new Set(lines.filter(l => !l.variantId).map(l => l.productId))}
+        existingVariantIds={new Set(lines.filter(l => l.variantId).map(l => l.variantId!))}
         onConfirm={handleBulkAdd}
-        showVariants={false}
+        loadVariants={loadVariantsForBulkAdd}
+        showVariants={true}
       />
     </div>
   )

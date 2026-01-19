@@ -62,11 +62,26 @@ export async function getPOs(params: {
           select: {
             id: true,
             productId: true,
+            variantId: true,
             qty: true,
             qtyReceived: true,
             unitPrice: true,
             product: {
-              select: { id: true, name: true, sku: true },
+              select: { id: true, name: true, sku: true, hasVariants: true },
+            },
+            variant: {
+              select: { 
+                id: true, 
+                name: true, 
+                sku: true,
+                optionValues: {
+                  include: {
+                    optionValue: {
+                      include: { optionType: true }
+                    }
+                  }
+                }
+              },
             },
           },
         },
@@ -104,6 +119,17 @@ export async function getPO(id: string): Promise<POWithRelations | null> {
       lines: {
         include: {
           product: true,
+          variant: {
+            include: {
+              optionValues: {
+                include: {
+                  optionValue: {
+                    include: { optionType: true }
+                  }
+                }
+              }
+            }
+          },
           grnLines: true,
         },
       },
@@ -156,6 +182,7 @@ export async function createPO(data: CreatePOInput): Promise<ActionResult<POWith
         lines: {
           create: data.lines.map((line) => ({
             productId: line.productId,
+            variantId: line.variantId,
             qty: line.qty,
             unitPrice: line.unitPrice,
             note: line.note,
@@ -174,7 +201,10 @@ export async function createPO(data: CreatePOInput): Promise<ActionResult<POWith
         createdBy: { select: userSelect },
         approvedBy: { select: userSelect },
         lines: {
-          include: { product: true },
+          include: { 
+            product: true,
+            variant: true,
+          },
         },
       },
     })
@@ -209,6 +239,7 @@ export async function createPO(data: CreatePOInput): Promise<ActionResult<POWith
 interface UpdatePOLineInput {
   id?: string
   productId: string
+  variantId?: string
   qty: number
   unitPrice: number
   note?: string
@@ -271,6 +302,7 @@ export async function updatePO(id: string, data: UpdatePOInput): Promise<ActionR
         lines: {
           create: data.lines.map((line) => ({
             productId: line.productId,
+            variantId: line.variantId,
             qty: line.qty,
             unitPrice: line.unitPrice,
             note: line.note,

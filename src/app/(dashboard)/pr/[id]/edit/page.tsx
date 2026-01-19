@@ -25,31 +25,52 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { FileText, ArrowLeft, Loader2, Plus, Trash2, Save, Package, ListPlus } from 'lucide-react'
-import { BulkAddModal, BulkAddResult } from '@/components/bulk-add-modal'
+import { BulkAddModal, BulkAddResult, BulkAddVariant } from '@/components/bulk-add-modal'
 import { getPR, updatePR } from '@/actions/pr'
 import { getProducts } from '@/actions/products'
 import { toast } from 'sonner'
 import type { ProductWithRelations } from '@/types'
 import { PageHeader } from '@/components/common'
+import { CascadingVariantPicker } from '@/components/variants'
 
 interface PageProps {
   params: Promise<{ id: string }>
 }
 
+interface VariantOption {
+  optionName: string
+  value: string
+}
+
+interface Variant {
+  id: string
+  sku: string
+  name: string | null
+  options: VariantOption[]
+  stock?: number
+  costPrice?: number
+}
+
+interface ProductWithVariants extends ProductWithRelations {
+  hasVariants: boolean
+  variants?: Variant[]
+}
+
 interface PRLine {
   id: string
   productId: string
+  variantId?: string
   productName?: string
+  variantLabel?: string
   qty: number
   note?: string
 }
 
 const priorityOptions = [
-  { value: 'LOW', label: 'ต่ำ' },
-  { value: 'NORMAL', label: 'ปกติ' },
-  { value: 'MEDIUM', label: 'ปานกลาง' },
-  { value: 'HIGH', label: 'สูง' },
-  { value: 'URGENT', label: 'เร่งด่วน' },
+  { value: 'LOW', label: 'ต่ำ', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
+  { value: 'NORMAL', label: 'ปกติ', color: 'bg-[var(--status-info-light)] text-[var(--status-info)]' },
+  { value: 'HIGH', label: 'สูง', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
+  { value: 'URGENT', label: 'เร่งด่วน', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
 ]
 
 export default function EditPRPage(props: PageProps) {
@@ -64,8 +85,10 @@ export default function EditPRPage(props: PageProps) {
   const [priority, setPriority] = useState('NORMAL')
   const [lines, setLines] = useState<PRLine[]>([])
   
-  const [products, setProducts] = useState<ProductWithRelations[]>([])
+  const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [showBulkAddModal, setShowBulkAddModal] = useState(false)
+  const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
+  const [loadedVariants, setLoadedVariants] = useState<Record<string, Variant[]>>({})
 
   useEffect(() => {
     async function loadData() {
@@ -93,15 +116,35 @@ export default function EditPRPage(props: PageProps) {
         setNeedByDate(pr.needByDate ? new Date(pr.needByDate).toISOString().split('T')[0] : '')
         setNote(pr.note || '')
         setPriority(pr.priority || 'NORMAL')
-        setLines(pr.lines.map(line => ({
-          id: line.id,
-          productId: line.productId,
-          productName: line.product.name,
-          qty: Number(line.qty),
-          note: line.note || undefined,
-        })))
+        
+        // Build variant label from existing data
+        setLines(pr.lines.map(line => {
+          // Build variant label from optionValues if variant exists
+          let variantLabel: string | undefined
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const lineWithVariant = line as any
+          if (lineWithVariant.variant?.optionValues) {
+            variantLabel = lineWithVariant.variant.optionValues
+              .map((ov: { optionValue: { value: string } }) => ov.optionValue.value)
+              .join(' / ')
+          }
+          
+          return {
+            id: line.id,
+            productId: line.productId,
+            variantId: lineWithVariant.variantId || undefined,
+            productName: line.product.name,
+            variantLabel,
+            qty: Number(line.qty),
+            note: line.note || undefined,
+          }
+        }))
 
-        setProducts(productsResult.items)
+        setProducts(productsResult.items.map(p => ({
+          ...p,
+          hasVariants: p.hasVariants || false,
+          variants: undefined,
+        })))
       } catch (error) {
         console.error('Error loading data:', error)
         toast.error('เกิดข้อผิดพลาดในการโหลดข้อมูล')
@@ -111,6 +154,93 @@ export default function EditPRPage(props: PageProps) {
     }
     loadData()
   }, [params.id, router])
+
+  // Load variants for a product
+  const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
+    // Check if already loaded (including empty result)
+    if (productId in loadedVariants) {
+      return loadedVariants[productId]
+    }
+    
+    setLoadingVariantFor(productId)
+    try {
+      const response = await fetch(`/api/products/${productId}/variants`)
+      if (response.ok) {
+        const data = await response.json()
+        const variants: Variant[] = data.map((v: { 
+          id: string
+          sku: string
+          name: string | null
+          costPrice?: number
+          optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+          stockBalances?: { qtyOnHand: number }[]
+        }) => ({
+          id: v.id,
+          sku: v.sku,
+          name: v.name,
+          options: v.optionValues?.map((ov) => ({
+            optionName: ov.optionValue.optionType.name,
+            value: ov.optionValue.value,
+          })) || [],
+          stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+        }))
+        
+        // Store in loadedVariants state
+        setLoadedVariants(prev => ({ ...prev, [productId]: variants }))
+        
+        return variants
+      }
+    } catch (error) {
+      console.error('Failed to load variants:', error)
+    } finally {
+      setLoadingVariantFor(null)
+    }
+    return []
+  }
+
+  // Load variants for bulk add modal
+  const loadVariantsForBulkAdd = async (productId: string): Promise<BulkAddVariant[]> => {
+    try {
+      const response = await fetch(`/api/products/${productId}/variants`)
+      if (response.ok) {
+        const variants = await response.json()
+        return variants.map((v: { 
+          id: string
+          sku: string
+          name: string | null
+          costPrice?: number
+          optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+          stockBalances?: { qtyOnHand: number }[]
+        }) => ({
+          id: v.id,
+          sku: v.sku,
+          name: v.name,
+          options: v.optionValues?.map((ov) => ({
+            optionName: ov.optionValue.optionType.name,
+            value: ov.optionValue.value,
+          })) || [],
+          stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to load variants:', error)
+    }
+    return []
+  }
+
+  // Convert BulkAddVariant to Variant format
+  function convertBulkAddVariants(variants: BulkAddVariant[]): Variant[] {
+    return variants.map(v => ({
+      id: v.id,
+      sku: v.sku,
+      name: v.name,
+      options: v.options || [],
+      stock: v.stock || 0,
+      costPrice: v.costPrice,
+    }))
+  }
 
   function addLine() {
     setLines([
@@ -135,28 +265,58 @@ export default function EditPRPage(props: PageProps) {
     )
   }
 
-  function handleProductChange(lineId: string, productId: string) {
+  async function handleProductChange(lineId: string, productId: string) {
     const product = products.find((p) => p.id === productId)
     if (!product) return
 
-    updateLine(lineId, {
+    const updates: Partial<PRLine> = {
       productId,
       productName: product.name,
-    })
+      variantId: undefined,
+      variantLabel: undefined,
+    }
+
+    updateLine(lineId, updates)
+
+    // Load variants if needed
+    if (product.hasVariants) {
+      await loadVariantsForProduct(productId)
+    }
   }
 
-  // Bulk add handler - receives result from modal
+  function getProductVariants(productId: string): Variant[] {
+    // Check if loaded in loadedVariants state
+    if (productId in loadedVariants) {
+      return loadedVariants[productId]
+    }
+    // Fallback to products state
+    const product = products.find(p => p.id === productId)
+    return product?.variants || []
+  }
+
+  // Bulk add handler - receives result from modal with selections and loaded variants
   function handleBulkAdd(result: BulkAddResult) {
-    const { selections } = result
+    const { selections, loadedVariants: modalVariants } = result
+    
     const newLines: PRLine[] = selections.map(sel => ({
       id: `new-${Math.random().toString(36).substr(2, 9)}`,
       productId: sel.productId,
+      variantId: sel.variantId,
       productName: sel.productName,
+      variantLabel: sel.variantLabel,
       qty: 1,
     }))
     
     setLines(prev => [...prev, ...newLines])
     setShowBulkAddModal(false)
+    
+    // Store loaded variants from modal into page state
+    const convertedVariants: Record<string, Variant[]> = {}
+    for (const [productId, variants] of Object.entries(modalVariants)) {
+      convertedVariants[productId] = convertBulkAddVariants(variants)
+    }
+    setLoadedVariants(prev => ({ ...prev, ...convertedVariants }))
+    
     toast.success(`เพิ่ม ${newLines.length} รายการ`)
   }
 
@@ -171,6 +331,12 @@ export default function EditPRPage(props: PageProps) {
     for (const line of lines) {
       if (!line.productId) {
         toast.error('กรุณาเลือกสินค้าทุกรายการ')
+        return
+      }
+      // Validate variant selection for products with variants
+      const product = products.find(p => p.id === line.productId)
+      if (product?.hasVariants && !line.variantId) {
+        toast.error(`กรุณาเลือกตัวเลือก (สี/ไซส์) สำหรับ "${product.name}"`)
         return
       }
       if (line.qty <= 0) {
@@ -188,6 +354,7 @@ export default function EditPRPage(props: PageProps) {
       lines: lines.map((line) => ({
         id: line.id.startsWith('new-') ? undefined : line.id,
         productId: line.productId,
+        variantId: line.variantId,
         qty: line.qty,
         note: line.note,
       })),
@@ -202,6 +369,8 @@ export default function EditPRPage(props: PageProps) {
       toast.error(result.error)
     }
   }
+
+  const selectedPriority = priorityOptions.find(p => p.value === priority)
 
   if (isLoadingData) {
     return (
@@ -247,12 +416,18 @@ export default function EditPRPage(props: PageProps) {
                 <Label>ความสำคัญ</Label>
                 <Select value={priority} onValueChange={setPriority}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue>
+                      {selectedPriority && (
+                        <div className="flex items-center gap-2">
+                          <Badge className={selectedPriority.color}>{selectedPriority.label}</Badge>
+                        </div>
+                      )}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {priorityOptions.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
+                        <Badge className={opt.color}>{opt.label}</Badge>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -308,16 +483,17 @@ export default function EditPRPage(props: PageProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[300px]">สินค้า</TableHead>
+                    <TableHead className="min-w-[200px]">สินค้า</TableHead>
+                    <TableHead className="min-w-[200px]">ตัวเลือก (สี/ไซส์)</TableHead>
                     <TableHead className="w-32">จำนวน</TableHead>
-                    <TableHead className="min-w-[200px]">หมายเหตุ</TableHead>
+                    <TableHead className="min-w-[150px]">หมายเหตุ</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {lines.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-12">
+                      <TableCell colSpan={5} className="text-center py-12">
                         <div className="flex flex-col items-center gap-2 text-[var(--text-muted)]">
                           <Package className="w-10 h-10 opacity-50" />
                           <p>ยังไม่มีรายการ</p>
@@ -326,57 +502,111 @@ export default function EditPRPage(props: PageProps) {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    lines.map((line) => (
-                      <TableRow key={line.id}>
-                        <TableCell>
-                          <Select
-                            value={line.productId}
-                            onValueChange={(v) => handleProductChange(line.id, v)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="เลือกสินค้า" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-60">
-                              {products.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono text-xs text-[var(--text-muted)]">{product.sku}</span>
-                                    <span>{product.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="1"
-                            value={line.qty}
-                            onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
-                            className="w-24"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={line.note || ''}
-                            onChange={(e) => updateLine(line.id, { note: e.target.value })}
-                            placeholder="หมายเหตุ"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeLine(line.id)}
-                            className="text-[var(--status-error)] hover:text-[var(--status-error)] hover:bg-[var(--status-error-light)]"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    lines.map((line) => {
+                      const product = products.find(p => p.id === line.productId)
+                      const variants = getProductVariants(line.productId)
+                      const showVariantSelect = product?.hasVariants
+
+                      return (
+                        <TableRow key={line.id}>
+                          <TableCell>
+                            <Select
+                              value={line.productId}
+                              onValueChange={(v) => handleProductChange(line.id, v)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="เลือกสินค้า" />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {products.map((product) => (
+                                  <SelectItem key={product.id} value={product.id}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-xs text-[var(--text-muted)]">{product.sku}</span>
+                                      <span>{product.name}</span>
+                                      {product.hasVariants && (
+                                        <Badge variant="secondary" className="text-xs">Variants</Badge>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            {showVariantSelect ? (
+                              loadingVariantFor === line.productId ? (
+                                <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  กำลังโหลดตัวเลือก...
+                                </div>
+                              ) : variants.length === 0 && !line.variantId ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => loadVariantsForProduct(line.productId)}
+                                >
+                                  โหลดตัวเลือก
+                                </Button>
+                              ) : variants.length === 0 && line.variantId ? (
+                                <div className="text-sm">
+                                  {line.variantLabel || 'กำลังโหลด...'}
+                                </div>
+                              ) : (
+                                <CascadingVariantPicker
+                                  variants={variants}
+                                  selectedVariantId={line.variantId}
+                                  onSelect={(variant) => {
+                                    if (variant) {
+                                      updateLine(line.id, {
+                                        variantId: variant.id,
+                                        variantLabel: variant.options.map(o => o.value).join(' / '),
+                                      })
+                                    } else {
+                                      updateLine(line.id, {
+                                        variantId: undefined,
+                                        variantLabel: undefined,
+                                      })
+                                    }
+                                  }}
+                                  showStock={true}
+                                  placeholder="เลือก สี/ไซส์"
+                                />
+                              )
+                            ) : (
+                              <div className="text-[var(--text-muted)] text-sm">-</div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={line.qty}
+                              onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
+                              className="w-24"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={line.note || ''}
+                              onChange={(e) => updateLine(line.id, { note: e.target.value })}
+                              placeholder="หมายเหตุ"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeLine(line.id)}
+                              className="text-[var(--status-error)] hover:text-[var(--status-error)] hover:bg-[var(--status-error-light)]"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -404,9 +634,11 @@ export default function EditPRPage(props: PageProps) {
         open={showBulkAddModal}
         onOpenChange={setShowBulkAddModal}
         products={products}
-        existingProductIds={new Set(lines.map(l => l.productId))}
+        existingProductIds={new Set(lines.filter(l => !l.variantId).map(l => l.productId))}
+        existingVariantIds={new Set(lines.filter(l => l.variantId).map(l => l.variantId!))}
         onConfirm={handleBulkAdd}
-        showVariants={false}
+        loadVariants={loadVariantsForBulkAdd}
+        showVariants={true}
       />
     </div>
   )

@@ -6,6 +6,7 @@ import { VatType } from '@/generated/prisma'
 
 export interface POLineInput {
   productId: string
+  variantId?: string
   qty: number
   unitPrice: number
   note?: string

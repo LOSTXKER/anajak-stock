@@ -10,6 +10,7 @@ import { sendLinePRPendingAlert } from '@/actions/line-notifications'
 
 interface PRLineInput {
   productId: string
+  variantId?: string
   qty: number
   note?: string
 }
@@ -95,10 +96,25 @@ export async function getPRs(params: {
           select: {
             id: true,
             productId: true,
+            variantId: true,
             qty: true,
             note: true,
             product: {
-              select: { id: true, name: true, sku: true, standardCost: true, reorderPoint: true },
+              select: { id: true, name: true, sku: true, standardCost: true, reorderPoint: true, hasVariants: true },
+            },
+            variant: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                optionValues: {
+                  include: {
+                    optionValue: {
+                      include: { optionType: true }
+                    }
+                  }
+                }
+              }
             },
           },
         },
@@ -132,7 +148,18 @@ export async function getPR(id: string): Promise<PRWithRelations | null> {
       lines: {
         include: {
           product: {
-            select: { id: true, name: true, sku: true, standardCost: true, reorderPoint: true, minQty: true, maxQty: true },
+            select: { id: true, name: true, sku: true, standardCost: true, reorderPoint: true, minQty: true, maxQty: true, hasVariants: true },
+          },
+          variant: {
+            include: {
+              optionValues: {
+                include: {
+                  optionValue: {
+                    include: { optionType: true }
+                  }
+                }
+              }
+            }
           },
         },
       },
@@ -166,6 +193,7 @@ export async function createPR(data: CreatePRInput): Promise<ActionResult<PRWith
         lines: {
           create: data.lines.map((line) => ({
             productId: line.productId,
+            variantId: line.variantId,
             qty: line.qty,
             note: line.note,
           })),
@@ -181,6 +209,17 @@ export async function createPR(data: CreatePRInput): Promise<ActionResult<PRWith
         lines: {
           include: {
             product: true,
+            variant: {
+              include: {
+                optionValues: {
+                  include: {
+                    optionValue: {
+                      include: { optionType: true }
+                    }
+                  }
+                }
+              }
+            },
           },
         },
       },
@@ -374,6 +413,7 @@ export async function rejectPR(id: string, reason?: string): Promise<ActionResul
 interface UpdatePRLineInput {
   id?: string
   productId: string
+  variantId?: string
   qty: number
   note?: string
 }
@@ -420,6 +460,7 @@ export async function updatePR(id: string, data: UpdatePRInput): Promise<ActionR
         lines: {
           create: data.lines.map((line) => ({
             productId: line.productId,
+            variantId: line.variantId,
             qty: line.qty,
             note: line.note,
           })),
