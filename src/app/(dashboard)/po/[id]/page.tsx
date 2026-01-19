@@ -92,6 +92,24 @@ async function getPO(id: string) {
               unit: true,
             },
           },
+          variant: {
+            include: {
+              optionValues: {
+                include: {
+                  optionValue: {
+                    include: {
+                      optionType: true,
+                    },
+                  },
+                },
+                orderBy: {
+                  optionValue: {
+                    optionType: { displayOrder: 'asc' },
+                  },
+                },
+              },
+            },
+          },
         },
       },
       grns: {
@@ -362,31 +380,45 @@ async function PODetail({ id }: { id: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {po.lines.map((line, index) => (
-                <TableRow key={line.id}>
-                  <TableCell className="text-[var(--text-muted)]">{index + 1}</TableCell>
-                  <TableCell className="font-mono text-sm">
-                    <Link href={`/products/${line.product.id}`} className="text-[var(--accent-primary)] hover:underline">
-                      {line.product.sku}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-medium">{line.product.name}</TableCell>
-                  <TableCell className="text-right font-mono">
-                    {Number(line.qty).toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    <span className={Number(line.qtyReceived) >= Number(line.qty) ? 'text-[var(--status-success)]' : ''}>
-                      {Number(line.qtyReceived).toLocaleString()}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    ฿{Number(line.unitPrice).toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right font-mono font-medium">
-                    ฿{(Number(line.qty) * Number(line.unitPrice)).toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {po.lines.map((line, index) => {
+                // สร้างชื่อ variant จาก option values
+                const variantName = line.variant?.optionValues
+                  ?.map((ov) => ov.optionValue.value)
+                  .join(', ') || line.variant?.name
+                
+                return (
+                  <TableRow key={line.id}>
+                    <TableCell className="text-[var(--text-muted)]">{index + 1}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      <Link href={`/products/${line.product.id}`} className="text-[var(--accent-primary)] hover:underline">
+                        {line.variant?.sku || line.product.sku}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium text-[var(--text-primary)]">{line.product.name}</p>
+                        {variantName && (
+                          <p className="text-sm text-[var(--text-muted)]">{variantName}</p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {Number(line.qty).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      <span className={Number(line.qtyReceived) >= Number(line.qty) ? 'text-[var(--status-success)]' : ''}>
+                        {Number(line.qtyReceived).toLocaleString()}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      ฿{Number(line.unitPrice).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-medium">
+                      ฿{(Number(line.qty) * Number(line.unitPrice)).toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
               {/* Total Row */}
               <TableRow className="bg-[var(--bg-secondary)]">
                 <TableCell colSpan={6} className="text-right font-medium">
