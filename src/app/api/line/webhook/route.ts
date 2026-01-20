@@ -59,13 +59,36 @@ export async function POST(request: NextRequest) {
     const body = await request.text()
     const signature = request.headers.get('x-line-signature')
 
-    // Get settings
+    // Parse webhook body first
+    let webhookBody: LineWebhookBody
+    try {
+      webhookBody = JSON.parse(body)
+    } catch {
+      // Invalid JSON, return 200 anyway for LINE verification
+      return NextResponse.json({ success: true })
+    }
+
+    // If no events (verification request), return 200 immediately
+    if (!webhookBody.events || webhookBody.events.length === 0) {
+      return NextResponse.json({ success: true })
+    }
+
+    // Get settings - only needed when there are events to process
     const settingsResult = await getLineSettings()
     if (!settingsResult.success || !settingsResult.data) {
-      return NextResponse.json({ error: 'LINE not configured' }, { status: 500 })
+      // No settings configured, but still return 200 to LINE
+      console.log('LINE webhook: No settings configured')
+      return NextResponse.json({ success: true })
     }
 
     const { channelAccessToken } = settingsResult.data
+    
+    // If no access token, can't reply but still return 200
+    if (!channelAccessToken) {
+      console.log('LINE webhook: No access token configured')
+      return NextResponse.json({ success: true })
+    }
+
     const channelSecret = process.env.LINE_CHANNEL_SECRET
 
     // Verify signature if channel secret is set
@@ -74,8 +97,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
       }
     }
-
-    const webhookBody: LineWebhookBody = JSON.parse(body)
 
     // Process events
     for (const event of webhookBody.events) {
