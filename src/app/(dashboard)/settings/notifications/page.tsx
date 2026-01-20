@@ -427,13 +427,41 @@ export default function NotificationSettingsPage() {
             ผู้รับการแจ้งเตือน
           </CardTitle>
           <CardDescription>
-            เพิ่ม LINE User ID ของผู้ที่ต้องการรับแจ้งเตือน (ดูได้จาก Webhook หรือ LINE Official Account Manager)
+            เพิ่ม LINE User ID หรือ Group ID ของผู้ที่ต้องการรับแจ้งเตือน
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* How to get User ID */}
+          <div className="p-4 bg-[var(--accent-primary)]/5 border border-[var(--accent-primary)]/20 rounded-lg space-y-3">
+            <p className="font-medium text-[var(--accent-primary)] flex items-center gap-2">
+              <Info className="w-4 h-4" />
+              วิธีขอ User ID / Group ID
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="p-3 bg-[var(--bg-primary)] rounded-lg">
+                <p className="font-medium mb-1">👤 User ID</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  เพิ่ม Bot เป็นเพื่อนใน LINE แล้ว Bot จะตอบกลับ User ID ให้อัตโนมัติ
+                </p>
+              </div>
+              <div className="p-3 bg-[var(--bg-primary)] rounded-lg">
+                <p className="font-medium mb-1">👥 Group ID</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  เชิญ Bot เข้ากลุ่ม LINE แล้ว Bot จะส่ง Group ID ให้ในกลุ่มทันที
+                </p>
+              </div>
+              <div className="p-3 bg-[var(--bg-primary)] rounded-lg">
+                <p className="font-medium mb-1">💬 พิมพ์ขอ</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  พิมพ์ <code className="bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded text-[var(--accent-primary)]">id</code> ในแชทกับ Bot หรือในกลุ่ม
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-2">
             <Input
-              placeholder="U1234567890abcdef..."
+              placeholder="U1234567890abcdef... หรือ C1234567890abcdef..."
               value={newUserId}
               onChange={(e) => setNewUserId(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addUserId()}
@@ -449,7 +477,7 @@ export default function NotificationSettingsPage() {
             <div className="text-center py-8 text-[var(--text-muted)]">
               <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
               <p>ยังไม่มีผู้รับการแจ้งเตือน</p>
-              <p className="text-xs mt-1">เพิ่ม LINE User ID เพื่อรับแจ้งเตือน</p>
+              <p className="text-xs mt-1">เพิ่ม LINE User ID หรือ Group ID เพื่อรับแจ้งเตือน</p>
             </div>
           ) : (
             <div className="space-y-2">
