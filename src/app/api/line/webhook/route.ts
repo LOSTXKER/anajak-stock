@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { getLineSettings } from '@/actions/line-notifications'
+import { getLineSettingsForWebhook } from '@/actions/line-notifications'
 
 // LINE Webhook Event Types
 interface LineEvent {
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get settings - only needed when there are events to process
-    const settingsResult = await getLineSettings()
+    const settingsResult = await getLineSettingsForWebhook()
     console.log('Settings result:', settingsResult.success)
     
     if (!settingsResult.success || !settingsResult.data) {

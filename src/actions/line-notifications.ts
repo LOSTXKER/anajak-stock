@@ -67,6 +67,30 @@ export async function getLineSettings(): Promise<ActionResult<LineSettings>> {
   }
 }
 
+/**
+ * Get LINE settings without requiring authentication (for webhook use)
+ */
+export async function getLineSettingsForWebhook(): Promise<ActionResult<LineSettings>> {
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { key: 'line_notification' },
+    })
+
+    if (!setting) {
+      return { success: true, data: DEFAULT_LINE_SETTINGS }
+    }
+
+    const data = JSON.parse(setting.value) as Partial<LineSettings>
+    return { 
+      success: true, 
+      data: { ...DEFAULT_LINE_SETTINGS, ...data } 
+    }
+  } catch (error) {
+    console.error('Error getting LINE settings for webhook:', error)
+    return { success: false, error: 'ไม่สามารถโหลดการตั้งค่าได้' }
+  }
+}
+
 export async function updateLineSettings(settings: Partial<LineSettings>): Promise<ActionResult<void>> {
   const session = await getSession()
   if (!session || session.role !== 'ADMIN') {
