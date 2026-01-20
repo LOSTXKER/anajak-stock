@@ -416,6 +416,29 @@ export default function NotificationSettingsPage() {
               {' → Messaging API → Channel Access Token'}
             </p>
           </div>
+
+          <div className="space-y-2">
+            <Label>Channel Secret (สำหรับยืนยัน Webhook)</Label>
+            <Input
+              type="password"
+              placeholder="ใส่ Channel Secret จาก LINE Developers Console"
+              value={settings.channelSecret || ''}
+              onChange={(e) => setSettings({ ...settings, channelSecret: e.target.value })}
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-[var(--text-muted)]">
+              รับได้จาก{' '}
+              <a 
+                href="https://developers.line.biz/console/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-[var(--accent-primary)] hover:underline"
+              >
+                LINE Developers Console
+              </a>
+              {' → Basic settings → Channel secret (ไม่บังคับ แต่แนะนำให้ใส่เพื่อความปลอดภัย)'}
+            </p>
+          </div>
         </CardContent>
       </Card>
 

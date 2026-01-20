@@ -20,6 +20,7 @@ import { revalidatePath } from 'next/cache'
 export interface LineSettings {
   enabled: boolean
   channelAccessToken: string
+  channelSecret: string
   notifyLowStock: boolean
   notifyPRPending: boolean
   notifyPOStatus: boolean
@@ -31,6 +32,7 @@ export interface LineSettings {
 const DEFAULT_LINE_SETTINGS: LineSettings = {
   enabled: false,
   channelAccessToken: '',
+  channelSecret: '',
   notifyLowStock: true,
   notifyPRPending: true,
   notifyPOStatus: true,

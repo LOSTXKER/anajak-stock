@@ -99,8 +99,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    const { channelAccessToken } = settingsResult.data
+    const { channelAccessToken, channelSecret } = settingsResult.data
     console.log('Has access token:', !!channelAccessToken, 'Token length:', channelAccessToken?.length || 0)
+    console.log('Has channel secret:', !!channelSecret)
     
     // If no access token, can't reply but still return 200
     if (!channelAccessToken) {
@@ -108,11 +109,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    const channelSecret = process.env.LINE_CHANNEL_SECRET
+    // Use channel secret from settings, fallback to environment variable
+    const secret = channelSecret || process.env.LINE_CHANNEL_SECRET
 
     // Verify signature if channel secret is set
-    if (channelSecret && signature) {
-      const isValid = verifySignature(body, signature, channelSecret)
+    if (secret && signature) {
+      const isValid = verifySignature(body, signature, secret)
       console.log('Signature verification:', isValid)
       if (!isValid) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
