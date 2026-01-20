@@ -91,6 +91,9 @@ export async function createProductWithVariants(
       }
 
       return newProduct
+    }, {
+      timeout: 30000, // 30 seconds - สร้างสินค้าพร้อม variants หลายตัวอาจใช้เวลานาน
+      maxWait: 10000,
     })
 
     // Create audit log
@@ -320,6 +323,9 @@ export async function createProductWithInlineVariants(
       }
 
       return newProduct
+    }, {
+      timeout: 30000, // 30 seconds - สร้างสินค้าพร้อม variants หลายตัวอาจใช้เวลานาน
+      maxWait: 10000,
     })
 
     // Create audit log

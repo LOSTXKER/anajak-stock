@@ -175,6 +175,9 @@ export async function createGRN(data: CreateGRNInput): Promise<ActionResult> {
       })
 
       return { grn, movement }
+    }, {
+      timeout: 30000, // 30 seconds - รับสินค้าหลายรายการอาจใช้เวลานาน
+      maxWait: 10000, // max wait for connection
     })
 
     await prisma.auditLog.create({

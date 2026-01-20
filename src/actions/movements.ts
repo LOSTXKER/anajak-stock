@@ -591,6 +591,9 @@ export async function postMovement(id: string): Promise<ActionResult> {
       })
 
       return movement
+    }, {
+      timeout: 30000, // 30 seconds - การ post movement หลายรายการอาจใช้เวลานาน
+      maxWait: 10000,
     })
 
     // Send LINE notification for movement posted (if enabled)

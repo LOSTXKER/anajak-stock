@@ -313,6 +313,9 @@ export async function completeStockTake(id: string) {
           completedAt: new Date(),
         },
       })
+    }, {
+      timeout: 30000, // 30 seconds - คำนวณ variance หลายรายการอาจใช้เวลานาน
+      maxWait: 10000,
     })
 
     revalidatePath('/stock-take')
@@ -418,6 +421,9 @@ export async function approveStockTake(id: string) {
             approvedAt: new Date(),
           },
         })
+      }, {
+        timeout: 30000, // 30 seconds - การอนุมัติตรวจนับหลายรายการอาจใช้เวลานาน
+        maxWait: 10000,
       })
     } else {
       // No variance, just approve

@@ -589,6 +589,9 @@ export async function importStock(rows: StockImportRow[]): Promise<ActionResult<
       }
 
       result.success = validLines.length
+    }, {
+      timeout: 60000, // 60 seconds - นำเข้าสต๊อคหลายร้อยรายการอาจใช้เวลานาน
+      maxWait: 10000,
     })
   } catch (error) {
     console.error('Error importing stock:', error)
