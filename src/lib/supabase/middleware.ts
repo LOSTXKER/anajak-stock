@@ -43,6 +43,15 @@ export async function updateSession(request: NextRequest) {
   const publicPaths = ['/login', '/auth/callback', '/auth/confirm']
   const isPublicPath = publicPaths.some((path) => pathname.startsWith(path))
 
+  // API routes that need external access (webhooks, cron jobs, etc.)
+  const externalApiPaths = ['/api/line/webhook', '/api/cron/', '/api/erp']
+  const isExternalApi = externalApiPaths.some((path) => pathname.startsWith(path))
+
+  // Skip auth check for external API routes
+  if (isExternalApi) {
+    return supabaseResponse
+  }
+
   // Allow static files and Next.js internals
   if (
     pathname.startsWith('/_next') ||
