@@ -43,6 +43,8 @@ export function NotificationBell() {
   const [permissionStatus, setPermissionStatus] = useState<NotificationPermission | 'unsupported'>('default')
   const [showSettings, setShowSettings] = useState(false)
   const originalTitle = useRef<string>('')
+  const seenNotificationIds = useRef<Set<string>>(new Set())
+  const isFirstLoad = useRef(true)
 
   // Load notifications
   const loadNotifications = useCallback(async (showRefreshState = false) => {
@@ -50,9 +52,52 @@ export function NotificationBell() {
     try {
       const result = await getNotifications()
       if (result.success && result.data) {
+        // Check for new notifications (not seen before and unread)
+        const newNotifications = result.data.filter(
+          (n) => !n.read && !seenNotificationIds.current.has(n.id)
+        )
+
+        // Show toast for new notifications (skip on first load)
+        if (!isFirstLoad.current && newNotifications.length > 0) {
+          // Show individual toast for each new notification (max 3)
+          newNotifications.slice(0, 3).forEach((notification) => {
+            toast(notification.title, {
+              description: notification.message,
+              icon: getNotificationIcon(notification.type),
+              duration: 5000,
+              action: notification.url ? {
+                label: 'ดู',
+                onClick: () => {
+                  window.location.href = notification.url!
+                },
+              } : undefined,
+            })
+          })
+
+          // If more than 3 new notifications
+          if (newNotifications.length > 3) {
+            toast.info(`มีการแจ้งเตือนใหม่อีก ${newNotifications.length - 3} รายการ`, {
+              action: {
+                label: 'ดูทั้งหมด',
+                onClick: () => {
+                  window.location.href = '/notifications'
+                },
+              },
+            })
+          }
+        }
+
+        // Update seen notification IDs
+        result.data.forEach((n) => seenNotificationIds.current.add(n.id))
+
         setNotifications(result.data)
         const newUnreadCount = result.data.filter((n) => !n.read).length
         setUnreadCount(newUnreadCount)
+
+        // Mark first load as complete
+        if (isFirstLoad.current) {
+          isFirstLoad.current = false
+        }
       }
     } catch (error) {
       console.error('Error loading notifications:', error)
