@@ -36,6 +36,8 @@ function verifySignature(body: string, signature: string, channelSecret: string)
 
 // Reply to LINE
 async function replyMessage(replyToken: string, messages: object[], accessToken: string) {
+  console.log('replyMessage called with token length:', accessToken?.length)
+  
   const response = await fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: {
@@ -48,9 +50,13 @@ async function replyMessage(replyToken: string, messages: object[], accessToken:
     }),
   })
 
+  console.log('LINE API response status:', response.status)
+  
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    console.error('LINE reply error:', error)
+    console.error('LINE reply error:', response.status, JSON.stringify(error))
+  } else {
+    console.log('LINE reply success!')
   }
 }
 
@@ -59,29 +65,42 @@ export async function POST(request: NextRequest) {
     const body = await request.text()
     const signature = request.headers.get('x-line-signature')
 
+    console.log('=== LINE WEBHOOK RECEIVED ===')
+    console.log('Body:', body.substring(0, 500))
+
     // Parse webhook body first
     let webhookBody: LineWebhookBody
     try {
       webhookBody = JSON.parse(body)
-    } catch {
-      // Invalid JSON, return 200 anyway for LINE verification
+    } catch (e) {
+      console.log('LINE webhook: Invalid JSON', e)
       return NextResponse.json({ success: true })
     }
 
+    console.log('Events count:', webhookBody.events?.length || 0)
+
     // If no events (verification request), return 200 immediately
     if (!webhookBody.events || webhookBody.events.length === 0) {
+      console.log('LINE webhook: No events (verification request)')
       return NextResponse.json({ success: true })
+    }
+
+    // Log event details
+    for (const evt of webhookBody.events) {
+      console.log('Event type:', evt.type, 'Source:', evt.source?.type, 'Message:', evt.message?.text)
     }
 
     // Get settings - only needed when there are events to process
     const settingsResult = await getLineSettings()
+    console.log('Settings result:', settingsResult.success)
+    
     if (!settingsResult.success || !settingsResult.data) {
-      // No settings configured, but still return 200 to LINE
-      console.log('LINE webhook: No settings configured')
+      console.log('LINE webhook: No settings configured', settingsResult.success ? 'no data' : 'failed')
       return NextResponse.json({ success: true })
     }
 
     const { channelAccessToken } = settingsResult.data
+    console.log('Has access token:', !!channelAccessToken, 'Token length:', channelAccessToken?.length || 0)
     
     // If no access token, can't reply but still return 200
     if (!channelAccessToken) {
@@ -93,7 +112,9 @@ export async function POST(request: NextRequest) {
 
     // Verify signature if channel secret is set
     if (channelSecret && signature) {
-      if (!verifySignature(body, signature, channelSecret)) {
+      const isValid = verifySignature(body, signature, channelSecret)
+      console.log('Signature verification:', isValid)
+      if (!isValid) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
       }
     }
@@ -261,8 +282,10 @@ export async function POST(request: NextRequest) {
       // Handle message event - respond to "id" command
       if (event.type === 'message' && event.message?.type === 'text' && event.replyToken) {
         const text = event.message.text?.toLowerCase().trim()
+        console.log('Message received:', text)
         
         if (text === 'id' || text === 'myid' || text === 'groupid') {
+          console.log('ID command detected!')
           let responseText = ''
           
           if (event.source.type === 'group' && event.source.groupId) {
@@ -279,12 +302,16 @@ export async function POST(request: NextRequest) {
             responseText = `👤 User ID:\n${event.source.userId}`
           }
 
+          console.log('Response text:', responseText)
+
           if (responseText) {
+            console.log('Sending reply...')
             await replyMessage(
               event.replyToken,
               [{ type: 'text', text: responseText }],
               channelAccessToken
             )
+            console.log('Reply sent!')
           }
         }
       }
