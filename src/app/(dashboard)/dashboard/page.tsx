@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { formatDateShort, formatDateTime } from '@/lib/date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -246,7 +247,7 @@ async function getStockValueTrend() {
     const dateKey = date.toISOString().split('T')[0]
     
     data.unshift({
-      date: date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }),
+      date: formatDateShort(date),
       value: Math.max(0, Math.round(runningValue)),
     })
     
@@ -414,7 +415,7 @@ async function RecentMovementsSection() {
                   </div>
                 </div>
                 <p className="text-xs text-[var(--text-muted)]">
-                  {new Date(movement.createdAt).toLocaleDateString('th-TH', {
+                  {formatDateTime(movement.createdAt, {
                     day: 'numeric',
                     month: 'short',
                     hour: '2-digit',

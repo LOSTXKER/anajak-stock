@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
+import { formatDateTime } from '@/lib/date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -157,7 +158,7 @@ async function MovementDetail({ id }: { id: string }) {
               </Badge>
             </div>
             <p className="text-[var(--text-muted)] mt-1">
-              {new Date(movement.createdAt).toLocaleDateString('th-TH', {
+              {formatDateTime(movement.createdAt, {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',

@@ -2,6 +2,7 @@
 
 import { User, Calendar, FileText, CheckCircle2 } from 'lucide-react'
 import { StatCard } from '@/components/common'
+import { formatDate } from '@/lib/date'
 
 interface MovementStatsProps {
   createdByName: string | null
@@ -30,7 +31,7 @@ export function MovementStats({
       />
       <StatCard
         title="วันที่เอกสาร"
-        value={new Date(createdAt).toLocaleDateString('th-TH')}
+        value={formatDate(createdAt)}
         icon={Calendar}
         variant="warning"
       />
@@ -45,7 +46,7 @@ export function MovementStats({
         <StatCard
           title="ผู้อนุมัติ"
           value={approvedByName}
-          subtitle={postedAt ? new Date(postedAt).toLocaleDateString('th-TH') : undefined}
+          subtitle={postedAt ? formatDate(postedAt) : undefined}
           icon={CheckCircle2}
           variant="success"
         />
