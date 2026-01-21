@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
+import { formatDateTime, formatDate } from '@/lib/date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -175,7 +176,7 @@ async function PODetail({ id }: { id: string }) {
               </Badge>
             </div>
             <p className="text-[var(--text-muted)] mt-1">
-              สร้างเมื่อ {new Date(po.createdAt).toLocaleDateString('th-TH', {
+              สร้างเมื่อ {formatDateTime(po.createdAt, {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
@@ -263,7 +264,7 @@ async function PODetail({ id }: { id: string }) {
                     <div>
                       <p className="font-medium">{grn.grnNumber}</p>
                       <p className="text-sm text-[var(--text-muted)]">
-                        รับเมื่อ {new Date(grn.receivedAt).toLocaleDateString('th-TH')}
+                        รับเมื่อ {formatDate(grn.receivedAt)}
                       </p>
                     </div>
                   </div>
@@ -330,7 +331,7 @@ async function PODetail({ id }: { id: string }) {
                         <p className="text-sm text-[var(--text-muted)]">{timeline.note}</p>
                       )}
                       <p className="text-xs text-[var(--text-muted)]">
-                        {new Date(timeline.createdAt).toLocaleString('th-TH')}
+                        {formatDateTime(timeline.createdAt)}
                       </p>
                     </div>
                   </div>

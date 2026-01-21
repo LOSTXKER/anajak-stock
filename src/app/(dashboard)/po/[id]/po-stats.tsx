@@ -2,6 +2,7 @@
 
 import { Building2, DollarSign, Calendar } from 'lucide-react'
 import { StatCard } from '@/components/common'
+import { formatDate } from '@/lib/date'
 
 interface POStatsProps {
   supplierName: string
@@ -35,7 +36,7 @@ export function POStats({
       />
       <StatCard
         title="กำหนดส่ง"
-        value={eta ? new Date(eta).toLocaleDateString('th-TH') : '-'}
+        value={formatDate(eta)}
         icon={Calendar}
         variant="warning"
       />

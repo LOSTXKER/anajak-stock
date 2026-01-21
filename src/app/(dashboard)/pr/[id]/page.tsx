@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
+import { formatDateTime, formatDate } from '@/lib/date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -163,7 +164,7 @@ async function PRDetail({ id }: { id: string }) {
               </Badge>
             </div>
             <p className="text-[var(--text-muted)] mt-1">
-              สร้างเมื่อ {new Date(pr.createdAt).toLocaleDateString('th-TH', {
+              สร้างเมื่อ {formatDateTime(pr.createdAt, {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
@@ -207,7 +208,7 @@ async function PRDetail({ id }: { id: string }) {
             <Badge className={priority.color}>{priority.label}</Badge>
             {pr.needByDate && (
               <p className="text-sm text-[var(--text-muted)] mt-2">
-                ต้องการภายใน: {new Date(pr.needByDate).toLocaleDateString('th-TH')}
+                ต้องการภายใน: {formatDate(pr.needByDate)}
               </p>
             )}
           </CardContent>
@@ -225,7 +226,7 @@ async function PRDetail({ id }: { id: string }) {
               <p className="font-medium">{pr.approver.name}</p>
               {pr.approvedAt && (
                 <p className="text-sm text-[var(--text-muted)]">
-                  {new Date(pr.approvedAt).toLocaleDateString('th-TH')}
+                  {formatDate(pr.approvedAt)}
                 </p>
               )}
             </CardContent>

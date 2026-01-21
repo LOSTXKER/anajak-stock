@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
+import { formatDate } from '@/lib/date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -360,7 +361,7 @@ async function ProductDetail({ id }: { id: string }) {
                 {recentMovements.map((line) => (
                   <TableRow key={line.id}>
                     <TableCell className="text-sm text-[var(--text-muted)]">
-                      {new Date(line.movement.createdAt).toLocaleDateString('th-TH')}
+                      {formatDate(line.movement.createdAt)}
                     </TableCell>
                     <TableCell>
                       <Link
