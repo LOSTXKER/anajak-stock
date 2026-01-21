@@ -21,6 +21,13 @@ import { ArrowLeft, Save, Loader2, Package, Settings } from 'lucide-react'
 import { getProductById, updateProduct, getCategories, getUnits } from '@/actions/products'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/common'
+import { StockType } from '@/types'
+
+const stockTypeLabels: Record<StockType, { label: string; description: string }> = {
+  STOCKED: { label: 'เก็บสต๊อคเอง', description: 'แจ้งเตือนเมื่อสต๊อคต่ำกว่า Reorder Point' },
+  MADE_TO_ORDER: { label: 'สั่งผลิตเมื่อมีออเดอร์', description: 'ไม่แจ้งเตือนสต๊อค' },
+  DROP_SHIP: { label: 'สั่งจากซัพพลายเออร์ส่งตรง', description: 'ไม่แจ้งเตือนสต๊อค' },
+}
 
 interface EditProductFormData {
   sku: string
@@ -29,6 +36,7 @@ interface EditProductFormData {
   barcode?: string
   categoryId?: string
   unitId?: string
+  stockType: StockType
   reorderPoint: number
   minQty: number
   maxQty: number
@@ -80,6 +88,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       setValue('barcode', product.barcode || '')
       setValue('categoryId', product.categoryId || '')
       setValue('unitId', product.unitId || '')
+      setValue('stockType', product.stockType || 'STOCKED')
       setValue('reorderPoint', Number(product.reorderPoint))
       setValue('minQty', Number(product.minQty))
       setValue('maxQty', Number(product.maxQty))
@@ -98,6 +107,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       ...data,
       categoryId: data.categoryId || undefined,
       unitId: data.unitId || undefined,
+      stockType: data.stockType,
     })
     setIsSaving(false)
 
@@ -242,15 +252,40 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
+                <Label>ประเภทการจัดเก็บ</Label>
+                <Select
+                  value={watch('stockType') || 'STOCKED'}
+                  onValueChange={(v) => setValue('stockType', v as StockType)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(stockTypeLabels).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {stockTypeLabels[watch('stockType') || 'STOCKED']?.description}
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="reorderPoint">Reorder Point</Label>
                 <Input
                   id="reorderPoint"
                   type="number"
                   step="0.01"
                   {...register('reorderPoint', { valueAsNumber: true })}
+                  disabled={watch('stockType') !== 'STOCKED'}
                 />
                 <p className="text-xs text-[var(--text-muted)]">
-                  ระบบจะแจ้งเตือนเมื่อสต๊อคต่ำกว่าจุดนี้
+                  {watch('stockType') === 'STOCKED' 
+                    ? 'ระบบจะแจ้งเตือนเมื่อสต๊อคต่ำกว่าจุดนี้'
+                    : 'ไม่ใช้สำหรับสินค้าประเภทนี้'}
                 </p>
               </div>
 

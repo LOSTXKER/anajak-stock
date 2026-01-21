@@ -1,6 +1,9 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
+
+// Force dynamic rendering to avoid build-time database queries
+export const dynamic = 'force-dynamic'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -32,11 +35,13 @@ interface LowStockItem {
 
 async function getLowStockReport(): Promise<LowStockItem[]> {
   // Get all stock balances grouped by product/variant
+  // Only include products with stockType = STOCKED (not MADE_TO_ORDER or DROP_SHIP)
   const stockBalances = await prisma.stockBalance.findMany({
     where: {
       product: {
         active: true,
         deletedAt: null,
+        stockType: 'STOCKED', // Only show stocked products
       },
     },
     include: {
@@ -121,10 +126,12 @@ async function getLowStockReport(): Promise<LowStockItem[]> {
   }
 
   // Also get products/variants with reorderPoint but no stock (never had movement)
+  // Only include products with stockType = STOCKED
   const productsWithNoStock = await prisma.product.findMany({
     where: {
       active: true,
       deletedAt: null,
+      stockType: 'STOCKED', // Only show stocked products
       reorderPoint: { gt: 0 },
       stockBalances: { none: {} },
     },

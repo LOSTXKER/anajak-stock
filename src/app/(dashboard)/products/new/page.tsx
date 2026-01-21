@@ -296,6 +296,7 @@ export default function NewProductPage() {
           barcode: (formData.get('barcode') as string) || undefined,
           categoryId: (formData.get('categoryId') as string) || undefined,
           unitId: (formData.get('unitId') as string) || undefined,
+          stockType: 'STOCKED', // Default to stocked for new products
           reorderPoint: Number(formData.get('reorderPoint')) || 0,
           minQty: Number(formData.get('minQty')) || 0,
           maxQty: Number(formData.get('maxQty')) || 0,

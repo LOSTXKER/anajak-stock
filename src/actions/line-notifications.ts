@@ -219,12 +219,13 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
       return { success: false, error: 'No recipients configured' }
     }
 
-    // Get low stock items
+    // Get low stock items (only STOCKED products)
     const products = await prisma.product.findMany({
       where: {
         reorderPoint: { gt: 0 },
         active: true,
         deletedAt: null,
+        stockType: 'STOCKED', // Only alert for stocked products
       },
       include: {
         stockBalances: true,

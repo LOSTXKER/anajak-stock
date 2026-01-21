@@ -73,6 +73,12 @@ enum VatType {
   NO_VAT
 }
 
+enum StockType {
+  STOCKED        // สินค้าเก็บสต๊อคเอง - แจ้งเตือนเมื่อหมด
+  MADE_TO_ORDER  // สั่งผลิตเมื่อมีออเดอร์ - ไม่แจ้งเตือน
+  DROP_SHIP      // สั่งจากซัพพลายเออร์ส่งตรง - ไม่แจ้งเตือน
+}
+
 // ==================== USERS & AUTH ====================
 
 model User {
@@ -141,6 +147,7 @@ model Product {
   barcode       String?   @unique
   categoryId    String?
   unitId        String?
+  stockType     StockType @default(STOCKED)  // ประเภทการจัดเก็บสต๊อค
   reorderPoint  Decimal   @default(0) @db.Decimal(18, 4)
   minQty        Decimal   @default(0) @db.Decimal(18, 4)
   maxQty        Decimal   @default(0) @db.Decimal(18, 4)

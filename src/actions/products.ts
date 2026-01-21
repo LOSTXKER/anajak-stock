@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { serialize } from '@/lib/serialize'
 import type { ActionResult, PaginatedResult, ProductWithRelations } from '@/types'
+import { StockType } from '@/generated/prisma'
 
 const productSchema = z.object({
   sku: z.string().min(1, 'กรุณากรอก SKU'),
@@ -14,6 +15,7 @@ const productSchema = z.object({
   barcode: z.string().optional(),
   categoryId: z.string().optional(),
   unitId: z.string().optional(),
+  stockType: z.nativeEnum(StockType).default(StockType.STOCKED),
   reorderPoint: z.number().min(0).default(0),
   minQty: z.number().min(0).default(0),
   maxQty: z.number().min(0).default(0),
@@ -418,6 +420,7 @@ export async function updateProduct(
         ...(data.barcode !== undefined && { barcode: data.barcode || null }),
         ...(data.categoryId !== undefined && { categoryId: data.categoryId || null }),
         ...(data.unitId !== undefined && { unitId: data.unitId || null }),
+        ...(data.stockType !== undefined && { stockType: data.stockType }),
         ...(data.reorderPoint !== undefined && { reorderPoint: data.reorderPoint }),
         ...(data.minQty !== undefined && { minQty: data.minQty }),
         ...(data.maxQty !== undefined && { maxQty: data.maxQty }),

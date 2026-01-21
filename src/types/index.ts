@@ -23,10 +23,11 @@ import {
   POStatus,
   GRNStatus,
   VatType,
+  StockType,
 } from '@/generated/prisma'
 
 // Re-export enums
-export { Role, MovementType, DocStatus, PRStatus, POStatus, GRNStatus, VatType }
+export { Role, MovementType, DocStatus, PRStatus, POStatus, GRNStatus, VatType, StockType }
 
 // Extended types with relations
 export type UserSafe = Omit<User, 'passwordHash'>

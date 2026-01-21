@@ -198,13 +198,14 @@ export async function sendLowStockAlert() {
     return { success: false, error: 'No recipients found' }
   }
 
-  // Find low stock items
+  // Find low stock items (only STOCKED products)
   const lowStockItems = await prisma.stockBalance.findMany({
     where: {
       product: {
         reorderPoint: { gt: 0 },
         active: true,
         deletedAt: null,
+        stockType: 'STOCKED', // Only alert for stocked products
       },
     },
     include: {
