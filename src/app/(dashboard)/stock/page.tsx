@@ -146,6 +146,13 @@ async function StockContent({ searchParams }: PageProps) {
 
                   // Use variant SKU if available, otherwise product SKU
                   const displaySku = balance.variant?.sku || balance.product.sku
+                  
+                  // Get variant display name: use name, or generate from option values
+                  const variant = balance.variant as any
+                  const variantName = variant?.name 
+                    || (variant?.optionValues && variant.optionValues.length > 0
+                        ? variant.optionValues.map((ov: any) => ov.optionValue.value).join(' / ')
+                        : null)
 
                   return (
                     <TableRow key={balance.id}>
@@ -161,7 +168,7 @@ async function StockContent({ searchParams }: PageProps) {
                         </Link>
                       </TableCell>
                       <TableCell className="text-[var(--text-secondary)]">
-                        {balance.variant?.name || '-'}
+                        {variantName || '-'}
                       </TableCell>
                       <TableCell className="text-[var(--text-secondary)]">
                         {balance.product.category?.name || '-'}

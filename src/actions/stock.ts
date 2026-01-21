@@ -54,6 +54,19 @@ export async function getStockBalances(params: {
         variant: {
           select: {
             id: true, name: true, sku: true,
+            optionValues: {
+              select: {
+                optionValue: {
+                  select: {
+                    value: true,
+                    optionType: { select: { displayOrder: true } },
+                  },
+                },
+              },
+              orderBy: {
+                optionValue: { optionType: { displayOrder: 'asc' } },
+              },
+            },
           },
         },
         location: {
@@ -152,6 +165,19 @@ async function getLowStockBalances(params: {
           variant: {
             select: {
               id: true, name: true, sku: true,
+              optionValues: {
+                select: {
+                  optionValue: {
+                    select: {
+                      value: true,
+                      optionType: { select: { displayOrder: true } },
+                    },
+                  },
+                },
+                orderBy: {
+                  optionValue: { optionType: { displayOrder: 'asc' } },
+                },
+              },
             },
           },
           location: {
