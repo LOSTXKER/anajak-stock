@@ -35,14 +35,21 @@ interface LowStockItem {
 
 async function getLowStockReport(): Promise<LowStockItem[]> {
   // Get all stock balances grouped by product/variant
-  // Only include products with stockType = STOCKED (not MADE_TO_ORDER or DROP_SHIP)
+  // Only include:
+  // - Products without variants: stockType = STOCKED
+  // - Variants: variant.stockType = STOCKED
   const stockBalances = await prisma.stockBalance.findMany({
     where: {
       product: {
         active: true,
         deletedAt: null,
-        stockType: 'STOCKED', // Only show stocked products
       },
+      OR: [
+        // Products without variants: check product.stockType
+        { variantId: null, product: { stockType: 'STOCKED' } },
+        // Variants: check variant.stockType
+        { variant: { stockType: 'STOCKED' } },
+      ],
     },
     include: {
       product: {
@@ -126,19 +133,26 @@ async function getLowStockReport(): Promise<LowStockItem[]> {
   }
 
   // Also get products/variants with reorderPoint but no stock (never had movement)
-  // Only include products with stockType = STOCKED
+  // Only include:
+  // - Products without variants: stockType = STOCKED
+  // - Variants: variant.stockType = STOCKED
   const productsWithNoStock = await prisma.product.findMany({
     where: {
       active: true,
       deletedAt: null,
-      stockType: 'STOCKED', // Only show stocked products
       reorderPoint: { gt: 0 },
       stockBalances: { none: {} },
+      OR: [
+        // Products without variants: stockType = STOCKED
+        { hasVariants: false, stockType: 'STOCKED' },
+        // Products with variants: at least one variant has stockType = STOCKED
+        { hasVariants: true, variants: { some: { stockType: 'STOCKED', active: true, deletedAt: null } } },
+      ],
     },
     include: {
       category: true,
       variants: {
-        where: { active: true, deletedAt: null },
+        where: { active: true, deletedAt: null, stockType: 'STOCKED' }, // Only STOCKED variants
         include: {
           optionValues: {
             include: {
@@ -157,7 +171,7 @@ async function getLowStockReport(): Promise<LowStockItem[]> {
 
   for (const product of productsWithNoStock) {
     if (product.variants.length > 0) {
-      // Add each variant with 0 stock
+      // Add each variant with 0 stock (only STOCKED variants)
       for (const variant of product.variants) {
         const key = `${product.id}-${variant.id}`
         if (!stockMap.has(key)) {

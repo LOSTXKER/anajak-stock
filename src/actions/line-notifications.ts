@@ -219,35 +219,68 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
       return { success: false, error: 'No recipients configured' }
     }
 
-    // Get low stock items (only STOCKED products)
+    // Get low stock items
+    // For products without variants: check product.stockType = STOCKED
+    // For variants: check variant.stockType = STOCKED
     const products = await prisma.product.findMany({
       where: {
-        reorderPoint: { gt: 0 },
         active: true,
         deletedAt: null,
-        stockType: 'STOCKED', // Only alert for stocked products
+        OR: [
+          // Products without variants: stockType = STOCKED
+          { hasVariants: false, stockType: 'STOCKED', reorderPoint: { gt: 0 } },
+          // Products with variants (we'll check variant-level stockType below)
+          { hasVariants: true },
+        ],
       },
       include: {
-        stockBalances: true,
+        stockBalances: { where: { variantId: null } },
+        variants: {
+          where: { active: true, deletedAt: null, stockType: 'STOCKED' },
+          include: { stockBalances: true },
+        },
       },
     })
 
-    const lowStockItems = products
-      .map((product) => {
+    const lowStockItems: { name: string; sku: string; qty: number; rop: number }[] = []
+
+    for (const product of products) {
+      if (!product.hasVariants) {
+        // Simple product
         const totalStock = product.stockBalances.reduce(
           (sum, sb) => sum + Number(sb.qtyOnHand),
           0
         )
         const rop = Number(product.reorderPoint)
-        return {
-          name: product.name,
-          sku: product.sku,
-          qty: totalStock,
-          rop,
+        if (rop > 0 && totalStock <= rop) {
+          lowStockItems.push({
+            name: product.name,
+            sku: product.sku,
+            qty: totalStock,
+            rop,
+          })
         }
-      })
-      .filter((item) => item.qty <= item.rop)
-      .sort((a, b) => a.qty - b.qty)
+      } else {
+        // Product with variants - check each STOCKED variant
+        for (const variant of product.variants) {
+          const totalStock = variant.stockBalances.reduce(
+            (sum, sb) => sum + Number(sb.qtyOnHand),
+            0
+          )
+          const rop = Number(variant.reorderPoint) || Number(product.reorderPoint)
+          if (rop > 0 && totalStock <= rop) {
+            lowStockItems.push({
+              name: `${product.name} - ${variant.name || variant.sku}`,
+              sku: variant.sku,
+              qty: totalStock,
+              rop,
+            })
+          }
+        }
+      }
+    }
+
+    lowStockItems.sort((a, b) => a.qty - b.qty)
 
     if (lowStockItems.length === 0) {
       return { success: true, data: undefined }

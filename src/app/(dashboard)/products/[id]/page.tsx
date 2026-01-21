@@ -213,6 +213,7 @@ async function ProductDetail({ id }: { id: string }) {
             sku: v.sku,
             name: v.name,
             barcode: v.barcode,
+            stockType: v.stockType,
             costPrice: Number(v.costPrice),
             sellingPrice: Number(v.sellingPrice),
             reorderPoint: Number(v.reorderPoint),

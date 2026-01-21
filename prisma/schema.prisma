@@ -222,6 +222,7 @@ model ProductVariant {
   sku           String    @unique
   barcode       String?   @unique
   name          String?   // e.g., "แดง, L" - generated from option values
+  stockType     StockType @default(STOCKED)  // ประเภทการจัดเก็บสต๊อค
   costPrice     Decimal   @default(0) @db.Decimal(18, 4)  // ราคาทุน
   sellingPrice  Decimal   @default(0) @db.Decimal(18, 4)  // ราคาขาย
   lastCost      Decimal   @default(0) @db.Decimal(18, 4)

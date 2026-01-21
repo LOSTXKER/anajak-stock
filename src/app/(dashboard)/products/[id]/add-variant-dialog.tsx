@@ -241,6 +241,7 @@ export function AddVariantDialog({
         sku,
         barcode: barcode || undefined,
         name: Object.values(selectedValues).join(', '),
+        stockType: 'STOCKED', // Default to stocked for new variants
         costPrice,
         sellingPrice,
         reorderPoint: 0,

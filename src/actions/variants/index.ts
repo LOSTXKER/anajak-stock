@@ -12,7 +12,7 @@ export { generateVariantSku } from './utils'
 export { createProductWithVariants, createProductWithInlineVariants } from './create'
 
 // CRUD operations
-export { addVariant, updateVariant, deleteVariant } from './crud'
+export { addVariant, updateVariant, deleteVariant, bulkUpdateVariantStockType, bulkUpdateProductStockType } from './crud'
 
 // Read operations
 export { getProductVariants, getVariantById, getVariantStock } from './read'

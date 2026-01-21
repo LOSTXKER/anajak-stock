@@ -52,6 +52,7 @@ export async function addVariant(
           sku: validated.sku,
           barcode: validated.barcode || null,
           name: validated.name || null,
+          stockType: validated.stockType,
           costPrice: validated.costPrice,
           sellingPrice: validated.sellingPrice,
           reorderPoint: validated.reorderPoint,
@@ -144,6 +145,7 @@ export async function updateVariant(
           sku: validated.sku,
           barcode: validated.barcode,
           name: validated.name,
+          stockType: validated.stockType,
           costPrice: validated.costPrice,
           sellingPrice: validated.sellingPrice,
           reorderPoint: validated.reorderPoint,
@@ -243,5 +245,80 @@ export async function deleteVariant(variantId: string): Promise<ActionResult> {
     return { success: true, data: undefined }
   } catch (error) {
     return handleActionError(error, 'deleteVariant')
+  }
+}
+
+/**
+ * Bulk update stockType for multiple variants
+ */
+export async function bulkUpdateVariantStockType(
+  variantIds: string[],
+  stockType: 'STOCKED' | 'MADE_TO_ORDER' | 'DROP_SHIP'
+): Promise<ActionResult<{ updated: number }>> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้รับอนุญาต' }
+  }
+
+  try {
+    // Update all variants in a single query
+    const result = await prisma.productVariant.updateMany({
+      where: {
+        id: { in: variantIds },
+        active: true,
+        deletedAt: null,
+      },
+      data: { stockType },
+    })
+
+    // Get affected product IDs for revalidation
+    const affectedVariants = await prisma.productVariant.findMany({
+      where: { id: { in: variantIds } },
+      select: { productId: true },
+    })
+
+    const productIds = [...new Set(affectedVariants.map(v => v.productId))]
+    for (const productId of productIds) {
+      revalidatePath(`/products/${productId}`)
+    }
+    revalidatePath('/products')
+
+    return { success: true, data: { updated: result.count } }
+  } catch (error) {
+    return handleActionError(error, 'bulkUpdateVariantStockType')
+  }
+}
+
+/**
+ * Bulk update stockType for multiple products (without variants)
+ */
+export async function bulkUpdateProductStockType(
+  productIds: string[],
+  stockType: 'STOCKED' | 'MADE_TO_ORDER' | 'DROP_SHIP'
+): Promise<ActionResult<{ updated: number }>> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้รับอนุญาต' }
+  }
+
+  try {
+    // Update all products in a single query
+    const result = await prisma.product.updateMany({
+      where: {
+        id: { in: productIds },
+        active: true,
+        deletedAt: null,
+      },
+      data: { stockType },
+    })
+
+    for (const productId of productIds) {
+      revalidatePath(`/products/${productId}`)
+    }
+    revalidatePath('/products')
+
+    return { success: true, data: { updated: result.count } }
+  } catch (error) {
+    return handleActionError(error, 'bulkUpdateProductStockType')
   }
 }

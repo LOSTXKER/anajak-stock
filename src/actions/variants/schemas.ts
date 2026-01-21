@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod'
+import { StockType } from '@/generated/prisma'
 
 // ==================== SCHEMAS ====================
 
@@ -10,6 +11,7 @@ export const VariantInputSchema = z.object({
   sku: z.string().min(1, 'กรุณากรอก SKU'),
   barcode: z.string().optional(),
   name: z.string().optional(),
+  stockType: z.nativeEnum(StockType).default(StockType.STOCKED),
   costPrice: z.number().min(0).default(0),
   sellingPrice: z.number().min(0).default(0),
   reorderPoint: z.number().min(0).default(0),
@@ -23,6 +25,7 @@ export const UpdateVariantSchema = z.object({
   sku: z.string().min(1).optional(),
   barcode: z.string().optional(),
   name: z.string().optional(),
+  stockType: z.nativeEnum(StockType).optional(),
   costPrice: z.number().min(0).optional(),
   sellingPrice: z.number().min(0).optional(),
   reorderPoint: z.number().min(0).optional(),
@@ -50,6 +53,7 @@ export const CreateProductWithVariantsSchema = z.object({
 export const InlineVariantInputSchema = z.object({
   sku: z.string().min(1, 'กรุณากรอก SKU'),
   barcode: z.string().optional(),
+  stockType: z.nativeEnum(StockType).default(StockType.STOCKED),
   costPrice: z.number().min(0).default(0),
   sellingPrice: z.number().min(0).default(0),
   reorderPoint: z.number().min(0).default(0),

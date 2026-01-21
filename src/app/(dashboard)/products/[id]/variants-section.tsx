@@ -8,6 +8,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Table,
   TableBody,
   TableCell,
@@ -29,6 +36,13 @@ import { updateVariant, deleteVariant } from '@/actions/variants'
 import { useRouter } from 'next/navigation'
 import { AddVariantDialog } from './add-variant-dialog'
 import { PrintLabel, BulkPrintLabel } from '@/components/print-label'
+import { StockType } from '@/types'
+
+const stockTypeLabels: Record<StockType, string> = {
+  STOCKED: 'สต๊อค',
+  MADE_TO_ORDER: 'MTO',
+  DROP_SHIP: 'Drop',
+}
 
 interface VariantOption {
   typeName: string
@@ -47,6 +61,7 @@ interface Variant {
   sku: string
   name: string | null
   barcode: string | null
+  stockType: StockType
   costPrice: number
   sellingPrice: number
   reorderPoint: number
@@ -113,6 +128,7 @@ export function VariantsSection({ productId, productSku, productName, variants: 
     try {
       const result = await updateVariant(variant.id, {
         name: variant.name || undefined,
+        stockType: variant.stockType,
         costPrice: variant.costPrice,
         sellingPrice: variant.sellingPrice,
         reorderPoint: variant.reorderPoint,
@@ -241,6 +257,7 @@ export function VariantsSection({ productId, productSku, productName, variants: 
                     </TableHead>
                   ))}
                   {optionTypes.length === 0 && <TableHead>ชื่อ</TableHead>}
+                  <TableHead>ประเภท</TableHead>
                   <TableHead>* ราคาขาย</TableHead>
                   <TableHead>* ราคาทุน</TableHead>
                   <TableHead>สต๊อค</TableHead>
@@ -304,6 +321,24 @@ export function VariantsSection({ productId, productSku, productName, variants: 
                             />
                           </TableCell>
                         )}
+                        {/* ประเภทสต๊อค */}
+                        <TableCell>
+                          <Select
+                            value={variant.stockType}
+                            onValueChange={(v) => updateLocalVariant(variant.id, 'stockType', v)}
+                          >
+                            <SelectTrigger className="h-8 w-24">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(stockTypeLabels).map(([key, label]) => (
+                                <SelectItem key={key} value={key}>
+                                  {label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
                         {/* ราคาขาย */}
                         <TableCell>
                           <div className="flex items-center gap-1">

@@ -198,28 +198,44 @@ export async function sendLowStockAlert() {
     return { success: false, error: 'No recipients found' }
   }
 
-  // Find low stock items (only STOCKED products)
+  // Find low stock items
+  // For products without variants: check product.stockType = STOCKED
+  // For variants: check variant.stockType = STOCKED
   const lowStockItems = await prisma.stockBalance.findMany({
     where: {
       product: {
-        reorderPoint: { gt: 0 },
         active: true,
         deletedAt: null,
-        stockType: 'STOCKED', // Only alert for stocked products
       },
+      OR: [
+        // Products without variants: stockType = STOCKED
+        { variantId: null, product: { stockType: 'STOCKED', reorderPoint: { gt: 0 } } },
+        // Variants: variant.stockType = STOCKED
+        { variant: { stockType: 'STOCKED' } },
+      ],
     },
     include: {
       product: true,
+      variant: true,
     },
   })
 
   const criticalItems = lowStockItems
-    .filter((item) => Number(item.qtyOnHand) <= Number(item.product.reorderPoint))
+    .filter((item) => {
+      const rop = item.variant 
+        ? (Number(item.variant.reorderPoint) || Number(item.product.reorderPoint))
+        : Number(item.product.reorderPoint)
+      return rop > 0 && Number(item.qtyOnHand) <= rop
+    })
     .map((item) => ({
-      name: item.product.name,
-      sku: item.product.sku,
+      name: item.variant 
+        ? `${item.product.name} - ${item.variant.name || item.variant.sku}`
+        : item.product.name,
+      sku: item.variant ? item.variant.sku : item.product.sku,
       qty: Number(item.qtyOnHand),
-      reorderPoint: Number(item.product.reorderPoint),
+      reorderPoint: item.variant 
+        ? (Number(item.variant.reorderPoint) || Number(item.product.reorderPoint))
+        : Number(item.product.reorderPoint),
     }))
 
   if (criticalItems.length === 0) {

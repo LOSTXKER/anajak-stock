@@ -264,6 +264,7 @@ export default function NewProductPage() {
           })),
           variants: variants.map(v => ({
             sku: v.sku,
+            stockType: 'STOCKED' as const, // Default to stocked
             costPrice: v.costPrice,
             sellingPrice: v.sellingPrice,
             reorderPoint: 0,
