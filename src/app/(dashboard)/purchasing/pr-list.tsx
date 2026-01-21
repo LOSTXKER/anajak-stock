@@ -15,9 +15,8 @@ import {
 } from '@/components/ui/table'
 import { ChevronLeft, ChevronRight, Eye, FileText, Loader2 } from 'lucide-react'
 import { PRStatus } from '@/generated/prisma'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
 import { EmptyState } from '@/components/common'
+import { formatDate } from '@/lib/date'
 import { getPRs } from '@/actions/pr'
 
 const statusConfig: Record<PRStatus, { label: string; color: string }> = {
@@ -156,7 +155,7 @@ export function PRList() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-[var(--text-muted)] text-sm">
-                      {format(new Date(pr.createdAt), 'd MMM yy', { locale: th })}
+                      {formatDate(pr.createdAt)}
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" asChild>

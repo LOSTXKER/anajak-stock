@@ -14,8 +14,7 @@ import {
 } from '@/components/ui/table'
 import { FileText, Plus, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { PRStatus } from '@/generated/prisma'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
+import { formatDate, formatDateTime } from '@/lib/date'
 import { PageHeader, EmptyState } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
 
@@ -155,12 +154,10 @@ async function PRContent({ searchParams }: PageProps) {
                         {pr.lines.length} รายการ
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] text-sm">
-                        {pr.needByDate
-                          ? format(new Date(pr.needByDate), 'd MMM yy', { locale: th })
-                          : '-'}
+                        {formatDate(pr.needByDate)}
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] text-sm">
-                        {format(new Date(pr.createdAt), 'd MMM yy HH:mm', { locale: th })}
+                        {formatDateTime(pr.createdAt)}
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon-sm" asChild>

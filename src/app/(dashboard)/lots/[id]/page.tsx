@@ -26,8 +26,7 @@ import {
   CheckCircle,
 } from 'lucide-react'
 import { DetailPageSkeleton } from '@/components/ui/skeleton'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
+import { formatDate, formatDateTime } from '@/lib/date'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -168,10 +167,7 @@ async function LotDetailContent({ params }: PageProps) {
               <div>
                 <p className="text-sm text-[var(--text-muted)]">วันหมดอายุ</p>
                 <p className="text-lg font-semibold text-[var(--text-primary)]">
-                  {lot.expiryDate 
-                    ? format(new Date(lot.expiryDate), 'd MMM yyyy', { locale: th })
-                    : '-'
-                  }
+                  {formatDate(lot.expiryDate)}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-[var(--status-warning-light)] flex items-center justify-center">
@@ -233,16 +229,13 @@ async function LotDetailContent({ params }: PageProps) {
               <div>
                 <p className="text-sm text-[var(--text-muted)]">วันที่ผลิต</p>
                 <p className="text-[var(--text-primary)]">
-                  {lot.manufacturedDate 
-                    ? format(new Date(lot.manufacturedDate), 'd MMM yyyy', { locale: th })
-                    : '-'
-                  }
+                  {formatDate(lot.manufacturedDate)}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-[var(--text-muted)]">วันที่รับเข้า</p>
                 <p className="text-[var(--text-primary)]">
-                  {format(new Date(lot.receivedDate), 'd MMM yyyy', { locale: th })}
+                  {formatDate(lot.receivedDate)}
                 </p>
               </div>
             </div>
@@ -321,7 +314,7 @@ async function LotDetailContent({ params }: PageProps) {
                   return (
                     <TableRow key={i}>
                       <TableCell className="text-[var(--text-secondary)]">
-                        {format(new Date(ml.createdAt), 'd MMM yyyy HH:mm', { locale: th })}
+                        {formatDateTime(ml.createdAt)}
                       </TableCell>
                       <TableCell>
                         <Link 

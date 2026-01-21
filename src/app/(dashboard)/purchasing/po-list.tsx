@@ -15,9 +15,8 @@ import {
 } from '@/components/ui/table'
 import { ChevronLeft, ChevronRight, Eye, ShoppingCart, Loader2 } from 'lucide-react'
 import { POStatus } from '@/generated/prisma'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
 import { EmptyState } from '@/components/common'
+import { formatDate } from '@/lib/date'
 import { getPOs } from '@/actions/po'
 
 const statusConfig: Record<POStatus, { label: string; color: string }> = {
@@ -151,10 +150,10 @@ export function POList() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-[var(--text-muted)] text-sm">
-                      {format(new Date(po.createdAt), 'd MMM yy', { locale: th })}
+                      {formatDate(po.createdAt)}
                     </TableCell>
                     <TableCell className="text-[var(--text-muted)] text-sm">
-                      {po.eta ? format(new Date(po.eta), 'd MMM yy', { locale: th }) : '-'}
+                      {formatDate(po.eta)}
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" asChild>

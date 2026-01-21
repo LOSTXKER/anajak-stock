@@ -14,8 +14,7 @@ import {
 } from '@/components/ui/table'
 import { ShoppingCart, Plus, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { POStatus } from '@/generated/prisma'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
+import { formatDate } from '@/lib/date'
 import { PageHeader, EmptyState } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
 
@@ -163,12 +162,10 @@ async function POContent({ searchParams }: PageProps) {
                         ฿{Number(po.total || 0).toLocaleString()}
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] text-sm">
-                        {po.eta
-                          ? format(new Date(po.eta), 'd MMM yy', { locale: th })
-                          : '-'}
+                        {formatDate(po.eta)}
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] text-sm">
-                        {format(new Date(po.createdAt), 'd MMM yy', { locale: th })}
+                        {formatDate(po.createdAt)}
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon-sm" asChild>

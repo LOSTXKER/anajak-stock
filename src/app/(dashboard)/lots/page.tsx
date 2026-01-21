@@ -16,8 +16,7 @@ import { Package, Search, ChevronLeft, ChevronRight, AlertTriangle, Clock, Check
 import { PageHeader, EmptyState } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
 import { LotSearch } from './lot-search'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
+import { formatDate } from '@/lib/date'
 
 interface PageProps {
   searchParams: Promise<{
@@ -170,10 +169,7 @@ async function LotsContent({ searchParams }: PageProps) {
                       </span>
                     </TableCell>
                     <TableCell className="text-[var(--text-secondary)]">
-                      {lot.expiryDate 
-                        ? format(new Date(lot.expiryDate), 'd MMM yyyy', { locale: th })
-                        : '-'
-                      }
+                      {formatDate(lot.expiryDate)}
                     </TableCell>
                     <TableCell>
                       {getStatusBadge({ 

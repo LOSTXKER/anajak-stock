@@ -7,8 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, RotateCcw, CornerDownRight, Link2 } from 'lucide-react'
 import { getLinkedMovements } from '@/actions/movements'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
+import { formatDate } from '@/lib/date'
 
 interface LinkedMovement {
   id: string
@@ -115,7 +114,7 @@ export function LinkedMovements({ movementId }: LinkedMovementsProps) {
                 </Badge>
               </div>
               <span className="text-xs text-[var(--text-muted)]">
-                {format(new Date(originalMovement.createdAt), 'd MMM yy', { locale: th })}
+                {formatDate(originalMovement.createdAt)}
               </span>
             </div>
           </div>
@@ -158,7 +157,7 @@ export function LinkedMovements({ movementId }: LinkedMovementsProps) {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-[var(--text-muted)]">
-                    {format(new Date(movement.createdAt), 'd MMM yy', { locale: th })}
+                    {formatDate(movement.createdAt)}
                   </span>
                   <Button variant="ghost" size="sm" asChild>
                     <Link href={`/movements/${movement.id}`}>

@@ -27,7 +27,7 @@ import { getMovements } from '@/actions/movements'
 import { exportMovementsToCSV } from '@/actions/export'
 import { MovementType, DocStatus } from '@/generated/prisma'
 import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
+import { formatDateTime } from '@/lib/date'
 import type { MovementWithRelations } from '@/types'
 import { toast } from 'sonner'
 import { PageHeader, EmptyState } from '@/components/common'
@@ -218,9 +218,7 @@ export default function LedgerReportPage() {
                               rowSpan={mov.lines.length}
                               className="text-[var(--text-muted)] text-sm align-top"
                             >
-                              {mov.postedAt
-                                ? format(new Date(mov.postedAt), 'd MMM yy HH:mm', { locale: th })
-                                : '-'}
+                              {formatDateTime(mov.postedAt)}
                             </TableCell>
                           </>
                         ) : null}

@@ -16,8 +16,7 @@ import {
 } from '@/components/ui/table'
 import { ArrowLeft, ClipboardCheck, User, Calendar, Package, FileText, CheckCircle2, XCircle, Link2, ShoppingCart } from 'lucide-react'
 import { GRNActions } from './grn-actions'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
+import { formatDateTime, formatDate, formatTime } from '@/lib/date'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -121,7 +120,7 @@ async function GRNDetail({ id }: { id: string }) {
               </Badge>
             </div>
             <p className="text-[var(--text-muted)] mt-1">
-              รับเมื่อ {format(new Date(grn.receivedAt), 'd MMMM yyyy HH:mm น.', { locale: th })}
+              รับเมื่อ {formatDateTime(grn.receivedAt, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </p>
           </div>
         </div>
@@ -157,8 +156,8 @@ async function GRNDetail({ id }: { id: string }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="font-medium">{format(new Date(grn.receivedAt), 'd/M/yyyy', { locale: th })}</p>
-            <p className="text-sm text-[var(--text-muted)]">{format(new Date(grn.receivedAt), 'HH:mm น.')}</p>
+            <p className="font-medium">{formatDate(grn.receivedAt)}</p>
+            <p className="text-sm text-[var(--text-muted)]">{formatTime(grn.receivedAt)}</p>
           </CardContent>
         </Card>
 

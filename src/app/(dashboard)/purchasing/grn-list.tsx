@@ -15,9 +15,8 @@ import {
 } from '@/components/ui/table'
 import { ChevronLeft, ChevronRight, Eye, ClipboardList, Loader2 } from 'lucide-react'
 import { GRNStatus } from '@/generated/prisma'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
 import { EmptyState } from '@/components/common'
+import { formatDate } from '@/lib/date'
 
 const statusConfig: Record<GRNStatus, { label: string; color: string }> = {
   DRAFT: { label: 'ร่าง', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
@@ -155,7 +154,7 @@ export function GRNList() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] text-sm">
-                        {format(new Date(grn.receivedDate), 'd MMM yy', { locale: th })}
+                        {formatDate(grn.receivedDate)}
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)]">
                         {grn.receivedBy?.name || grn.receivedBy?.username || '-'}

@@ -14,8 +14,7 @@ import {
 } from '@/components/ui/table'
 import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, RefreshCw, Settings2, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { MovementType, DocStatus } from '@/generated/prisma'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
+import { formatDateTime } from '@/lib/date'
 import { ExportButton } from '@/components/export-button'
 import { PageHeader, EmptyState } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
@@ -254,7 +253,7 @@ async function MovementsContent({ searchParams }: PageProps) {
                         {movement.createdBy.name}
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] text-sm">
-                        {format(new Date(movement.createdAt), 'd MMM yy HH:mm', { locale: th })}
+                        {formatDateTime(movement.createdAt)}
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon-sm" asChild>

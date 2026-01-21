@@ -14,8 +14,7 @@ import {
 } from '@/components/ui/table'
 import { ClipboardList, CheckCircle2, XCircle, FileText } from 'lucide-react'
 import { GRNStatus } from '@/generated/prisma'
-import { format } from 'date-fns'
-import { th } from 'date-fns/locale'
+import { formatDateTime } from '@/lib/date'
 import { PageHeader, EmptyState } from '@/components/common'
 import { TableSkeleton } from '@/components/ui/skeleton'
 
@@ -191,7 +190,7 @@ async function GRNContent({ searchParams }: PageProps) {
                         {grn.receivedBy.name}
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] text-sm">
-                        {format(new Date(grn.receivedAt), 'd MMM yy HH:mm', { locale: th })}
+                        {formatDateTime(grn.receivedAt)}
                       </TableCell>
                     </TableRow>
                   )
