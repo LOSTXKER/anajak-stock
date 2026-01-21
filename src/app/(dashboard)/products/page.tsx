@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Package, Plus, Search, Layers, FileUp, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Package, Plus, Search, Layers, FileUp, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
 import { ProductSearch } from './product-search'
 import { ProductActions } from './product-actions'
 import { ExportButton } from '@/components/export-button'
@@ -52,6 +52,12 @@ async function ProductsContent({ searchParams }: PageProps) {
               label="Export"
               className="hidden sm:inline-flex"
             />
+            <Button variant="outline" size="sm" className="text-xs sm:text-sm" asChild>
+              <Link href="/products/bulk-stock-type">
+                <Settings2 className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">จัดการสต๊อค</span>
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" className="text-xs sm:text-sm" asChild>
               <Link href="/products/import">
                 <FileUp className="w-4 h-4 sm:mr-2" />
