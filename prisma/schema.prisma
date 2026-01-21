@@ -769,6 +769,19 @@ model LotMovementLine {
 
 // ==================== NOTIFICATIONS ====================
 
+enum NotificationChannel {
+  WEB
+  LINE
+  EMAIL
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
 model Notification {
   id        String   @id @default(cuid())
   userId    String?  // null = broadcast to all
@@ -779,10 +792,61 @@ model Notification {
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
+  // Relations
+  deliveryLogs NotificationDeliveryLog[]
+
   @@index([userId])
   @@index([read])
   @@index([createdAt])
   @@map("notifications")
+}
+
+// Track delivery status for each channel
+model NotificationDeliveryLog {
+  id             String              @id @default(cuid())
+  notificationId String
+  channel        NotificationChannel
+  status         DeliveryStatus      @default(PENDING)
+  recipientId    String?             // LINE User ID, email address, etc.
+  error          String?
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+
+  // Relations
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, channel, recipientId])
+  @@index([notificationId])
+  @@index([channel])
+  @@index([status])
+  @@map("notification_delivery_logs")
+}
+
+// User notification preferences
+model UserNotificationPreference {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  // Channel toggles
+  webEnabled            Boolean  @default(true)
+  lineEnabled           Boolean  @default(true)
+  emailEnabled          Boolean  @default(true)
+  // Notification type toggles
+  notifyLowStock        Boolean  @default(true)
+  notifyPRPending       Boolean  @default(true)
+  notifyPRApproved      Boolean  @default(true)
+  notifyPRRejected      Boolean  @default(true)
+  notifyPOPending       Boolean  @default(true)
+  notifyPOApproved      Boolean  @default(true)
+  notifyPORejected      Boolean  @default(true)
+  notifyPOReceived      Boolean  @default(true)
+  notifyMovementPosted  Boolean  @default(false)
+  notifyExpiring        Boolean  @default(true)
+  // LINE specific
+  lineUserId            String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("user_notification_preferences")
 }
 
 // ==================== ERP INTEGRATION ====================

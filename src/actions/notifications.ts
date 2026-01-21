@@ -114,21 +114,26 @@ export async function markAllNotificationsAsRead(): Promise<ActionResult<void>> 
   }
 }
 
-// Create a new in-app notification
+// Create a new in-app notification with delivery tracking
 export async function createNotification({
   userId,
   type,
   title,
   message,
   url,
+  sendLine = false,
+  sendEmail = false,
 }: {
   userId?: string | null // null = broadcast
   type: NotificationType
   title: string
   message: string
   url?: string
+  sendLine?: boolean // Also send via LINE
+  sendEmail?: boolean // Also send via Email
 }): Promise<ActionResult<{ id: string }>> {
   try {
+    // Create notification with delivery log for WEB channel
     const notification = await prisma.notification.create({
       data: {
         userId: userId || null,
@@ -137,6 +142,14 @@ export async function createNotification({
         message,
         url,
         read: false,
+        deliveryLogs: {
+          create: {
+            channel: 'WEB',
+            status: 'SENT',
+            recipientId: userId,
+            sentAt: new Date(),
+          },
+        },
       },
     })
 
@@ -152,6 +165,108 @@ export async function createNotification({
       error,
     })
     return { success: false, error: 'ไม่สามารถสร้างการแจ้งเตือนได้' }
+  }
+}
+
+// Create notification and send to all channels
+export async function createAndSendNotification({
+  userId,
+  type,
+  title,
+  message,
+  url,
+}: {
+  userId?: string | null
+  type: NotificationType
+  title: string
+  message: string
+  url?: string
+}): Promise<ActionResult<{ id: string; deliveryResults: { channel: string; success: boolean; error?: string }[] }>> {
+  try {
+    // Create notification first
+    const notification = await prisma.notification.create({
+      data: {
+        userId: userId || null,
+        type,
+        title,
+        message,
+        url,
+        read: false,
+      },
+    })
+
+    const deliveryResults: { channel: string; success: boolean; error?: string }[] = []
+
+    // Log WEB delivery
+    await prisma.notificationDeliveryLog.create({
+      data: {
+        notificationId: notification.id,
+        channel: 'WEB',
+        status: 'SENT',
+        recipientId: userId,
+        sentAt: new Date(),
+      },
+    })
+    deliveryResults.push({ channel: 'WEB', success: true })
+
+    console.log(`[Notification] Created and delivered: type=${type}, userId=${userId || 'broadcast'}, title="${title}"`)
+
+    return { 
+      success: true, 
+      data: { 
+        id: notification.id,
+        deliveryResults,
+      } 
+    }
+  } catch (error) {
+    console.error('[Notification] Failed to create:', error)
+    return { success: false, error: 'ไม่สามารถสร้างการแจ้งเตือนได้' }
+  }
+}
+
+// Log LINE delivery result
+export async function logLineDelivery(
+  notificationId: string,
+  recipientId: string,
+  success: boolean,
+  error?: string
+): Promise<void> {
+  try {
+    await prisma.notificationDeliveryLog.create({
+      data: {
+        notificationId,
+        channel: 'LINE',
+        status: success ? 'SENT' : 'FAILED',
+        recipientId,
+        error,
+        sentAt: success ? new Date() : null,
+      },
+    })
+  } catch (err) {
+    console.error('[Notification] Failed to log LINE delivery:', err)
+  }
+}
+
+// Log Email delivery result
+export async function logEmailDelivery(
+  notificationId: string,
+  recipientId: string,
+  success: boolean,
+  error?: string
+): Promise<void> {
+  try {
+    await prisma.notificationDeliveryLog.create({
+      data: {
+        notificationId,
+        channel: 'EMAIL',
+        status: success ? 'SENT' : 'FAILED',
+        recipientId,
+        error,
+        sentAt: success ? new Date() : null,
+      },
+    })
+  } catch (err) {
+    console.error('[Notification] Failed to log Email delivery:', err)
   }
 }
 
