@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
+import { createNotification } from '@/actions/notifications'
 
 // ==================== SCHEMAS ====================
 
@@ -318,6 +319,11 @@ export async function completeStockTake(id: string) {
       maxWait: 10000,
     })
 
+    // Send notifications to approvers
+    notifyStockTakeCompleted(id, stockTake.code, session.name).catch((err) =>
+      console.error('Failed to send stock take completion notifications:', err)
+    )
+
     revalidatePath('/stock-take')
     revalidatePath(`/stock-take/${id}`)
     return { success: true as const, data: undefined }
@@ -491,4 +497,41 @@ export async function getWarehouses() {
     console.error('Error getting warehouses:', error)
     return { success: false as const, error: 'เกิดข้อผิดพลาด' }
   }
+}
+
+// ============================================
+// Notification Helpers
+// ============================================
+
+/**
+ * Send notifications to all approvers when a stock take is completed
+ */
+async function notifyStockTakeCompleted(
+  stockTakeId: string,
+  code: string,
+  counterName: string
+) {
+  // Get all approvers (ADMIN and APPROVER roles)
+  const approvers = await prisma.user.findMany({
+    where: {
+      active: true,
+      deletedAt: null,
+      role: { in: ['ADMIN', 'APPROVER'] },
+    },
+    select: { id: true },
+  })
+
+  // Create in-app notifications for all approvers
+  const notificationPromises = approvers.map((approver) =>
+    createNotification({
+      userId: approver.id,
+      type: 'system',
+      title: `ตรวจนับรออนุมัติ: ${code}`,
+      message: `${counterName} นับสต๊อกเสร็จแล้ว รอการอนุมัติ`,
+      url: `/stock-take/${stockTakeId}`,
+    })
+  )
+
+  // Execute all in parallel
+  await Promise.allSettled(notificationPromises)
 }
