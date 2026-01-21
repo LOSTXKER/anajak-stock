@@ -48,6 +48,7 @@ export type StockBalanceWithProduct = StockBalance & {
     category: Category | null
     unit: UnitOfMeasure | null
   }
+  variant: ProductVariant | null
   location: Location & {
     warehouse: Warehouse
   }

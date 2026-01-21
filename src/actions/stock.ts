@@ -51,6 +51,11 @@ export async function getStockBalances(params: {
             unit: { select: { id: true, name: true, code: true } },
           },
         },
+        variant: {
+          select: {
+            id: true, name: true, sku: true,
+          },
+        },
         location: {
           select: {
             id: true, name: true, code: true,
@@ -60,6 +65,7 @@ export async function getStockBalances(params: {
       },
       orderBy: [
         { product: { name: 'asc' } },
+        { variant: { name: 'asc' } },
         { location: { code: 'asc' } },
       ],
       skip: (page - 1) * limit,
@@ -143,6 +149,11 @@ async function getLowStockBalances(params: {
               unit: { select: { id: true, name: true, code: true } },
             },
           },
+          variant: {
+            select: {
+              id: true, name: true, sku: true,
+            },
+          },
           location: {
             select: {
               id: true, name: true, code: true,
@@ -152,6 +163,7 @@ async function getLowStockBalances(params: {
         },
         orderBy: [
           { product: { name: 'asc' } },
+          { variant: { name: 'asc' } },
           { location: { code: 'asc' } },
         ],
       })

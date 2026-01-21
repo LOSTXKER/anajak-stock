@@ -129,6 +129,7 @@ async function StockContent({ searchParams }: PageProps) {
                 <TableRow>
                   <TableHead>SKU</TableHead>
                   <TableHead>สินค้า</TableHead>
+                  <TableHead>ตัวเลือก</TableHead>
                   <TableHead>หมวดหมู่</TableHead>
                   <TableHead>คลัง</TableHead>
                   <TableHead>โลเคชัน</TableHead>
@@ -143,10 +144,13 @@ async function StockContent({ searchParams }: PageProps) {
                     Number(balance.product.reorderPoint) > 0 &&
                     Number(balance.qtyOnHand) <= Number(balance.product.reorderPoint)
 
+                  // Use variant SKU if available, otherwise product SKU
+                  const displaySku = balance.variant?.sku || balance.product.sku
+
                   return (
                     <TableRow key={balance.id}>
                       <TableCell className="font-mono text-sm text-[var(--accent-primary)]">
-                        {balance.product.sku}
+                        {displaySku}
                       </TableCell>
                       <TableCell>
                         <Link
@@ -155,6 +159,9 @@ async function StockContent({ searchParams }: PageProps) {
                         >
                           {balance.product.name}
                         </Link>
+                      </TableCell>
+                      <TableCell className="text-[var(--text-secondary)]">
+                        {balance.variant?.name || '-'}
                       </TableCell>
                       <TableCell className="text-[var(--text-secondary)]">
                         {balance.product.category?.name || '-'}
