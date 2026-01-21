@@ -15,73 +15,204 @@ import {
 import { AlertTriangle, ShoppingCart } from 'lucide-react'
 import { PageHeader, EmptyState } from '@/components/common'
 
-async function getLowStockReport() {
-  // Query all products with reorder point > 0
-  // This includes products that never had any movement (new products)
-  const products = await prisma.product.findMany({
+interface LowStockItem {
+  id: string
+  productId: string
+  productName: string
+  productSku: string
+  variantId: string | null
+  variantName: string | null
+  variantSku: string | null
+  categoryName: string | null
+  warehouseName: string | null
+  locationCode: string | null
+  qtyOnHand: number
+  reorderPoint: number
+}
+
+async function getLowStockReport(): Promise<LowStockItem[]> {
+  // Get all stock balances grouped by product/variant
+  const stockBalances = await prisma.stockBalance.findMany({
     where: {
-      reorderPoint: { gt: 0 },
+      product: {
+        active: true,
+        deletedAt: null,
+      },
+    },
+    include: {
+      product: {
+        include: {
+          category: true,
+        },
+      },
+      variant: {
+        include: {
+          optionValues: {
+            include: {
+              optionValue: {
+                include: {
+                  optionType: true,
+                },
+              },
+            },
+            orderBy: {
+              optionValue: { optionType: { displayOrder: 'asc' } },
+            },
+          },
+        },
+      },
+      location: {
+        include: {
+          warehouse: true,
+        },
+      },
+    },
+  })
+
+  // Group by product+variant to get total stock
+  const stockMap = new Map<string, {
+    productId: string
+    productName: string
+    productSku: string
+    variantId: string | null
+    variantName: string | null
+    variantSku: string | null
+    categoryName: string | null
+    reorderPoint: number
+    totalQty: number
+    warehouseName: string | null
+    locationCode: string | null
+  }>()
+
+  for (const sb of stockBalances) {
+    const key = sb.variantId 
+      ? `${sb.productId}-${sb.variantId}`
+      : sb.productId
+
+    // Get variant name from optionValues if not set
+    let variantName = sb.variant?.name
+    if (!variantName && sb.variant?.optionValues && sb.variant.optionValues.length > 0) {
+      variantName = sb.variant.optionValues.map(ov => ov.optionValue.value).join(' / ')
+    }
+
+    // Determine reorder point (use variant's if available, otherwise product's)
+    const reorderPoint = sb.variant 
+      ? Number(sb.variant.reorderPoint) || Number(sb.product.reorderPoint) || 0
+      : Number(sb.product.reorderPoint) || 0
+
+    const existing = stockMap.get(key)
+    if (existing) {
+      existing.totalQty += Number(sb.qtyOnHand)
+    } else {
+      stockMap.set(key, {
+        productId: sb.productId,
+        productName: sb.product.name,
+        productSku: sb.product.sku,
+        variantId: sb.variantId,
+        variantName: variantName || null,
+        variantSku: sb.variant?.sku || null,
+        categoryName: sb.product.category?.name || null,
+        reorderPoint,
+        totalQty: Number(sb.qtyOnHand),
+        warehouseName: sb.location.warehouse.name,
+        locationCode: sb.location.code,
+      })
+    }
+  }
+
+  // Also get products/variants with reorderPoint but no stock (never had movement)
+  const productsWithNoStock = await prisma.product.findMany({
+    where: {
       active: true,
       deletedAt: null,
+      reorderPoint: { gt: 0 },
+      stockBalances: { none: {} },
     },
     include: {
       category: true,
-      unit: true,
-      stockBalances: {
+      variants: {
+        where: { active: true, deletedAt: null },
         include: {
-          location: {
+          optionValues: {
             include: {
-              warehouse: true,
+              optionValue: {
+                include: { optionType: true },
+              },
+            },
+            orderBy: {
+              optionValue: { optionType: { displayOrder: 'asc' } },
             },
           },
         },
       },
     },
-    orderBy: {
-      name: 'asc',
-    },
   })
 
-  // Transform to include calculated total stock
-  const result: Array<{
-    id: string
-    productId: string
-    product: typeof products[0]
-    location: { code: string; name: string; warehouse: { name: string } } | null
-    qtyOnHand: number
-    totalStock: number
-  }> = []
-
-  for (const product of products) {
-    const totalStock = product.stockBalances.reduce(
-      (sum, sb) => sum + Number(sb.qtyOnHand),
-      0
-    )
-    const rop = Number(product.reorderPoint)
-
-    // Only include if total stock <= reorder point
-    if (totalStock <= rop) {
-      if (product.stockBalances.length === 0) {
-        // Product has no stock balance records (never had movement)
-        result.push({
-          id: `${product.id}-no-stock`,
+  for (const product of productsWithNoStock) {
+    if (product.variants.length > 0) {
+      // Add each variant with 0 stock
+      for (const variant of product.variants) {
+        const key = `${product.id}-${variant.id}`
+        if (!stockMap.has(key)) {
+          let variantName = variant.name
+          if (!variantName && variant.optionValues.length > 0) {
+            variantName = variant.optionValues.map(ov => ov.optionValue.value).join(' / ')
+          }
+          
+          stockMap.set(key, {
+            productId: product.id,
+            productName: product.name,
+            productSku: product.sku,
+            variantId: variant.id,
+            variantName: variantName || null,
+            variantSku: variant.sku,
+            categoryName: product.category?.name || null,
+            reorderPoint: Number(variant.reorderPoint) || Number(product.reorderPoint) || 0,
+            totalQty: 0,
+            warehouseName: null,
+            locationCode: null,
+          })
+        }
+      }
+    } else {
+      // Product without variants
+      const key = product.id
+      if (!stockMap.has(key)) {
+        stockMap.set(key, {
           productId: product.id,
-          product,
-          location: null,
-          qtyOnHand: 0,
-          totalStock: 0,
-        })
-      } else {
-        // Group by product and show total
-        result.push({
-          id: `${product.id}-total`,
-          productId: product.id,
-          product,
-          location: product.stockBalances[0]?.location || null,
-          qtyOnHand: totalStock,
-          totalStock,
+          productName: product.name,
+          productSku: product.sku,
+          variantId: null,
+          variantName: null,
+          variantSku: null,
+          categoryName: product.category?.name || null,
+          reorderPoint: Number(product.reorderPoint) || 0,
+          totalQty: 0,
+          warehouseName: null,
+          locationCode: null,
         })
       }
+    }
+  }
+
+  // Filter for low stock items
+  const result: LowStockItem[] = []
+  for (const [key, item] of stockMap) {
+    if (item.reorderPoint > 0 && item.totalQty <= item.reorderPoint) {
+      result.push({
+        id: key,
+        productId: item.productId,
+        productName: item.productName,
+        productSku: item.productSku,
+        variantId: item.variantId,
+        variantName: item.variantName,
+        variantSku: item.variantSku,
+        categoryName: item.categoryName,
+        warehouseName: item.warehouseName,
+        locationCode: item.locationCode,
+        qtyOnHand: item.totalQty,
+        reorderPoint: item.reorderPoint,
+      })
     }
   }
 
@@ -118,85 +249,92 @@ async function LowStockReportContent() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>SKU</TableHead>
-                <TableHead>สินค้า</TableHead>
-                <TableHead>หมวดหมู่</TableHead>
-                <TableHead>คลัง / โลเคชัน</TableHead>
-                <TableHead className="text-right">คงเหลือ</TableHead>
-                <TableHead className="text-right">ROP</TableHead>
-                <TableHead className="text-right">ขาด</TableHead>
-                <TableHead className="text-center">ระดับ</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {lowStockItems.length === 0 ? (
+          <div className="overflow-x-auto">
+            <Table className="min-w-[900px]">
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12">
-                    <EmptyState
-                      icon={<AlertTriangle className="w-8 h-8" />}
-                      title="ไม่มีสินค้าใกล้หมด"
-                      description="สินค้าทั้งหมดมียอดคงเหลือเพียงพอ"
-                    />
-                  </TableCell>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>สินค้า</TableHead>
+                  <TableHead>ตัวเลือก</TableHead>
+                  <TableHead>หมวดหมู่</TableHead>
+                  <TableHead>คลัง / โลเคชัน</TableHead>
+                  <TableHead className="text-right">คงเหลือ</TableHead>
+                  <TableHead className="text-right">ROP</TableHead>
+                  <TableHead className="text-right">ขาด</TableHead>
+                  <TableHead className="text-center">ระดับ</TableHead>
                 </TableRow>
-              ) : (
-                lowStockItems.map((item) => {
-                  const qty = Number(item.qtyOnHand)
-                  const rop = Number(item.product.reorderPoint)
-                  const shortage = rop - qty
-                  const level = qty === 0 ? 'critical' : qty < rop / 2 ? 'warning' : 'low'
-                  const levelInfo = levelConfig[level]
+              </TableHeader>
+              <TableBody>
+                {lowStockItems.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-12">
+                      <EmptyState
+                        icon={<AlertTriangle className="w-8 h-8" />}
+                        title="ไม่มีสินค้าใกล้หมด"
+                        description="สินค้าทั้งหมดมียอดคงเหลือเพียงพอ"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  lowStockItems.map((item) => {
+                    const qty = item.qtyOnHand
+                    const rop = item.reorderPoint
+                    const shortage = rop - qty
+                    const level = qty === 0 ? 'critical' : qty < rop / 2 ? 'warning' : 'low'
+                    const levelInfo = levelConfig[level]
+                    const displaySku = item.variantSku || item.productSku
 
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-mono text-sm">
-                        <Link href={`/products/${item.productId}`} className="text-[var(--accent-primary)] hover:underline">
-                          {item.product.sku}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {item.product.name}
-                      </TableCell>
-                      <TableCell className="text-[var(--text-muted)]">
-                        {item.product.category?.name || '-'}
-                      </TableCell>
-                      <TableCell>
-                        {item.location ? (
-                          <>
-                            <span className="font-medium">{item.location.warehouse.name}</span>
-                            <span className="text-[var(--text-muted)] text-xs ml-2">
-                              ({item.location.code})
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-[var(--text-muted)] italic">ยังไม่มีสต๊อค</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className={qty === 0 ? 'text-[var(--status-error)] font-bold' : 'text-[var(--status-warning)] font-bold'}>
-                          {qty.toLocaleString()}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right text-[var(--text-muted)] font-mono">
-                        {rop.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right text-[var(--status-error)] font-mono font-semibold">
-                        -{shortage.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge className={levelInfo.color}>
-                          {levelInfo.label}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-mono text-sm">
+                          <Link href={`/products/${item.productId}`} className="text-[var(--accent-primary)] hover:underline">
+                            {displaySku}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {item.productName}
+                        </TableCell>
+                        <TableCell className="text-[var(--text-secondary)]">
+                          {item.variantName || '-'}
+                        </TableCell>
+                        <TableCell className="text-[var(--text-muted)]">
+                          {item.categoryName || '-'}
+                        </TableCell>
+                        <TableCell>
+                          {item.warehouseName ? (
+                            <>
+                              <span className="font-medium">{item.warehouseName}</span>
+                              <span className="text-[var(--text-muted)] text-xs ml-2">
+                                ({item.locationCode})
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[var(--text-muted)] italic">ยังไม่มีสต๊อค</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={qty === 0 ? 'text-[var(--status-error)] font-bold' : 'text-[var(--status-warning)] font-bold'}>
+                            {qty.toLocaleString()}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right text-[var(--text-muted)] font-mono">
+                          {rop.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right text-[var(--status-error)] font-mono font-semibold">
+                          -{shortage.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge className={levelInfo.color}>
+                            {levelInfo.label}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

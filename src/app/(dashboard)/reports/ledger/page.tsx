@@ -165,6 +165,7 @@ export default function LedgerReportPage() {
                 <TableHead>วันที่ Post</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>สินค้า</TableHead>
+                <TableHead>ตัวเลือก</TableHead>
                 <TableHead>จาก</TableHead>
                 <TableHead>ไป</TableHead>
                 <TableHead className="text-right">จำนวน</TableHead>
@@ -174,13 +175,13 @@ export default function LedgerReportPage() {
             <TableBody>
               {isPending ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12">
+                  <TableCell colSpan={10} className="text-center py-12">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent-primary)] mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : movements.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12">
+                  <TableCell colSpan={10} className="text-center py-12">
                     <EmptyState
                       icon={<FileSpreadsheet className="w-8 h-8" />}
                       title="ไม่พบรายการ"
@@ -192,6 +193,9 @@ export default function LedgerReportPage() {
                 movements.flatMap((mov) =>
                   mov.lines.map((line, idx) => {
                     const typeInfo = typeConfig[mov.type]
+                    const displaySku = line.variant?.sku || line.product.sku
+                    const variantName = line.variant?.name || '-'
+                    
                     return (
                       <TableRow key={`${mov.id}-${line.id}`}>
                         {idx === 0 ? (
@@ -222,11 +226,14 @@ export default function LedgerReportPage() {
                         ) : null}
                         <TableCell className="font-mono text-xs text-[var(--text-muted)]">
                           <Link href={`/products/${line.productId}`} className="hover:text-[var(--accent-primary)]">
-                            {line.product.sku}
+                            {displaySku}
                           </Link>
                         </TableCell>
                         <TableCell className="text-sm font-medium">
                           {line.product.name}
+                        </TableCell>
+                        <TableCell className="text-[var(--text-secondary)] text-sm">
+                          {variantName}
                         </TableCell>
                         <TableCell className="text-[var(--text-muted)] text-sm">
                           {line.fromLocation
