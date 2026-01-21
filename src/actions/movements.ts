@@ -7,6 +7,7 @@ import { MovementType, DocStatus } from '@/generated/prisma'
 import { serialize } from '@/lib/serialize'
 import type { ActionResult, PaginatedResult, MovementWithRelations } from '@/types'
 import { sendLineMovementPosted } from '@/actions/line-notifications'
+import { createNotification } from '@/actions/notifications'
 
 interface MovementLineInput {
   productId: string
@@ -328,6 +329,11 @@ export async function submitMovement(id: string): Promise<ActionResult> {
         refId: id,
       },
     }).catch((err) => console.error('Failed to create audit log:', err))
+
+    // Send notifications to approvers
+    notifyMovementSubmitted(id, movement.docNumber, movement.type, session.name).catch((err) =>
+      console.error('Failed to send movement submission notifications:', err)
+    )
 
     revalidatePath('/movements')
     revalidatePath(`/movements/${id}`)
@@ -1109,4 +1115,52 @@ export async function getLinkedMovements(id: string) {
     console.error('Get linked movements error:', error)
     return { success: false, error: 'ไม่สามารถโหลดรายการที่เชื่อมโยงได้' }
   }
+}
+
+// ============================================
+// Notification Helpers
+// ============================================
+
+const MOVEMENT_TYPE_LABELS: Record<string, string> = {
+  RECEIVE: 'รับเข้า',
+  ISSUE: 'เบิกออก',
+  TRANSFER: 'โอนย้าย',
+  ADJUST: 'ปรับปรุง',
+  RETURN: 'คืนของ',
+}
+
+/**
+ * Send notifications to all approvers when a movement is submitted
+ */
+async function notifyMovementSubmitted(
+  movementId: string, 
+  docNumber: string, 
+  type: string, 
+  submitterName: string
+) {
+  const typeLabel = MOVEMENT_TYPE_LABELS[type] || type
+
+  // Get all approvers (ADMIN and APPROVER roles)
+  const approvers = await prisma.user.findMany({
+    where: {
+      active: true,
+      deletedAt: null,
+      role: { in: ['ADMIN', 'APPROVER'] },
+    },
+    select: { id: true },
+  })
+
+  // Create in-app notifications for all approvers
+  const notificationPromises = approvers.map((approver) =>
+    createNotification({
+      userId: approver.id,
+      type: 'system',
+      title: `${typeLabel}รอดำเนินการ: ${docNumber}`,
+      message: `${submitterName} ส่งรายการ${typeLabel} ${docNumber} รอดำเนินการ`,
+      url: `/movements/${movementId}`,
+    })
+  )
+
+  // Execute all in parallel
+  await Promise.allSettled(notificationPromises)
 }
