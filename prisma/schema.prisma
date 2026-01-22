@@ -1,6 +1,3 @@
-// Prisma schema for Inventory Stock Management System
-// ระบบจัดการสต๊อคสินค้า (Inventory + PR/PO + Statistics)
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -10,7 +7,753 @@ datasource db {
   provider = "postgresql"
 }
 
-// ==================== ENUMS ====================
+model User {
+  id                 String          @id @default(cuid())
+  supabaseId         String?         @unique
+  username           String          @unique
+  email              String?         @unique
+  name               String
+  role               Role            @default(VIEWER)
+  active             Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  deletedAt          DateTime?
+  customPermissions  String[]        @default([])
+  auditLogs          AuditLog[]
+  grns               GRN[]           @relation("GRNReceivedBy")
+  approvedPOs        PO[]            @relation("POApprover")
+  pos                PO[]            @relation("POCreatedBy")
+  approvedPRs        PR[]            @relation("PRApprover")
+  prs                PR[]            @relation("PRRequester")
+  approvedMovements  StockMovement[] @relation("MovementApprovedBy")
+  createdMovements   StockMovement[] @relation("MovementCreatedBy")
+  stockTakesApproved StockTake[]     @relation("StockTakeApprovedBy")
+  stockTakesCounted  StockTake[]     @relation("StockTakeCountedBy")
+
+  @@map("users")
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  products    Product[]
+
+  @@map("categories")
+}
+
+model UnitOfMeasure {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  products  Product[]
+
+  @@map("units_of_measure")
+}
+
+model Product {
+  id             String           @id @default(cuid())
+  sku            String           @unique
+  name           String
+  description    String?
+  barcode        String?          @unique
+  categoryId     String?
+  unitId         String?
+  reorderPoint   Decimal          @default(0) @db.Decimal(18, 4)
+  minQty         Decimal          @default(0) @db.Decimal(18, 4)
+  maxQty         Decimal          @default(0) @db.Decimal(18, 4)
+  standardCost   Decimal          @default(0) @db.Decimal(18, 4)
+  lastCost       Decimal          @default(0) @db.Decimal(18, 4)
+  imageUrl       String?
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+  hasVariants    Boolean          @default(false)
+  stockType      StockType        @default(STOCKED)
+  grnLines       GRNLine[]
+  lots           Lot[]
+  movementLines  MovementLine[]
+  poLines        POLine[]
+  prLines        PRLine[]
+  variants       ProductVariant[]
+  category       Category?        @relation(fields: [categoryId], references: [id])
+  unit           UnitOfMeasure?   @relation(fields: [unitId], references: [id])
+  stockBalances  StockBalance[]
+  stockTakeLines StockTakeLine[]
+
+  @@index([categoryId])
+  @@index([unitId])
+  @@index([sku])
+  @@index([barcode])
+  @@index([active, deletedAt])
+  @@index([categoryId, active])
+  @@index([name])
+  @@map("products")
+}
+
+model OptionType {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  displayOrder Int           @default(0)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  values       OptionValue[]
+
+  @@map("option_types")
+}
+
+model OptionValue {
+  id             String               @id @default(cuid())
+  optionTypeId   String
+  value          String
+  displayOrder   Int                  @default(0)
+  active         Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  optionType     OptionType           @relation(fields: [optionTypeId], references: [id], onDelete: Cascade)
+  variantOptions VariantOptionValue[]
+
+  @@unique([optionTypeId, value])
+  @@index([optionTypeId])
+  @@map("option_values")
+}
+
+model ProductVariant {
+  id             String               @id @default(cuid())
+  productId      String
+  sku            String               @unique
+  barcode        String?              @unique
+  lastCost       Decimal              @default(0) @db.Decimal(18, 4)
+  imageUrl       String?
+  active         Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  deletedAt      DateTime?
+  name           String?
+  costPrice      Decimal              @default(0) @db.Decimal(18, 4)
+  lowStockAlert  Boolean              @default(true)
+  maxQty         Decimal              @default(0) @db.Decimal(18, 4)
+  minQty         Decimal              @default(0) @db.Decimal(18, 4)
+  reorderPoint   Decimal              @default(0) @db.Decimal(18, 4)
+  sellingPrice   Decimal              @default(0) @db.Decimal(18, 4)
+  stockType      StockType            @default(STOCKED)
+  grnLines       GRNLine[]
+  lots           Lot[]
+  movementLines  MovementLine[]
+  poLines        POLine[]
+  prLines        PRLine[]
+  product        Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockBalances  StockBalance[]
+  stockTakeLines StockTakeLine[]
+  optionValues   VariantOptionValue[]
+
+  @@index([productId])
+  @@index([sku])
+  @@index([barcode])
+  @@map("product_variants")
+}
+
+model VariantOptionValue {
+  id            String         @id @default(cuid())
+  variantId     String
+  optionValueId String
+  createdAt     DateTime       @default(now())
+  optionValue   OptionValue    @relation(fields: [optionValueId], references: [id], onDelete: Cascade)
+  variant       ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, optionValueId])
+  @@index([variantId])
+  @@index([optionValueId])
+  @@map("variant_option_values")
+}
+
+model Warehouse {
+  id         String      @id @default(cuid())
+  code       String      @unique
+  name       String
+  address    String?
+  active     Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  deletedAt  DateTime?
+  locations  Location[]
+  stockTakes StockTake[]
+
+  @@map("warehouses")
+}
+
+model Location {
+  id                String          @id @default(cuid())
+  warehouseId       String
+  code              String
+  name              String
+  zone              String?
+  rack              String?
+  shelf             String?
+  bin               String?
+  active            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+  warehouse         Warehouse       @relation(fields: [warehouseId], references: [id])
+  lotBalances       LotBalance[]
+  movementLinesFrom MovementLine[]  @relation("MovementFromLocation")
+  movementLinesTo   MovementLine[]  @relation("MovementToLocation")
+  stockBalances     StockBalance[]
+  stockTakeLines    StockTakeLine[]
+
+  @@unique([warehouseId, code])
+  @@index([warehouseId])
+  @@map("locations")
+}
+
+model Supplier {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  name         String
+  contactName  String?
+  phone        String?
+  email        String?
+  address      String?
+  taxId        String?
+  terms        String?
+  leadTimeDays Int?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+  pos          PO[]
+
+  @@map("suppliers")
+}
+
+model StockBalance {
+  id         String          @id @default(cuid())
+  productId  String
+  locationId String
+  qtyOnHand  Decimal         @default(0) @db.Decimal(18, 4)
+  updatedAt  DateTime        @updatedAt
+  variantId  String?
+  location   Location        @relation(fields: [locationId], references: [id])
+  product    Product         @relation(fields: [productId], references: [id])
+  variant    ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@unique([productId, variantId, locationId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([locationId])
+  @@index([productId, locationId])
+  @@index([locationId, qtyOnHand])
+  @@map("stock_balances")
+}
+
+model StockMovement {
+  id           String         @id @default(cuid())
+  docNumber    String         @unique
+  type         MovementType
+  refType      String?
+  refId        String?
+  status       DocStatus      @default(DRAFT)
+  note         String?
+  reason       String?
+  projectCode  String?
+  createdById  String
+  approvedById String?
+  postedAt     DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  attachments  Attachment[]
+  lines        MovementLine[]
+  approvedBy   User?          @relation("MovementApprovedBy", fields: [approvedById], references: [id])
+  createdBy    User           @relation("MovementCreatedBy", fields: [createdById], references: [id])
+
+  @@index([type])
+  @@index([status])
+  @@index([createdById])
+  @@index([docNumber])
+  @@index([type, status])
+  @@index([createdAt, type])
+  @@index([status, createdAt])
+  @@map("stock_movements")
+}
+
+model MovementLine {
+  id               String            @id @default(cuid())
+  movementId       String
+  productId        String
+  fromLocationId   String?
+  toLocationId     String?
+  qty              Decimal           @db.Decimal(18, 4)
+  unitCost         Decimal           @default(0) @db.Decimal(18, 4)
+  note             String?
+  createdAt        DateTime          @default(now())
+  variantId        String?
+  lotMovementLines LotMovementLine[]
+  fromLocation     Location?         @relation("MovementFromLocation", fields: [fromLocationId], references: [id])
+  movement         StockMovement     @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  product          Product           @relation(fields: [productId], references: [id])
+  toLocation       Location?         @relation("MovementToLocation", fields: [toLocationId], references: [id])
+  variant          ProductVariant?   @relation(fields: [variantId], references: [id])
+
+  @@index([movementId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@map("movement_lines")
+}
+
+model PR {
+  id             String       @id @default(cuid())
+  prNumber       String       @unique
+  requesterId    String
+  needByDate     DateTime?
+  status         PRStatus     @default(DRAFT)
+  note           String?
+  priority       String?      @default("NORMAL")
+  approverId     String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  attachments    Attachment[]
+  pos            PO[]
+  lines          PRLine[]
+  approver       User?        @relation("PRApprover", fields: [approverId], references: [id])
+  requester      User         @relation("PRRequester", fields: [requesterId], references: [id])
+
+  @@index([requesterId])
+  @@index([status])
+  @@index([prNumber])
+  @@index([status, createdAt])
+  @@map("prs")
+}
+
+model PRLine {
+  id        String          @id @default(cuid())
+  prId      String
+  productId String
+  qty       Decimal         @db.Decimal(18, 4)
+  note      String?
+  createdAt DateTime        @default(now())
+  variantId String?
+  pr        PR              @relation(fields: [prId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([prId])
+  @@index([productId])
+  @@index([variantId])
+  @@map("pr_lines")
+}
+
+model PO {
+  id           String       @id @default(cuid())
+  poNumber     String       @unique
+  supplierId   String
+  prId         String?
+  status       POStatus     @default(DRAFT)
+  vatType      VatType      @default(NO_VAT)
+  vatRate      Decimal      @default(0) @db.Decimal(5, 2)
+  subtotal     Decimal      @default(0) @db.Decimal(18, 4)
+  vatAmount    Decimal      @default(0) @db.Decimal(18, 4)
+  total        Decimal      @default(0) @db.Decimal(18, 4)
+  eta          DateTime?
+  terms        String?
+  note         String?
+  createdById  String
+  approvedById String?
+  approvedAt   DateTime?
+  sentAt       DateTime?
+  closedAt     DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  attachments  Attachment[]
+  grns         GRN[]
+  lines        POLine[]
+  timelines    POTimeline[]
+  approvedBy   User?        @relation("POApprover", fields: [approvedById], references: [id])
+  createdBy    User         @relation("POCreatedBy", fields: [createdById], references: [id])
+  pr           PR?          @relation(fields: [prId], references: [id])
+  supplier     Supplier     @relation(fields: [supplierId], references: [id])
+
+  @@index([supplierId])
+  @@index([prId])
+  @@index([status])
+  @@index([poNumber])
+  @@index([status, createdAt])
+  @@index([supplierId, status])
+  @@map("pos")
+}
+
+model POLine {
+  id          String          @id @default(cuid())
+  poId        String
+  productId   String
+  qty         Decimal         @db.Decimal(18, 4)
+  qtyReceived Decimal         @default(0) @db.Decimal(18, 4)
+  unitPrice   Decimal         @db.Decimal(18, 4)
+  note        String?
+  createdAt   DateTime        @default(now())
+  variantId   String?
+  grnLines    GRNLine[]
+  po          PO              @relation(fields: [poId], references: [id], onDelete: Cascade)
+  product     Product         @relation(fields: [productId], references: [id])
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([poId])
+  @@index([productId])
+  @@index([variantId])
+  @@map("po_lines")
+}
+
+model POTimeline {
+  id        String   @id @default(cuid())
+  poId      String
+  action    String
+  note      String?
+  createdAt DateTime @default(now())
+  po        PO       @relation(fields: [poId], references: [id], onDelete: Cascade)
+
+  @@index([poId])
+  @@map("po_timelines")
+}
+
+model GRN {
+  id           String       @id @default(cuid())
+  grnNumber    String       @unique
+  poId         String
+  status       GRNStatus    @default(DRAFT)
+  receivedById String
+  receivedAt   DateTime     @default(now())
+  note         String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  attachments  Attachment[]
+  lines        GRNLine[]
+  po           PO           @relation(fields: [poId], references: [id])
+  receivedBy   User         @relation("GRNReceivedBy", fields: [receivedById], references: [id])
+
+  @@index([poId])
+  @@index([grnNumber])
+  @@map("grns")
+}
+
+model GRNLine {
+  id          String          @id @default(cuid())
+  grnId       String
+  poLineId    String
+  productId   String
+  locationId  String?
+  qtyReceived Decimal         @db.Decimal(18, 4)
+  unitCost    Decimal         @db.Decimal(18, 4)
+  note        String?
+  createdAt   DateTime        @default(now())
+  variantId   String?
+  grn         GRN             @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  poLine      POLine          @relation(fields: [poLineId], references: [id])
+  product     Product         @relation(fields: [productId], references: [id])
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([grnId])
+  @@index([poLineId])
+  @@index([productId])
+  @@index([variantId])
+  @@map("grn_lines")
+}
+
+model Attachment {
+  id         String         @id @default(cuid())
+  refType    String
+  refId      String
+  fileName   String
+  fileUrl    String
+  fileSize   Int?
+  mimeType   String?
+  createdAt  DateTime       @default(now())
+  movementId String?
+  prId       String?
+  poId       String?
+  grnId      String?
+  grn        GRN?           @relation(fields: [grnId], references: [id])
+  movement   StockMovement? @relation(fields: [movementId], references: [id])
+  po         PO?            @relation(fields: [poId], references: [id])
+  pr         PR?            @relation(fields: [prId], references: [id])
+
+  @@index([refType, refId])
+  @@index([movementId])
+  @@index([prId])
+  @@index([poId])
+  @@index([grnId])
+  @@map("attachments")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  refType   String
+  refId     String
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  actor     User     @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([refType, refId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model StockTake {
+  id           String          @id @default(cuid())
+  code         String          @unique
+  warehouseId  String
+  status       StockTakeStatus @default(DRAFT)
+  countedById  String?
+  approvedById String?
+  note         String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  completedAt  DateTime?
+  approvedAt   DateTime?
+  lines        StockTakeLine[]
+  approvedBy   User?           @relation("StockTakeApprovedBy", fields: [approvedById], references: [id])
+  countedBy    User?           @relation("StockTakeCountedBy", fields: [countedById], references: [id])
+  warehouse    Warehouse       @relation(fields: [warehouseId], references: [id])
+
+  @@index([warehouseId])
+  @@index([status])
+  @@map("stock_takes")
+}
+
+model StockTakeLine {
+  id          String          @id @default(cuid())
+  stockTakeId String
+  productId   String
+  variantId   String?
+  locationId  String
+  systemQty   Decimal         @db.Decimal(18, 4)
+  countedQty  Decimal?        @db.Decimal(18, 4)
+  variance    Decimal?        @db.Decimal(18, 4)
+  note        String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  location    Location        @relation(fields: [locationId], references: [id])
+  product     Product         @relation(fields: [productId], references: [id])
+  stockTake   StockTake       @relation(fields: [stockTakeId], references: [id], onDelete: Cascade)
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([stockTakeId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([locationId])
+  @@map("stock_take_lines")
+}
+
+model Lot {
+  id               String            @id @default(cuid())
+  lotNumber        String
+  productId        String
+  variantId        String?
+  expiryDate       DateTime?
+  manufacturedDate DateTime?
+  receivedDate     DateTime          @default(now())
+  qtyReceived      Decimal           @db.Decimal(18, 4)
+  note             String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  balances         LotBalance[]
+  movementLines    LotMovementLine[]
+  product          Product           @relation(fields: [productId], references: [id])
+  variant          ProductVariant?   @relation(fields: [variantId], references: [id])
+
+  @@unique([lotNumber, productId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([expiryDate])
+  @@map("lots")
+}
+
+model LotBalance {
+  lotId      String
+  locationId String
+  qtyOnHand  Decimal  @db.Decimal(18, 4)
+  updatedAt  DateTime @updatedAt
+  location   Location @relation(fields: [locationId], references: [id])
+  lot        Lot      @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@id([lotId, locationId])
+  @@map("lot_balances")
+}
+
+model LotMovementLine {
+  id             String       @id @default(cuid())
+  movementLineId String
+  lotId          String
+  qty            Decimal      @db.Decimal(18, 4)
+  createdAt      DateTime     @default(now())
+  lot            Lot          @relation(fields: [lotId], references: [id])
+  movementLine   MovementLine @relation(fields: [movementLineId], references: [id], onDelete: Cascade)
+
+  @@index([movementLineId])
+  @@index([lotId])
+  @@map("lot_movement_lines")
+}
+
+model Notification {
+  id           String                    @id @default(cuid())
+  userId       String?
+  type         String
+  title        String
+  message      String
+  url          String?
+  read         Boolean                   @default(false)
+  createdAt    DateTime                  @default(now())
+  deliveryLogs NotificationDeliveryLog[]
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationDeliveryLog {
+  id             String              @id @default(cuid())
+  notificationId String
+  channel        NotificationChannel
+  status         DeliveryStatus      @default(PENDING)
+  recipientId    String?
+  error          String?
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+  notification   Notification        @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, channel, recipientId])
+  @@index([notificationId])
+  @@index([channel])
+  @@index([status])
+  @@map("notification_delivery_logs")
+}
+
+model UserNotificationPreference {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  lineUserId          String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  lowStockWeb         Boolean  @default(true)
+  lowStockLine        Boolean  @default(true)
+  lowStockEmail       Boolean  @default(true)
+  expiringWeb         Boolean  @default(true)
+  expiringLine        Boolean  @default(true)
+  expiringEmail       Boolean  @default(true)
+  movementPostedWeb   Boolean  @default(true)
+  movementPostedLine  Boolean  @default(false)
+  movementPostedEmail Boolean  @default(false)
+  prPendingWeb        Boolean  @default(true)
+  prPendingLine       Boolean  @default(true)
+  prPendingEmail      Boolean  @default(true)
+  prApprovedWeb       Boolean  @default(true)
+  prApprovedLine      Boolean  @default(true)
+  prApprovedEmail     Boolean  @default(true)
+  prRejectedWeb       Boolean  @default(true)
+  prRejectedLine      Boolean  @default(true)
+  prRejectedEmail     Boolean  @default(true)
+  poPendingWeb        Boolean  @default(true)
+  poPendingLine       Boolean  @default(true)
+  poPendingEmail      Boolean  @default(true)
+  poApprovedWeb       Boolean  @default(true)
+  poApprovedLine      Boolean  @default(true)
+  poApprovedEmail     Boolean  @default(true)
+  poRejectedWeb       Boolean  @default(true)
+  poRejectedLine      Boolean  @default(true)
+  poRejectedEmail     Boolean  @default(true)
+  poReceivedWeb       Boolean  @default(true)
+  poReceivedLine      Boolean  @default(true)
+  poReceivedEmail     Boolean  @default(true)
+  grnCreatedWeb       Boolean  @default(true)
+  grnCreatedLine      Boolean  @default(false)
+  grnCreatedEmail     Boolean  @default(false)
+  stockTakeWeb        Boolean  @default(true)
+  stockTakeLine       Boolean  @default(false)
+  stockTakeEmail      Boolean  @default(false)
+
+  @@map("user_notification_preferences")
+}
+
+model ERPIntegration {
+  id           String       @id @default(cuid())
+  name         String
+  provider     String
+  baseUrl      String
+  apiKey       String?
+  clientId     String?
+  clientSecret String?
+  accessToken  String?
+  refreshToken String?
+  tokenExpiry  DateTime?
+  settings     Json?
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  syncLogs     ERPSyncLog[]
+
+  @@map("erp_integrations")
+}
+
+model ERPSyncLog {
+  id            String         @id @default(cuid())
+  integrationId String
+  direction     String
+  docType       String
+  localId       String?
+  externalId    String?
+  status        String
+  requestData   Json?
+  responseData  Json?
+  errorMessage  String?
+  createdAt     DateTime       @default(now())
+  integration   ERPIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId])
+  @@index([docType])
+  @@index([status])
+  @@index([createdAt])
+  @@map("erp_sync_logs")
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model DocSequence {
+  id        String @id @default(cuid())
+  docType   String @unique
+  prefix    String
+  currentNo Int    @default(0)
+  padLength Int    @default(6)
+
+  @@map("doc_sequences")
+}
 
 enum Role {
   ADMIN
@@ -50,15 +793,15 @@ enum PRStatus {
 
 enum POStatus {
   DRAFT
-  SUBMITTED
   APPROVED
-  REJECTED
   SENT
   IN_PROGRESS
   PARTIALLY_RECEIVED
   FULLY_RECEIVED
   CLOSED
   CANCELLED
+  SUBMITTED
+  REJECTED
 }
 
 enum GRNStatus {
@@ -74,582 +817,10 @@ enum VatType {
 }
 
 enum StockType {
-  STOCKED        // สินค้าเก็บสต๊อคเอง - แจ้งเตือนเมื่อหมด
-  MADE_TO_ORDER  // สั่งผลิตเมื่อมีออเดอร์ - ไม่แจ้งเตือน
-  DROP_SHIP      // สั่งจากซัพพลายเออร์ส่งตรง - ไม่แจ้งเตือน
+  STOCKED
+  MADE_TO_ORDER
+  DROP_SHIP
 }
-
-// ==================== USERS & AUTH ====================
-
-model User {
-  id                String   @id @default(cuid())
-  supabaseId        String?  @unique
-  username          String   @unique
-  email             String?  @unique
-  name              String
-  role              Role     @default(VIEWER)
-  customPermissions String[] @default([]) // Additional permissions beyond role
-  active            Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  deletedAt         DateTime?
-
-  // Relations
-  createdMovements    StockMovement[] @relation("MovementCreatedBy")
-  approvedMovements   StockMovement[] @relation("MovementApprovedBy")
-  prs                 PR[]            @relation("PRRequester")
-  approvedPRs         PR[]            @relation("PRApprover")
-  pos                 PO[]            @relation("POCreatedBy")
-  approvedPOs         PO[]            @relation("POApprover")
-  grns                GRN[]           @relation("GRNReceivedBy")
-  auditLogs           AuditLog[]
-  stockTakesCounted   StockTake[]     @relation("StockTakeCountedBy")
-  stockTakesApproved  StockTake[]     @relation("StockTakeApprovedBy")
-
-  @@map("users")
-}
-
-// ==================== MASTER DATA ====================
-
-model Category {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  description String?
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
-
-  products Product[]
-
-  @@map("categories")
-}
-
-model UnitOfMeasure {
-  id           String    @id @default(cuid())
-  code         String    @unique
-  name         String
-  active       Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
-
-  products Product[]
-
-  @@map("units_of_measure")
-}
-
-model Product {
-  id            String    @id @default(cuid())
-  sku           String    @unique
-  name          String
-  description   String?
-  barcode       String?   @unique
-  categoryId    String?
-  unitId        String?
-  stockType     StockType @default(STOCKED)  // ประเภทการจัดเก็บสต๊อค
-  reorderPoint  Decimal   @default(0) @db.Decimal(18, 4)
-  minQty        Decimal   @default(0) @db.Decimal(18, 4)
-  maxQty        Decimal   @default(0) @db.Decimal(18, 4)
-  standardCost  Decimal   @default(0) @db.Decimal(18, 4)
-  lastCost      Decimal   @default(0) @db.Decimal(18, 4)
-  imageUrl      String?
-  hasVariants   Boolean   @default(false)
-  active        Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
-
-  // Relations
-  category        Category?         @relation(fields: [categoryId], references: [id])
-  unit            UnitOfMeasure?    @relation(fields: [unitId], references: [id])
-  stockBalances   StockBalance[]
-  movementLines   MovementLine[]
-  prLines         PRLine[]
-  poLines         POLine[]
-  grnLines        GRNLine[]
-  variants        ProductVariant[]
-  stockTakeLines  StockTakeLine[]
-  lots            Lot[]
-
-  @@index([categoryId])
-  @@index([unitId])
-  @@index([sku])
-  @@index([barcode])
-  @@index([active, deletedAt])          // Compound for active product queries
-  @@index([categoryId, active])         // Compound for category filter with active
-  @@index([name])                       // Index for name search
-  @@map("products")
-}
-
-// ==================== PRODUCT VARIANTS ====================
-
-model OptionType {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  displayOrder Int   @default(0)
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  values OptionValue[]
-
-  @@map("option_types")
-}
-
-model OptionValue {
-  id           String   @id @default(cuid())
-  optionTypeId String
-  value        String
-  displayOrder Int      @default(0)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // Relations
-  optionType     OptionType           @relation(fields: [optionTypeId], references: [id], onDelete: Cascade)
-  variantOptions VariantOptionValue[]
-
-  @@unique([optionTypeId, value])
-  @@index([optionTypeId])
-  @@map("option_values")
-}
-
-model ProductVariant {
-  id            String    @id @default(cuid())
-  productId     String
-  sku           String    @unique
-  barcode       String?   @unique
-  name          String?   // e.g., "แดง, L" - generated from option values
-  stockType     StockType @default(STOCKED)  // ประเภทการจัดเก็บสต๊อค
-  costPrice     Decimal   @default(0) @db.Decimal(18, 4)  // ราคาทุน
-  sellingPrice  Decimal   @default(0) @db.Decimal(18, 4)  // ราคาขาย
-  lastCost      Decimal   @default(0) @db.Decimal(18, 4)
-  reorderPoint  Decimal   @default(0) @db.Decimal(18, 4)  // จุดสั่งซื้อ
-  minQty        Decimal   @default(0) @db.Decimal(18, 4)
-  maxQty        Decimal   @default(0) @db.Decimal(18, 4)
-  lowStockAlert Boolean   @default(true)                   // เปิด/ปิดแจ้งเตือน
-  imageUrl      String?
-  active        Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
-
-  // Relations
-  product         Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
-  optionValues    VariantOptionValue[]
-  stockBalances   StockBalance[]
-  movementLines   MovementLine[]
-  prLines         PRLine[]
-  poLines         POLine[]
-  grnLines        GRNLine[]
-  stockTakeLines  StockTakeLine[]
-  lots            Lot[]
-
-  @@index([productId])
-  @@index([sku])
-  @@index([barcode])
-  @@map("product_variants")
-}
-
-model VariantOptionValue {
-  id            String   @id @default(cuid())
-  variantId     String
-  optionValueId String
-  createdAt     DateTime @default(now())
-
-  // Relations
-  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  optionValue OptionValue    @relation(fields: [optionValueId], references: [id], onDelete: Cascade)
-
-  @@unique([variantId, optionValueId])
-  @@index([variantId])
-  @@index([optionValueId])
-  @@map("variant_option_values")
-}
-
-model Warehouse {
-  id          String    @id @default(cuid())
-  code        String    @unique
-  name        String
-  address     String?
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
-
-  locations   Location[]
-  stockTakes  StockTake[]
-
-  @@map("warehouses")
-}
-
-model Location {
-  id          String    @id @default(cuid())
-  warehouseId String
-  code        String
-  name        String
-  zone        String?
-  rack        String?
-  shelf       String?
-  bin         String?
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
-
-  // Relations
-  warehouse          Warehouse        @relation(fields: [warehouseId], references: [id])
-  stockBalances      StockBalance[]
-  movementLinesFrom  MovementLine[]   @relation("MovementFromLocation")
-  movementLinesTo    MovementLine[]   @relation("MovementToLocation")
-  stockTakeLines     StockTakeLine[]
-  lotBalances        LotBalance[]
-
-  @@unique([warehouseId, code])
-  @@index([warehouseId])
-  @@map("locations")
-}
-
-model Supplier {
-  id          String    @id @default(cuid())
-  code        String    @unique
-  name        String
-  contactName String?
-  phone       String?
-  email       String?
-  address     String?
-  taxId       String?
-  terms       String?
-  leadTimeDays Int?
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
-
-  pos PO[]
-
-  @@map("suppliers")
-}
-
-// ==================== STOCK MANAGEMENT ====================
-
-model StockBalance {
-  id          String   @id @default(cuid())
-  productId   String
-  variantId   String?
-  locationId  String
-  qtyOnHand   Decimal  @default(0) @db.Decimal(18, 4)
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  product  Product         @relation(fields: [productId], references: [id])
-  variant  ProductVariant? @relation(fields: [variantId], references: [id])
-  location Location        @relation(fields: [locationId], references: [id])
-
-  @@unique([productId, variantId, locationId])
-  @@index([productId])
-  @@index([variantId])
-  @@index([locationId])
-  @@index([productId, locationId])          // Compound for product+location queries
-  @@index([locationId, qtyOnHand])          // Compound for location stock queries
-  @@map("stock_balances")
-}
-
-model StockMovement {
-  id            String       @id @default(cuid())
-  docNumber     String       @unique
-  type          MovementType
-  refType       String?      // PR, PO, GRN, etc.
-  refId         String?
-  status        DocStatus    @default(DRAFT)
-  note          String?
-  reason        String?
-  projectCode   String?
-  createdById   String
-  approvedById  String?
-  postedAt      DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-
-  // Relations
-  createdBy   User           @relation("MovementCreatedBy", fields: [createdById], references: [id])
-  approvedBy  User?          @relation("MovementApprovedBy", fields: [approvedById], references: [id])
-  lines       MovementLine[]
-  attachments Attachment[]
-
-  @@index([type])
-  @@index([status])
-  @@index([createdById])
-  @@index([docNumber])
-  @@index([type, status])        // Compound index for filtering by type AND status
-  @@index([createdAt, type])     // Compound index for date range + type filter
-  @@index([status, createdAt])   // Compound index for status filter with date ordering
-  @@map("stock_movements")
-}
-
-model MovementLine {
-  id             String   @id @default(cuid())
-  movementId     String
-  productId      String
-  variantId      String?
-  fromLocationId String?
-  toLocationId   String?
-  qty            Decimal  @db.Decimal(18, 4)
-  unitCost       Decimal  @default(0) @db.Decimal(18, 4)
-  note           String?
-  createdAt      DateTime @default(now())
-
-  // Relations
-  movement         StockMovement     @relation(fields: [movementId], references: [id], onDelete: Cascade)
-  product          Product           @relation(fields: [productId], references: [id])
-  variant          ProductVariant?   @relation(fields: [variantId], references: [id])
-  fromLocation     Location?         @relation("MovementFromLocation", fields: [fromLocationId], references: [id])
-  toLocation       Location?         @relation("MovementToLocation", fields: [toLocationId], references: [id])
-  lotMovementLines LotMovementLine[]
-
-  @@index([movementId])
-  @@index([productId])
-  @@index([variantId])
-  @@index([fromLocationId])
-  @@index([toLocationId])
-  @@map("movement_lines")
-}
-
-// ==================== PURCHASE REQUISITION (PR) ====================
-
-model PR {
-  id           String    @id @default(cuid())
-  prNumber     String    @unique
-  requesterId  String
-  needByDate   DateTime?
-  status       PRStatus  @default(DRAFT)
-  note         String?
-  priority     String?   @default("NORMAL")
-  approverId   String?
-  approvedAt   DateTime?
-  rejectedReason String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  // Relations
-  requester   User        @relation("PRRequester", fields: [requesterId], references: [id])
-  approver    User?       @relation("PRApprover", fields: [approverId], references: [id])
-  lines       PRLine[]
-  pos         PO[]
-  attachments Attachment[]
-
-  @@index([requesterId])
-  @@index([status])
-  @@index([prNumber])
-  @@index([status, createdAt])    // Compound for status filter with date ordering
-  @@map("prs")
-}
-
-model PRLine {
-  id        String   @id @default(cuid())
-  prId      String
-  productId String
-  variantId String?
-  qty       Decimal  @db.Decimal(18, 4)
-  note      String?
-  createdAt DateTime @default(now())
-
-  // Relations
-  pr      PR              @relation(fields: [prId], references: [id], onDelete: Cascade)
-  product Product         @relation(fields: [productId], references: [id])
-  variant ProductVariant? @relation(fields: [variantId], references: [id])
-
-  @@index([prId])
-  @@index([productId])
-  @@index([variantId])
-  @@map("pr_lines")
-}
-
-// ==================== PURCHASE ORDER (PO) ====================
-
-model PO {
-  id           String    @id @default(cuid())
-  poNumber     String    @unique
-  supplierId   String
-  prId         String?
-  status       POStatus  @default(DRAFT)
-  vatType      VatType   @default(NO_VAT)
-  vatRate      Decimal   @default(0) @db.Decimal(5, 2)
-  subtotal     Decimal   @default(0) @db.Decimal(18, 4)
-  vatAmount    Decimal   @default(0) @db.Decimal(18, 4)
-  total        Decimal   @default(0) @db.Decimal(18, 4)
-  eta          DateTime?
-  terms        String?
-  note         String?
-  createdById  String
-  approvedById String?
-  approvedAt   DateTime?
-  sentAt       DateTime?
-  closedAt     DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  // Relations
-  supplier    Supplier     @relation(fields: [supplierId], references: [id])
-  pr          PR?          @relation(fields: [prId], references: [id])
-  createdBy   User         @relation("POCreatedBy", fields: [createdById], references: [id])
-  approvedBy  User?        @relation("POApprover", fields: [approvedById], references: [id])
-  lines       POLine[]
-  grns        GRN[]
-  timelines   POTimeline[]
-  attachments Attachment[]
-
-  @@index([supplierId])
-  @@index([prId])
-  @@index([status])
-  @@index([poNumber])
-  @@index([status, createdAt])    // Compound for status filter with date ordering
-  @@index([supplierId, status])   // Compound for supplier + status filter
-  @@map("pos")
-}
-
-model POLine {
-  id         String   @id @default(cuid())
-  poId       String
-  productId  String
-  variantId  String?
-  qty        Decimal  @db.Decimal(18, 4)
-  qtyReceived Decimal @default(0) @db.Decimal(18, 4)
-  unitPrice  Decimal  @db.Decimal(18, 4)
-  note       String?
-  createdAt  DateTime @default(now())
-
-  // Relations
-  po       PO              @relation(fields: [poId], references: [id], onDelete: Cascade)
-  product  Product         @relation(fields: [productId], references: [id])
-  variant  ProductVariant? @relation(fields: [variantId], references: [id])
-  grnLines GRNLine[]
-
-  @@index([poId])
-  @@index([productId])
-  @@index([variantId])
-  @@map("po_lines")
-}
-
-model POTimeline {
-  id        String   @id @default(cuid())
-  poId      String
-  action    String
-  note      String?
-  createdAt DateTime @default(now())
-
-  // Relations
-  po PO @relation(fields: [poId], references: [id], onDelete: Cascade)
-
-  @@index([poId])
-  @@map("po_timelines")
-}
-
-// ==================== GOODS RECEIVED NOTE (GRN) ====================
-
-model GRN {
-  id           String    @id @default(cuid())
-  grnNumber    String    @unique
-  poId         String
-  status       GRNStatus @default(DRAFT)
-  receivedById String
-  receivedAt   DateTime  @default(now())
-  note         String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  // Relations
-  po          PO          @relation(fields: [poId], references: [id])
-  receivedBy  User        @relation("GRNReceivedBy", fields: [receivedById], references: [id])
-  lines       GRNLine[]
-  attachments Attachment[]
-
-  @@index([poId])
-  @@index([grnNumber])
-  @@map("grns")
-}
-
-model GRNLine {
-  id          String   @id @default(cuid())
-  grnId       String
-  poLineId    String
-  productId   String
-  variantId   String?
-  locationId  String?
-  qtyReceived Decimal  @db.Decimal(18, 4)
-  unitCost    Decimal  @db.Decimal(18, 4)
-  note        String?
-  createdAt   DateTime @default(now())
-
-  // Relations
-  grn     GRN              @relation(fields: [grnId], references: [id], onDelete: Cascade)
-  poLine  POLine           @relation(fields: [poLineId], references: [id])
-  product Product          @relation(fields: [productId], references: [id])
-  variant ProductVariant?  @relation(fields: [variantId], references: [id])
-
-  @@index([grnId])
-  @@index([poLineId])
-  @@index([productId])
-  @@index([variantId])
-  @@map("grn_lines")
-}
-
-// ==================== ATTACHMENTS & AUDIT ====================
-
-model Attachment {
-  id          String   @id @default(cuid())
-  refType     String   // MOVEMENT, PR, PO, GRN
-  refId       String
-  fileName    String
-  fileUrl     String
-  fileSize    Int?
-  mimeType    String?
-  createdAt   DateTime @default(now())
-  
-  // Optional foreign keys for each type
-  movementId  String?
-  prId        String?
-  poId        String?
-  grnId       String?
-
-  // Relations
-  movement    StockMovement? @relation(fields: [movementId], references: [id])
-  pr          PR?            @relation(fields: [prId], references: [id])
-  po          PO?            @relation(fields: [poId], references: [id])
-  grn         GRN?           @relation(fields: [grnId], references: [id])
-
-  @@index([refType, refId])
-  @@index([movementId])
-  @@index([prId])
-  @@index([poId])
-  @@index([grnId])
-  @@map("attachments")
-}
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  actorId   String
-  action    String
-  refType   String
-  refId     String
-  oldData   Json?
-  newData   Json?
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
-
-  // Relations
-  actor User @relation(fields: [actorId], references: [id])
-
-  @@index([actorId])
-  @@index([refType, refId])
-  @@index([createdAt])
-  @@map("audit_logs")
-}
-
-// ==================== STOCK TAKE / CYCLE COUNT ====================
 
 enum StockTakeStatus {
   DRAFT
@@ -658,116 +829,6 @@ enum StockTakeStatus {
   APPROVED
   CANCELLED
 }
-
-model StockTake {
-  id            String          @id @default(cuid())
-  code          String          @unique
-  warehouseId   String
-  status        StockTakeStatus @default(DRAFT)
-  countedById   String?
-  approvedById  String?
-  note          String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  completedAt   DateTime?
-  approvedAt    DateTime?
-
-  // Relations
-  warehouse     Warehouse       @relation(fields: [warehouseId], references: [id])
-  countedBy     User?           @relation("StockTakeCountedBy", fields: [countedById], references: [id])
-  approvedBy    User?           @relation("StockTakeApprovedBy", fields: [approvedById], references: [id])
-  lines         StockTakeLine[]
-
-  @@index([warehouseId])
-  @@index([status])
-  @@map("stock_takes")
-}
-
-model StockTakeLine {
-  id          String   @id @default(cuid())
-  stockTakeId String
-  productId   String
-  variantId   String?
-  locationId  String
-  systemQty   Decimal  @db.Decimal(18, 4)
-  countedQty  Decimal? @db.Decimal(18, 4)
-  variance    Decimal? @db.Decimal(18, 4)
-  note        String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  stockTake StockTake       @relation(fields: [stockTakeId], references: [id], onDelete: Cascade)
-  product   Product         @relation(fields: [productId], references: [id])
-  variant   ProductVariant? @relation(fields: [variantId], references: [id])
-  location  Location        @relation(fields: [locationId], references: [id])
-
-  @@index([stockTakeId])
-  @@index([productId])
-  @@index([variantId])
-  @@index([locationId])
-  @@map("stock_take_lines")
-}
-
-// ==================== LOT / BATCH TRACKING ====================
-
-model Lot {
-  id               String    @id @default(cuid())
-  lotNumber        String
-  productId        String
-  variantId        String?
-  expiryDate       DateTime?
-  manufacturedDate DateTime?
-  receivedDate     DateTime  @default(now())
-  qtyReceived      Decimal   @db.Decimal(18, 4)
-  note             String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  // Relations
-  product       Product            @relation(fields: [productId], references: [id])
-  variant       ProductVariant?    @relation(fields: [variantId], references: [id])
-  balances      LotBalance[]
-  movementLines LotMovementLine[]
-
-  @@unique([lotNumber, productId])
-  @@index([productId])
-  @@index([variantId])
-  @@index([expiryDate])
-  @@map("lots")
-}
-
-model LotBalance {
-  lotId      String
-  locationId String
-  qtyOnHand  Decimal @db.Decimal(18, 4)
-  updatedAt  DateTime @updatedAt
-
-  // Relations
-  lot      Lot      @relation(fields: [lotId], references: [id], onDelete: Cascade)
-  location Location @relation(fields: [locationId], references: [id])
-
-  @@id([lotId, locationId])
-  @@map("lot_balances")
-}
-
-model LotMovementLine {
-  id             String   @id @default(cuid())
-  movementLineId String
-  lotId          String
-  qty            Decimal  @db.Decimal(18, 4)
-  createdAt      DateTime @default(now())
-
-  // Relations
-  movementLine MovementLine @relation(fields: [movementLineId], references: [id], onDelete: Cascade)
-  lot          Lot          @relation(fields: [lotId], references: [id])
-
-  @@index([movementLineId])
-  @@index([lotId])
-  @@map("lot_movement_lines")
-}
-
-// ==================== NOTIFICATIONS ====================
 
 enum NotificationChannel {
   WEB
@@ -780,138 +841,4 @@ enum DeliveryStatus {
   SENT
   FAILED
   SKIPPED
-}
-
-model Notification {
-  id        String   @id @default(cuid())
-  userId    String?  // null = broadcast to all
-  type      String   // low_stock, pr_pending, po_pending, etc.
-  title     String
-  message   String
-  url       String?
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  // Relations
-  deliveryLogs NotificationDeliveryLog[]
-
-  @@index([userId])
-  @@index([read])
-  @@index([createdAt])
-  @@map("notifications")
-}
-
-// Track delivery status for each channel
-model NotificationDeliveryLog {
-  id             String              @id @default(cuid())
-  notificationId String
-  channel        NotificationChannel
-  status         DeliveryStatus      @default(PENDING)
-  recipientId    String?             // LINE User ID, email address, etc.
-  error          String?
-  sentAt         DateTime?
-  createdAt      DateTime            @default(now())
-
-  // Relations
-  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-
-  @@unique([notificationId, channel, recipientId])
-  @@index([notificationId])
-  @@index([channel])
-  @@index([status])
-  @@map("notification_delivery_logs")
-}
-
-// User notification preferences
-model UserNotificationPreference {
-  id                    String   @id @default(cuid())
-  userId                String   @unique
-  // Channel toggles
-  webEnabled            Boolean  @default(true)
-  lineEnabled           Boolean  @default(true)
-  emailEnabled          Boolean  @default(true)
-  // Notification type toggles
-  notifyLowStock        Boolean  @default(true)
-  notifyPRPending       Boolean  @default(true)
-  notifyPRApproved      Boolean  @default(true)
-  notifyPRRejected      Boolean  @default(true)
-  notifyPOPending       Boolean  @default(true)
-  notifyPOApproved      Boolean  @default(true)
-  notifyPORejected      Boolean  @default(true)
-  notifyPOReceived      Boolean  @default(true)
-  notifyMovementPosted  Boolean  @default(false)
-  notifyExpiring        Boolean  @default(true)
-  // LINE specific
-  lineUserId            String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  @@map("user_notification_preferences")
-}
-
-// ==================== ERP INTEGRATION ====================
-
-model ERPIntegration {
-  id           String   @id @default(cuid())
-  name         String   // PEAK, SAP, etc.
-  provider     String   // peak, custom_erp
-  baseUrl      String
-  apiKey       String?
-  clientId     String?
-  clientSecret String?
-  accessToken  String?
-  refreshToken String?
-  tokenExpiry  DateTime?
-  settings     Json?    // Additional settings
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  syncLogs ERPSyncLog[]
-
-  @@map("erp_integrations")
-}
-
-model ERPSyncLog {
-  id            String   @id @default(cuid())
-  integrationId String
-  direction     String   // IN, OUT
-  docType       String   // PO, PRODUCT, EXPENSE, etc.
-  localId       String?
-  externalId    String?
-  status        String   // SUCCESS, FAILED, PENDING
-  requestData   Json?
-  responseData  Json?
-  errorMessage  String?
-  createdAt     DateTime @default(now())
-
-  integration ERPIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-
-  @@index([integrationId])
-  @@index([docType])
-  @@index([status])
-  @@index([createdAt])
-  @@map("erp_sync_logs")
-}
-
-// ==================== SETTINGS ====================
-
-model Setting {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("settings")
-}
-
-model DocSequence {
-  id          String @id @default(cuid())
-  docType     String @unique // MOVEMENT, PR, PO, GRN, STOCK_TAKE
-  prefix      String
-  currentNo   Int    @default(0)
-  padLength   Int    @default(6)
-
-  @@map("doc_sequences")
 }

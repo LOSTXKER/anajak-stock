@@ -150,3 +150,59 @@ export function getNotificationIcon(type: NotificationType): string {
       return '🔔'
   }
 }
+
+// ============================================
+// Notification Preferences Helpers
+// ============================================
+
+// Channel settings for each notification type
+export interface NotificationChannels {
+  web: boolean
+  line: boolean
+  email: boolean
+}
+
+// Notification preference keys (for type checking)
+export type NotificationPreferenceKey = 
+  | 'lowStock'
+  | 'expiring'
+  | 'movementPosted'
+  | 'prPending'
+  | 'prApproved'
+  | 'prRejected'
+  | 'poPending'
+  | 'poApproved'
+  | 'poRejected'
+  | 'poReceived'
+  | 'grnCreated'
+  | 'stockTake'
+
+// User notification preferences shape (for use in shouldNotify)
+export interface NotificationPreferencesShape {
+  lowStock: NotificationChannels
+  expiring: NotificationChannels
+  movementPosted: NotificationChannels
+  prPending: NotificationChannels
+  prApproved: NotificationChannels
+  prRejected: NotificationChannels
+  poPending: NotificationChannels
+  poApproved: NotificationChannels
+  poRejected: NotificationChannels
+  poReceived: NotificationChannels
+  grnCreated: NotificationChannels
+  stockTake: NotificationChannels
+  lineUserId: string | null
+}
+
+// Helper to check if user wants notification on specific channel for specific type
+export function shouldNotify(
+  prefs: NotificationPreferencesShape,
+  notificationType: NotificationPreferenceKey,
+  channel: 'web' | 'line' | 'email'
+): boolean {
+  const typePrefs = prefs[notificationType]
+  if (typeof typePrefs === 'object' && typePrefs !== null) {
+    return typePrefs[channel] ?? false
+  }
+  return false
+}

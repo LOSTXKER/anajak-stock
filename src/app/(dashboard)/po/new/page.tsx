@@ -118,14 +118,79 @@ export default function NewPOPage() {
           setLinkedPR({ prNumber: pr.prNumber })
           setNote(`อ้างอิงจาก ${pr.prNumber}${pr.note ? ` - ${pr.note}` : ''}`)
           
+          // Collect product IDs that have variants to load
+          const productIdsWithVariants = new Set<string>()
+          pr.lines.forEach((line) => {
+            const product = productsResult.items.find(p => p.id === line.productId)
+            if (product?.hasVariants) {
+              productIdsWithVariants.add(line.productId)
+            }
+          })
+          
+          // Load variants for products that have variants
+          const variantsToLoad: Record<string, Variant[]> = {}
+          await Promise.all(
+            Array.from(productIdsWithVariants).map(async (productId) => {
+              try {
+                const response = await fetch(`/api/products/${productId}/variants`)
+                if (response.ok) {
+                  const data = await response.json()
+                  variantsToLoad[productId] = data.map((v: { 
+                    id: string
+                    sku: string
+                    name: string | null
+                    costPrice?: number
+                    optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+                    stockBalances?: { qtyOnHand: number }[]
+                  }) => ({
+                    id: v.id,
+                    sku: v.sku,
+                    name: v.name,
+                    options: v.optionValues?.map((ov) => ({
+                      optionName: ov.optionValue.optionType.name,
+                      value: ov.optionValue.value,
+                    })) || [],
+                    stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+                    costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+                  }))
+                }
+              } catch (error) {
+                console.error(`Failed to load variants for product ${productId}:`, error)
+              }
+            })
+          )
+          
+          // Set loaded variants state
+          setLoadedVariants(variantsToLoad)
+          
           // Pre-fill lines from PR
           const prLines: POLine[] = pr.lines.map((line) => {
             const product = productsResult.items.find(p => p.id === line.productId)
+            
+            // Get variant label from PR line data or loaded variants
+            let variantLabel: string | undefined
+            if (line.variantId) {
+              // First try to get from PR line variant data (cast to include variant from API response)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const lineWithVariant = line as any
+              const prVariant = lineWithVariant.variant as { optionValues?: { optionValue: { value: string } }[] } | null
+              if (prVariant?.optionValues) {
+                variantLabel = prVariant.optionValues.map(ov => ov.optionValue.value).join(' / ')
+              } else {
+                // Fallback to loaded variants
+                const loadedVariant = variantsToLoad[line.productId]?.find(v => v.id === line.variantId)
+                if (loadedVariant) {
+                  variantLabel = loadedVariant.options.map(o => o.value).join(' / ')
+                }
+              }
+            }
+            
             return {
               id: Math.random().toString(36).substr(2, 9),
               productId: line.productId,
               variantId: line.variantId || undefined,
               productName: product?.name || line.product?.name,
+              variantLabel,
               qty: Number(line.qty),
               unitPrice: Number(product?.lastCost || product?.standardCost || 0),
               note: line.note || undefined,

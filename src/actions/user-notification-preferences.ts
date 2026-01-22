@@ -9,40 +9,64 @@ import { revalidatePath } from 'next/cache'
 // Types
 // ============================================
 
+// Channel settings for each notification type
+export interface NotificationChannels {
+  web: boolean
+  line: boolean
+  email: boolean
+}
+
+// Granular per-type per-channel preferences
 export interface UserNotificationPreferences {
-  // Channel toggles
-  webEnabled: boolean
-  lineEnabled: boolean
-  emailEnabled: boolean
-  // Notification type toggles
-  notifyLowStock: boolean
-  notifyPRPending: boolean
-  notifyPRApproved: boolean
-  notifyPRRejected: boolean
-  notifyPOPending: boolean
-  notifyPOApproved: boolean
-  notifyPORejected: boolean
-  notifyPOReceived: boolean
-  notifyMovementPosted: boolean
-  notifyExpiring: boolean
+  // Stock alerts
+  lowStock: NotificationChannels
+  expiring: NotificationChannels
+  movementPosted: NotificationChannels
+  
+  // PR alerts
+  prPending: NotificationChannels
+  prApproved: NotificationChannels
+  prRejected: NotificationChannels
+  
+  // PO alerts
+  poPending: NotificationChannels
+  poApproved: NotificationChannels
+  poRejected: NotificationChannels
+  poReceived: NotificationChannels
+  
+  // GRN & Stock Take
+  grnCreated: NotificationChannels
+  stockTake: NotificationChannels
+  
   // LINE specific
   lineUserId: string | null
 }
 
+const DEFAULT_CHANNELS: NotificationChannels = {
+  web: true,
+  line: true,
+  email: true,
+}
+
+const DEFAULT_CHANNELS_WEB_ONLY: NotificationChannels = {
+  web: true,
+  line: false,
+  email: false,
+}
+
 const DEFAULT_PREFERENCES: UserNotificationPreferences = {
-  webEnabled: true,
-  lineEnabled: true,
-  emailEnabled: true,
-  notifyLowStock: true,
-  notifyPRPending: true,
-  notifyPRApproved: true,
-  notifyPRRejected: true,
-  notifyPOPending: true,
-  notifyPOApproved: true,
-  notifyPORejected: true,
-  notifyPOReceived: true,
-  notifyMovementPosted: false,
-  notifyExpiring: true,
+  lowStock: { ...DEFAULT_CHANNELS },
+  expiring: { ...DEFAULT_CHANNELS },
+  movementPosted: { ...DEFAULT_CHANNELS_WEB_ONLY },
+  prPending: { ...DEFAULT_CHANNELS },
+  prApproved: { ...DEFAULT_CHANNELS },
+  prRejected: { ...DEFAULT_CHANNELS },
+  poPending: { ...DEFAULT_CHANNELS },
+  poApproved: { ...DEFAULT_CHANNELS },
+  poRejected: { ...DEFAULT_CHANNELS },
+  poReceived: { ...DEFAULT_CHANNELS },
+  grnCreated: { ...DEFAULT_CHANNELS_WEB_ONLY },
+  stockTake: { ...DEFAULT_CHANNELS_WEB_ONLY },
   lineUserId: null,
 }
 
@@ -67,27 +91,140 @@ export async function getUserNotificationPreferences(): Promise<ActionResult<Use
 
     return {
       success: true,
-      data: {
-        webEnabled: prefs.webEnabled,
-        lineEnabled: prefs.lineEnabled,
-        emailEnabled: prefs.emailEnabled,
-        notifyLowStock: prefs.notifyLowStock,
-        notifyPRPending: prefs.notifyPRPending,
-        notifyPRApproved: prefs.notifyPRApproved,
-        notifyPRRejected: prefs.notifyPRRejected,
-        notifyPOPending: prefs.notifyPOPending,
-        notifyPOApproved: prefs.notifyPOApproved,
-        notifyPORejected: prefs.notifyPORejected,
-        notifyPOReceived: prefs.notifyPOReceived,
-        notifyMovementPosted: prefs.notifyMovementPosted,
-        notifyExpiring: prefs.notifyExpiring,
-        lineUserId: prefs.lineUserId,
-      },
+      data: dbToPreferences(prefs),
     }
   } catch (error) {
     console.error('Error getting user notification preferences:', error)
     return { success: false, error: 'ไม่สามารถโหลดการตั้งค่าได้' }
   }
+}
+
+// Helper to convert DB record to preferences object
+function dbToPreferences(prefs: {
+  lowStockWeb: boolean
+  lowStockLine: boolean
+  lowStockEmail: boolean
+  expiringWeb: boolean
+  expiringLine: boolean
+  expiringEmail: boolean
+  movementPostedWeb: boolean
+  movementPostedLine: boolean
+  movementPostedEmail: boolean
+  prPendingWeb: boolean
+  prPendingLine: boolean
+  prPendingEmail: boolean
+  prApprovedWeb: boolean
+  prApprovedLine: boolean
+  prApprovedEmail: boolean
+  prRejectedWeb: boolean
+  prRejectedLine: boolean
+  prRejectedEmail: boolean
+  poPendingWeb: boolean
+  poPendingLine: boolean
+  poPendingEmail: boolean
+  poApprovedWeb: boolean
+  poApprovedLine: boolean
+  poApprovedEmail: boolean
+  poRejectedWeb: boolean
+  poRejectedLine: boolean
+  poRejectedEmail: boolean
+  poReceivedWeb: boolean
+  poReceivedLine: boolean
+  poReceivedEmail: boolean
+  grnCreatedWeb: boolean
+  grnCreatedLine: boolean
+  grnCreatedEmail: boolean
+  stockTakeWeb: boolean
+  stockTakeLine: boolean
+  stockTakeEmail: boolean
+  lineUserId: string | null
+}): UserNotificationPreferences {
+  return {
+    lowStock: { web: prefs.lowStockWeb, line: prefs.lowStockLine, email: prefs.lowStockEmail },
+    expiring: { web: prefs.expiringWeb, line: prefs.expiringLine, email: prefs.expiringEmail },
+    movementPosted: { web: prefs.movementPostedWeb, line: prefs.movementPostedLine, email: prefs.movementPostedEmail },
+    prPending: { web: prefs.prPendingWeb, line: prefs.prPendingLine, email: prefs.prPendingEmail },
+    prApproved: { web: prefs.prApprovedWeb, line: prefs.prApprovedLine, email: prefs.prApprovedEmail },
+    prRejected: { web: prefs.prRejectedWeb, line: prefs.prRejectedLine, email: prefs.prRejectedEmail },
+    poPending: { web: prefs.poPendingWeb, line: prefs.poPendingLine, email: prefs.poPendingEmail },
+    poApproved: { web: prefs.poApprovedWeb, line: prefs.poApprovedLine, email: prefs.poApprovedEmail },
+    poRejected: { web: prefs.poRejectedWeb, line: prefs.poRejectedLine, email: prefs.poRejectedEmail },
+    poReceived: { web: prefs.poReceivedWeb, line: prefs.poReceivedLine, email: prefs.poReceivedEmail },
+    grnCreated: { web: prefs.grnCreatedWeb, line: prefs.grnCreatedLine, email: prefs.grnCreatedEmail },
+    stockTake: { web: prefs.stockTakeWeb, line: prefs.stockTakeLine, email: prefs.stockTakeEmail },
+    lineUserId: prefs.lineUserId,
+  }
+}
+
+// Helper to convert preferences object to DB fields
+function preferencesToDb(prefs: Partial<UserNotificationPreferences>) {
+  const result: Record<string, boolean | string | null> = {}
+  
+  if (prefs.lowStock) {
+    result.lowStockWeb = prefs.lowStock.web
+    result.lowStockLine = prefs.lowStock.line
+    result.lowStockEmail = prefs.lowStock.email
+  }
+  if (prefs.expiring) {
+    result.expiringWeb = prefs.expiring.web
+    result.expiringLine = prefs.expiring.line
+    result.expiringEmail = prefs.expiring.email
+  }
+  if (prefs.movementPosted) {
+    result.movementPostedWeb = prefs.movementPosted.web
+    result.movementPostedLine = prefs.movementPosted.line
+    result.movementPostedEmail = prefs.movementPosted.email
+  }
+  if (prefs.prPending) {
+    result.prPendingWeb = prefs.prPending.web
+    result.prPendingLine = prefs.prPending.line
+    result.prPendingEmail = prefs.prPending.email
+  }
+  if (prefs.prApproved) {
+    result.prApprovedWeb = prefs.prApproved.web
+    result.prApprovedLine = prefs.prApproved.line
+    result.prApprovedEmail = prefs.prApproved.email
+  }
+  if (prefs.prRejected) {
+    result.prRejectedWeb = prefs.prRejected.web
+    result.prRejectedLine = prefs.prRejected.line
+    result.prRejectedEmail = prefs.prRejected.email
+  }
+  if (prefs.poPending) {
+    result.poPendingWeb = prefs.poPending.web
+    result.poPendingLine = prefs.poPending.line
+    result.poPendingEmail = prefs.poPending.email
+  }
+  if (prefs.poApproved) {
+    result.poApprovedWeb = prefs.poApproved.web
+    result.poApprovedLine = prefs.poApproved.line
+    result.poApprovedEmail = prefs.poApproved.email
+  }
+  if (prefs.poRejected) {
+    result.poRejectedWeb = prefs.poRejected.web
+    result.poRejectedLine = prefs.poRejected.line
+    result.poRejectedEmail = prefs.poRejected.email
+  }
+  if (prefs.poReceived) {
+    result.poReceivedWeb = prefs.poReceived.web
+    result.poReceivedLine = prefs.poReceived.line
+    result.poReceivedEmail = prefs.poReceived.email
+  }
+  if (prefs.grnCreated) {
+    result.grnCreatedWeb = prefs.grnCreated.web
+    result.grnCreatedLine = prefs.grnCreated.line
+    result.grnCreatedEmail = prefs.grnCreated.email
+  }
+  if (prefs.stockTake) {
+    result.stockTakeWeb = prefs.stockTake.web
+    result.stockTakeLine = prefs.stockTake.line
+    result.stockTakeEmail = prefs.stockTake.email
+  }
+  if (prefs.lineUserId !== undefined) {
+    result.lineUserId = prefs.lineUserId
+  }
+  
+  return result
 }
 
 export async function updateUserNotificationPreferences(
@@ -99,14 +236,17 @@ export async function updateUserNotificationPreferences(
   }
 
   try {
+    const dbData = preferencesToDb(preferences)
+    const defaultDbData = preferencesToDb(DEFAULT_PREFERENCES)
+    
     await prisma.userNotificationPreference.upsert({
       where: { userId: session.id },
       create: {
         userId: session.id,
-        ...DEFAULT_PREFERENCES,
-        ...preferences,
+        ...defaultDbData,
+        ...dbData,
       },
-      update: preferences,
+      update: dbData,
     })
 
     revalidatePath('/settings/notifications')
@@ -128,27 +268,13 @@ export async function getUserPreferencesForNotification(userId: string): Promise
       return DEFAULT_PREFERENCES
     }
 
-    return {
-      webEnabled: prefs.webEnabled,
-      lineEnabled: prefs.lineEnabled,
-      emailEnabled: prefs.emailEnabled,
-      notifyLowStock: prefs.notifyLowStock,
-      notifyPRPending: prefs.notifyPRPending,
-      notifyPRApproved: prefs.notifyPRApproved,
-      notifyPRRejected: prefs.notifyPRRejected,
-      notifyPOPending: prefs.notifyPOPending,
-      notifyPOApproved: prefs.notifyPOApproved,
-      notifyPORejected: prefs.notifyPORejected,
-      notifyPOReceived: prefs.notifyPOReceived,
-      notifyMovementPosted: prefs.notifyMovementPosted,
-      notifyExpiring: prefs.notifyExpiring,
-      lineUserId: prefs.lineUserId,
-    }
+    return dbToPreferences(prefs)
   } catch (error) {
     console.error('Error getting user preferences for notification:', error)
     return DEFAULT_PREFERENCES
   }
 }
+
 
 // ============================================
 // Notification Delivery Logs

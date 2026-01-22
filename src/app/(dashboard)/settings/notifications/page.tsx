@@ -75,6 +75,7 @@ import {
   getNotificationDeliveryStats,
   type UserNotificationPreferences,
   type NotificationDeliveryLogItem,
+  type NotificationChannels,
 } from '@/actions/user-notification-preferences'
 import { formatDateTime } from '@/lib/date'
 
@@ -552,154 +553,99 @@ export default function NotificationSettingsPage() {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Bell className="w-4 h-4 text-[var(--accent-primary)]" />
-                ประเภทการแจ้งเตือน
+                ตั้งค่าการแจ้งเตือนละเอียด
               </CardTitle>
               <CardDescription>
-                เลือกการแจ้งเตือนที่ต้องการรับ (ส่งผ่านทุกช่องทางที่เปิดใช้งาน)
+                เลือกช่องทางการแจ้งเตือนสำหรับแต่ละประเภท
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Channel toggles for user */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-[var(--bg-secondary)] rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-[var(--text-muted)]" />
-                    <span className="text-sm">เว็บไซต์</span>
-                  </div>
-                  <Switch
-                    checked={userPrefs?.webEnabled ?? true}
-                    onCheckedChange={(webEnabled) => userPrefs && setUserPrefs({ ...userPrefs, webEnabled })}
-                  />
+            <CardContent className="space-y-6">
+              {/* Legend */}
+              <div className="flex flex-wrap items-center gap-4 p-3 bg-[var(--bg-secondary)] rounded-lg text-sm">
+                <span className="text-[var(--text-muted)]">ช่องทาง:</span>
+                <div className="flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-[var(--status-success)]" />
+                  <span>เว็บไซต์</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-[var(--text-muted)]" />
-                    <span className="text-sm">LINE</span>
-                  </div>
-                  <Switch
-                    checked={userPrefs?.lineEnabled ?? true}
-                    onCheckedChange={(lineEnabled) => userPrefs && setUserPrefs({ ...userPrefs, lineEnabled })}
-                  />
+                <div className="flex items-center gap-1.5">
+                  <MessageSquare className="w-4 h-4 text-[#00B900]" />
+                  <span>LINE</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-[var(--text-muted)]" />
-                    <span className="text-sm">Email</span>
-                  </div>
-                  <Switch
-                    checked={userPrefs?.emailEnabled ?? true}
-                    onCheckedChange={(emailEnabled) => userPrefs && setUserPrefs({ ...userPrefs, emailEnabled })}
-                  />
+                <div className="flex items-center gap-1.5">
+                  <Mail className="w-4 h-4 text-[var(--accent-primary)]" />
+                  <span>Email</span>
                 </div>
               </div>
 
-              {/* Notification types grouped by category */}
-              <div className="space-y-6">
-                {/* Stock Alerts */}
-                <div>
-                  <h3 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
-                    <Package className="w-4 h-4" />
-                    การแจ้งเตือนสต๊อค
-                  </h3>
-                  <div className="space-y-2">
-                    {[
-                      { key: 'notifyLowStock', label: 'สต๊อคใกล้หมด', description: 'แจ้งเตือนเมื่อสินค้าต่ำกว่า Reorder Point', icon: AlertTriangle, color: 'text-[var(--status-warning)]' },
-                      { key: 'notifyExpiring', label: 'สินค้าใกล้หมดอายุ', description: 'แจ้งเตือนสินค้าที่ใกล้หมดอายุภายใน 30 วัน', icon: Clock, color: 'text-[var(--status-error)]' },
-                      { key: 'notifyMovementPosted', label: 'Movement Posted', description: 'แจ้งเตือนเมื่อมีการ Post รายการเคลื่อนไหว', icon: Truck, color: 'text-[var(--status-success)]' },
-                    ].map((item) => (
-                      <div
-                        key={item.key}
-                        className="flex items-center justify-between p-3 bg-[var(--bg-secondary)] rounded-lg"
-                      >
-                        <div className="flex items-center gap-3">
-                          <item.icon className={`w-5 h-5 ${item.color}`} />
-                          <div>
-                            <p className="font-medium text-sm">{item.label}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{item.description}</p>
-                          </div>
-                        </div>
-                        <Switch
-                          checked={userPrefs?.[item.key as keyof UserNotificationPreferences] as boolean ?? true}
-                          onCheckedChange={(checked) => 
-                            userPrefs && setUserPrefs({ ...userPrefs, [item.key]: checked })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {/* Stock Alerts */}
+              <NotificationSection
+                title="การแจ้งเตือนสต๊อค"
+                icon={<Package className="w-4 h-4" />}
+                items={[
+                  { key: 'lowStock', label: 'สต๊อคใกล้หมด', description: 'แจ้งเตือนเมื่อสินค้าต่ำกว่า Reorder Point', icon: AlertTriangle, color: 'text-[var(--status-warning)]' },
+                  { key: 'expiring', label: 'สินค้าใกล้หมดอายุ', description: 'แจ้งเตือนสินค้าที่ใกล้หมดอายุภายใน 30 วัน', icon: Clock, color: 'text-[var(--status-error)]' },
+                  { key: 'movementPosted', label: 'Movement Posted', description: 'แจ้งเตือนเมื่อมีการ Post รายการเคลื่อนไหว', icon: Truck, color: 'text-[var(--status-success)]' },
+                ]}
+                userPrefs={userPrefs}
+                onUpdate={(key, channels) => {
+                  if (userPrefs) {
+                    setUserPrefs({ ...userPrefs, [key]: channels })
+                  }
+                }}
+              />
 
-                {/* PR Alerts */}
-                <div>
-                  <h3 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
-                    ใบขอซื้อ (PR)
-                  </h3>
-                  <div className="space-y-2">
-                    {[
-                      { key: 'notifyPRPending', label: 'PR รออนุมัติ', description: 'แจ้งเตือนเมื่อมี PR ใหม่รออนุมัติ', icon: ClipboardCheck, color: 'text-[var(--accent-primary)]' },
-                      { key: 'notifyPRApproved', label: 'PR อนุมัติแล้ว', description: 'แจ้งเตือนเมื่อ PR ได้รับการอนุมัติ', icon: CheckCircle2, color: 'text-[var(--status-success)]' },
-                      { key: 'notifyPRRejected', label: 'PR ไม่อนุมัติ', description: 'แจ้งเตือนเมื่อ PR ถูกปฏิเสธ', icon: XCircle, color: 'text-[var(--status-error)]' },
-                    ].map((item) => (
-                      <div
-                        key={item.key}
-                        className="flex items-center justify-between p-3 bg-[var(--bg-secondary)] rounded-lg"
-                      >
-                        <div className="flex items-center gap-3">
-                          <item.icon className={`w-5 h-5 ${item.color}`} />
-                          <div>
-                            <p className="font-medium text-sm">{item.label}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{item.description}</p>
-                          </div>
-                        </div>
-                        <Switch
-                          checked={userPrefs?.[item.key as keyof UserNotificationPreferences] as boolean ?? true}
-                          onCheckedChange={(checked) => 
-                            userPrefs && setUserPrefs({ ...userPrefs, [item.key]: checked })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {/* PR Alerts */}
+              <NotificationSection
+                title="ใบขอซื้อ (PR)"
+                icon={<FileText className="w-4 h-4" />}
+                items={[
+                  { key: 'prPending', label: 'PR รออนุมัติ', description: 'แจ้งเตือนเมื่อมี PR ใหม่รออนุมัติ', icon: ClipboardCheck, color: 'text-[var(--accent-primary)]' },
+                  { key: 'prApproved', label: 'PR อนุมัติแล้ว', description: 'แจ้งเตือนเมื่อ PR ได้รับการอนุมัติ', icon: CheckCircle2, color: 'text-[var(--status-success)]' },
+                  { key: 'prRejected', label: 'PR ไม่อนุมัติ', description: 'แจ้งเตือนเมื่อ PR ถูกปฏิเสธ', icon: XCircle, color: 'text-[var(--status-error)]' },
+                ]}
+                userPrefs={userPrefs}
+                onUpdate={(key, channels) => {
+                  if (userPrefs) {
+                    setUserPrefs({ ...userPrefs, [key]: channels })
+                  }
+                }}
+              />
 
-                {/* PO Alerts */}
-                <div>
-                  <h3 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
-                    <ShoppingCart className="w-4 h-4" />
-                    ใบสั่งซื้อ (PO)
-                  </h3>
-                  <div className="space-y-2">
-                    {[
-                      { key: 'notifyPOPending', label: 'PO รออนุมัติ', description: 'แจ้งเตือนเมื่อมี PO ใหม่รออนุมัติ', icon: ClipboardCheck, color: 'text-[var(--accent-primary)]' },
-                      { key: 'notifyPOApproved', label: 'PO อนุมัติแล้ว', description: 'แจ้งเตือนเมื่อ PO ได้รับการอนุมัติ', icon: CheckCircle2, color: 'text-[var(--status-success)]' },
-                      { key: 'notifyPORejected', label: 'PO ไม่อนุมัติ', description: 'แจ้งเตือนเมื่อ PO ถูกปฏิเสธ', icon: XCircle, color: 'text-[var(--status-error)]' },
-                      { key: 'notifyPOReceived', label: 'รับสินค้าแล้ว', description: 'แจ้งเตือนเมื่อรับสินค้าตาม PO', icon: Package, color: 'text-[var(--status-info)]' },
-                    ].map((item) => (
-                      <div
-                        key={item.key}
-                        className="flex items-center justify-between p-3 bg-[var(--bg-secondary)] rounded-lg"
-                      >
-                        <div className="flex items-center gap-3">
-                          <item.icon className={`w-5 h-5 ${item.color}`} />
-                          <div>
-                            <p className="font-medium text-sm">{item.label}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{item.description}</p>
-                          </div>
-                        </div>
-                        <Switch
-                          checked={userPrefs?.[item.key as keyof UserNotificationPreferences] as boolean ?? true}
-                          onCheckedChange={(checked) => 
-                            userPrefs && setUserPrefs({ ...userPrefs, [item.key]: checked })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              {/* PO Alerts */}
+              <NotificationSection
+                title="ใบสั่งซื้อ (PO)"
+                icon={<ShoppingCart className="w-4 h-4" />}
+                items={[
+                  { key: 'poPending', label: 'PO รออนุมัติ', description: 'แจ้งเตือนเมื่อมี PO ใหม่รออนุมัติ', icon: ClipboardCheck, color: 'text-[var(--accent-primary)]' },
+                  { key: 'poApproved', label: 'PO อนุมัติแล้ว', description: 'แจ้งเตือนเมื่อ PO ได้รับการอนุมัติ', icon: CheckCircle2, color: 'text-[var(--status-success)]' },
+                  { key: 'poRejected', label: 'PO ไม่อนุมัติ', description: 'แจ้งเตือนเมื่อ PO ถูกปฏิเสธ', icon: XCircle, color: 'text-[var(--status-error)]' },
+                  { key: 'poReceived', label: 'รับสินค้าแล้ว', description: 'แจ้งเตือนเมื่อรับสินค้าตาม PO', icon: Package, color: 'text-[var(--status-info)]' },
+                ]}
+                userPrefs={userPrefs}
+                onUpdate={(key, channels) => {
+                  if (userPrefs) {
+                    setUserPrefs({ ...userPrefs, [key]: channels })
+                  }
+                }}
+              />
 
-              <div className="flex justify-end pt-4">
+              {/* GRN & Stock Take */}
+              <NotificationSection
+                title="การรับสินค้า & ตรวจนับ"
+                icon={<Truck className="w-4 h-4" />}
+                items={[
+                  { key: 'grnCreated', label: 'สร้าง GRN', description: 'แจ้งเตือนเมื่อมีการสร้างใบรับสินค้า', icon: Package, color: 'text-[var(--status-info)]' },
+                  { key: 'stockTake', label: 'ตรวจนับสต๊อค', description: 'แจ้งเตือนเมื่อมีการตรวจนับสต๊อค', icon: ClipboardCheck, color: 'text-[var(--accent-primary)]' },
+                ]}
+                userPrefs={userPrefs}
+                onUpdate={(key, channels) => {
+                  if (userPrefs) {
+                    setUserPrefs({ ...userPrefs, [key]: channels })
+                  }
+                }}
+              />
+
+              <div className="flex justify-end pt-4 border-t border-[var(--border-default)]">
                 <Button onClick={handleSaveUserPrefs} disabled={isSaving}>
                   {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
                   บันทึกการตั้งค่า
@@ -998,6 +944,125 @@ export default function NotificationSettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+// ============================================
+// Notification Section Component
+// ============================================
+
+interface NotificationItem {
+  key: string
+  label: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  color: string
+}
+
+interface NotificationSectionProps {
+  title: string
+  icon: React.ReactNode
+  items: NotificationItem[]
+  userPrefs: UserNotificationPreferences | null
+  onUpdate: (key: string, channels: NotificationChannels) => void
+}
+
+function NotificationSection({ title, icon, items, userPrefs, onUpdate }: NotificationSectionProps) {
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
+        {icon}
+        {title}
+      </h3>
+      <div className="border border-[var(--border-default)] rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-[var(--bg-secondary)]">
+              <TableHead className="w-[45%]">ประเภท</TableHead>
+              <TableHead className="text-center w-[18%]">
+                <div className="flex items-center justify-center gap-1">
+                  <Globe className="w-4 h-4 text-[var(--status-success)]" />
+                  <span className="hidden sm:inline">เว็บ</span>
+                </div>
+              </TableHead>
+              <TableHead className="text-center w-[18%]">
+                <div className="flex items-center justify-center gap-1">
+                  <MessageSquare className="w-4 h-4 text-[#00B900]" />
+                  <span className="hidden sm:inline">LINE</span>
+                </div>
+              </TableHead>
+              <TableHead className="text-center w-[18%]">
+                <div className="flex items-center justify-center gap-1">
+                  <Mail className="w-4 h-4 text-[var(--accent-primary)]" />
+                  <span className="hidden sm:inline">Email</span>
+                </div>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item) => {
+              const channels = userPrefs?.[item.key as keyof UserNotificationPreferences] as NotificationChannels | undefined
+              const webEnabled = channels?.web ?? true
+              const lineEnabled = channels?.line ?? true
+              const emailEnabled = channels?.email ?? true
+
+              return (
+                <TableRow key={item.key} className="hover:bg-[var(--bg-secondary)]/50">
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <item.icon className={`w-5 h-5 ${item.color} shrink-0`} />
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm">{item.label}</p>
+                        <p className="text-xs text-[var(--text-muted)] truncate">{item.description}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex justify-center">
+                      <Switch
+                        checked={webEnabled}
+                        onCheckedChange={(checked) => onUpdate(item.key, { 
+                          web: checked, 
+                          line: lineEnabled, 
+                          email: emailEnabled 
+                        })}
+                        className="data-[state=checked]:bg-[var(--status-success)]"
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex justify-center">
+                      <Switch
+                        checked={lineEnabled}
+                        onCheckedChange={(checked) => onUpdate(item.key, { 
+                          web: webEnabled, 
+                          line: checked, 
+                          email: emailEnabled 
+                        })}
+                        className="data-[state=checked]:bg-[#00B900]"
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex justify-center">
+                      <Switch
+                        checked={emailEnabled}
+                        onCheckedChange={(checked) => onUpdate(item.key, { 
+                          web: webEnabled, 
+                          line: lineEnabled, 
+                          email: checked 
+                        })}
+                        className="data-[state=checked]:bg-[var(--accent-primary)]"
+                      />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   )
 }

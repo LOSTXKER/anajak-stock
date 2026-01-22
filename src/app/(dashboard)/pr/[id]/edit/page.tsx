@@ -117,6 +117,51 @@ export default function EditPRPage(props: PageProps) {
         setNote(pr.note || '')
         setPriority(pr.priority || 'NORMAL')
         
+        // Collect product IDs that have variants to load
+        const productIdsWithVariants = new Set<string>()
+        pr.lines.forEach((line) => {
+          const product = productsResult.items.find(p => p.id === line.productId)
+          if (product?.hasVariants) {
+            productIdsWithVariants.add(line.productId)
+          }
+        })
+        
+        // Load variants for products that have variants
+        const variantsToLoad: Record<string, Variant[]> = {}
+        await Promise.all(
+          Array.from(productIdsWithVariants).map(async (productId) => {
+            try {
+              const response = await fetch(`/api/products/${productId}/variants`)
+              if (response.ok) {
+                const data = await response.json()
+                variantsToLoad[productId] = data.map((v: { 
+                  id: string
+                  sku: string
+                  name: string | null
+                  costPrice?: number
+                  optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+                  stockBalances?: { qtyOnHand: number }[]
+                }) => ({
+                  id: v.id,
+                  sku: v.sku,
+                  name: v.name,
+                  options: v.optionValues?.map((ov) => ({
+                    optionName: ov.optionValue.optionType.name,
+                    value: ov.optionValue.value,
+                  })) || [],
+                  stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+                  costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+                }))
+              }
+            } catch (error) {
+              console.error(`Failed to load variants for product ${productId}:`, error)
+            }
+          })
+        )
+        
+        // Set loaded variants state
+        setLoadedVariants(variantsToLoad)
+        
         // Build variant label from existing data
         setLines(pr.lines.map(line => {
           // Build variant label from optionValues if variant exists
@@ -127,6 +172,12 @@ export default function EditPRPage(props: PageProps) {
             variantLabel = lineWithVariant.variant.optionValues
               .map((ov: { optionValue: { value: string } }) => ov.optionValue.value)
               .join(' / ')
+          } else if (lineWithVariant.variantId) {
+            // Fallback to loaded variants
+            const loadedVariant = variantsToLoad[line.productId]?.find(v => v.id === lineWithVariant.variantId)
+            if (loadedVariant) {
+              variantLabel = loadedVariant.options.map(o => o.value).join(' / ')
+            }
           }
           
           return {
