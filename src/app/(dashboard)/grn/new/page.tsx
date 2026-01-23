@@ -46,6 +46,12 @@ interface POLine {
     id: string
     name: string | null
     sku: string
+    optionValues?: Array<{
+      optionValue: {
+        value: string
+        optionType: { name: string }
+      }
+    }>
   } | null
 }
 
@@ -140,12 +146,16 @@ export default function NewGRNPage() {
             const remaining = Number(line.qty) - Number(line.qtyReceived)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const lineWithVariant = line as any
+            // สร้างชื่อ variant จาก optionValues
+            const variantName = lineWithVariant.variant?.optionValues
+              ?.map((ov: { optionValue: { value: string } }) => ov.optionValue.value)
+              .join(', ') || lineWithVariant.variant?.name
             return {
               poLineId: line.id,
               productId: line.productId,
               variantId: lineWithVariant.variantId || undefined,
               productName: line.product.name,
-              variantName: lineWithVariant.variant?.name || lineWithVariant.variant?.sku,
+              variantName,
               sku: lineWithVariant.variant?.sku || line.product.sku,
               ordered: Number(line.qty),
               received: Number(line.qtyReceived),

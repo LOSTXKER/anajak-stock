@@ -194,7 +194,11 @@ export default function LedgerReportPage() {
                   mov.lines.map((line, idx) => {
                     const typeInfo = typeConfig[mov.type]
                     const displaySku = line.variant?.sku || line.product.sku
-                    const variantName = line.variant?.name || '-'
+                    // สร้างชื่อ variant จาก optionValues
+                    const lineVariant = line.variant as any
+                    const variantName = lineVariant?.optionValues
+                      ?.map((ov: { optionValue: { value: string } }) => ov.optionValue.value)
+                      .join(', ') || lineVariant?.name || '-'
                     
                     return (
                       <TableRow key={`${mov.id}-${line.id}`}>

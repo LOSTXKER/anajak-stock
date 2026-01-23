@@ -98,7 +98,26 @@ export async function getMovements(params: {
               select: { id: true, name: true, sku: true },
             },
             variant: {
-              select: { id: true, name: true, sku: true },
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                optionValues: {
+                  select: {
+                    optionValue: {
+                      select: {
+                        value: true,
+                        optionType: { select: { name: true } },
+                      },
+                    },
+                  },
+                  orderBy: {
+                    optionValue: {
+                      optionType: { displayOrder: 'asc' },
+                    },
+                  },
+                },
+              },
             },
             fromLocation: {
               select: {
