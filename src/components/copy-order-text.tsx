@@ -38,17 +38,14 @@ export function CopyOrderText({
 }: CopyOrderTextProps) {
   const [copied, setCopied] = useState<'simple' | 'detailed' | null>(null)
 
-  // แบบย่อ - ส่ง Supplier (ใช้ SKU อย่างเดียว)
+  // แบบย่อ - ส่ง Supplier (สี/ไซส์ + จำนวน)
   function generateSimpleText() {
-    let text = `สั่งซื้อ ${docNumber}\n\n`
+    let text = ''
     
     lines.forEach((line, index) => {
-      text += `${index + 1}. ${line.sku} x ${line.qty.toLocaleString()}\n`
+      const variant = line.variantName || '-'
+      text += `${index + 1}. ${variant} x ${line.qty.toLocaleString()}\n`
     })
-    
-    if (totalAmount !== undefined) {
-      text += `\nรวม: ฿${totalAmount.toLocaleString()}`
-    }
     
     return text.trim()
   }
@@ -131,7 +128,7 @@ export function CopyOrderText({
         <DropdownMenuItem onClick={() => handleCopy('simple')}>
           <div>
             <p className="font-medium">แบบย่อ (ส่ง Supplier)</p>
-            <p className="text-xs text-[var(--text-muted)]">ชื่อสินค้า + จำนวน</p>
+            <p className="text-xs text-[var(--text-muted)]">สี/ไซส์ + จำนวน</p>
           </div>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleCopy('detailed')}>
