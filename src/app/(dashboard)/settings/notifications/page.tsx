@@ -584,6 +584,7 @@ export default function NotificationSettingsPage() {
                 items={[
                   { key: 'lowStock', label: 'สต๊อคใกล้หมด', description: 'แจ้งเตือนเมื่อสินค้าต่ำกว่า Reorder Point', icon: AlertTriangle, color: 'text-[var(--status-warning)]' },
                   { key: 'expiring', label: 'สินค้าใกล้หมดอายุ', description: 'แจ้งเตือนสินค้าที่ใกล้หมดอายุภายใน 30 วัน', icon: Clock, color: 'text-[var(--status-error)]' },
+                  { key: 'movementPending', label: 'Movement รออนุมัติ', description: 'แจ้งเตือนเมื่อมีรายการเคลื่อนไหวรออนุมัติ', icon: ClipboardCheck, color: 'text-[var(--accent-primary)]' },
                   { key: 'movementPosted', label: 'Movement Posted', description: 'แจ้งเตือนเมื่อมีการ Post รายการเคลื่อนไหว', icon: Truck, color: 'text-[var(--status-success)]' },
                 ]}
                 userPrefs={userPrefs}
@@ -619,6 +620,8 @@ export default function NotificationSettingsPage() {
                   { key: 'poPending', label: 'PO รออนุมัติ', description: 'แจ้งเตือนเมื่อมี PO ใหม่รออนุมัติ', icon: ClipboardCheck, color: 'text-[var(--accent-primary)]' },
                   { key: 'poApproved', label: 'PO อนุมัติแล้ว', description: 'แจ้งเตือนเมื่อ PO ได้รับการอนุมัติ', icon: CheckCircle2, color: 'text-[var(--status-success)]' },
                   { key: 'poRejected', label: 'PO ไม่อนุมัติ', description: 'แจ้งเตือนเมื่อ PO ถูกปฏิเสธ', icon: XCircle, color: 'text-[var(--status-error)]' },
+                  { key: 'poSent', label: 'ส่งให้ Supplier', description: 'แจ้งเตือนเมื่อส่ง PO ให้ Supplier แล้ว', icon: Send, color: 'text-[var(--status-info)]' },
+                  { key: 'poCancelled', label: 'PO ยกเลิก', description: 'แจ้งเตือนเมื่อ PO ถูกยกเลิก', icon: XCircle, color: 'text-[var(--status-error)]' },
                   { key: 'poReceived', label: 'รับสินค้าแล้ว', description: 'แจ้งเตือนเมื่อรับสินค้าตาม PO', icon: Package, color: 'text-[var(--status-info)]' },
                 ]}
                 userPrefs={userPrefs}

@@ -22,6 +22,7 @@ export interface UserNotificationPreferences {
   lowStock: NotificationChannels
   expiring: NotificationChannels
   movementPosted: NotificationChannels
+  movementPending: NotificationChannels
   
   // PR alerts
   prPending: NotificationChannels
@@ -32,6 +33,8 @@ export interface UserNotificationPreferences {
   poPending: NotificationChannels
   poApproved: NotificationChannels
   poRejected: NotificationChannels
+  poSent: NotificationChannels
+  poCancelled: NotificationChannels
   poReceived: NotificationChannels
   
   // GRN & Stock Take
@@ -58,12 +61,15 @@ const DEFAULT_PREFERENCES: UserNotificationPreferences = {
   lowStock: { ...DEFAULT_CHANNELS },
   expiring: { ...DEFAULT_CHANNELS },
   movementPosted: { ...DEFAULT_CHANNELS_WEB_ONLY },
+  movementPending: { ...DEFAULT_CHANNELS_WEB_ONLY },
   prPending: { ...DEFAULT_CHANNELS },
   prApproved: { ...DEFAULT_CHANNELS },
   prRejected: { ...DEFAULT_CHANNELS },
   poPending: { ...DEFAULT_CHANNELS },
   poApproved: { ...DEFAULT_CHANNELS },
   poRejected: { ...DEFAULT_CHANNELS },
+  poSent: { web: true, line: true, email: false },
+  poCancelled: { web: true, line: true, email: false },
   poReceived: { ...DEFAULT_CHANNELS },
   grnCreated: { ...DEFAULT_CHANNELS_WEB_ONLY },
   stockTake: { ...DEFAULT_CHANNELS_WEB_ONLY },
@@ -110,6 +116,9 @@ function dbToPreferences(prefs: {
   movementPostedWeb: boolean
   movementPostedLine: boolean
   movementPostedEmail: boolean
+  movementPendingWeb?: boolean
+  movementPendingLine?: boolean
+  movementPendingEmail?: boolean
   prPendingWeb: boolean
   prPendingLine: boolean
   prPendingEmail: boolean
@@ -128,6 +137,12 @@ function dbToPreferences(prefs: {
   poRejectedWeb: boolean
   poRejectedLine: boolean
   poRejectedEmail: boolean
+  poSentWeb?: boolean
+  poSentLine?: boolean
+  poSentEmail?: boolean
+  poCancelledWeb?: boolean
+  poCancelledLine?: boolean
+  poCancelledEmail?: boolean
   poReceivedWeb: boolean
   poReceivedLine: boolean
   poReceivedEmail: boolean
@@ -143,12 +158,15 @@ function dbToPreferences(prefs: {
     lowStock: { web: prefs.lowStockWeb, line: prefs.lowStockLine, email: prefs.lowStockEmail },
     expiring: { web: prefs.expiringWeb, line: prefs.expiringLine, email: prefs.expiringEmail },
     movementPosted: { web: prefs.movementPostedWeb, line: prefs.movementPostedLine, email: prefs.movementPostedEmail },
+    movementPending: { web: prefs.movementPendingWeb ?? true, line: prefs.movementPendingLine ?? false, email: prefs.movementPendingEmail ?? false },
     prPending: { web: prefs.prPendingWeb, line: prefs.prPendingLine, email: prefs.prPendingEmail },
     prApproved: { web: prefs.prApprovedWeb, line: prefs.prApprovedLine, email: prefs.prApprovedEmail },
     prRejected: { web: prefs.prRejectedWeb, line: prefs.prRejectedLine, email: prefs.prRejectedEmail },
     poPending: { web: prefs.poPendingWeb, line: prefs.poPendingLine, email: prefs.poPendingEmail },
     poApproved: { web: prefs.poApprovedWeb, line: prefs.poApprovedLine, email: prefs.poApprovedEmail },
     poRejected: { web: prefs.poRejectedWeb, line: prefs.poRejectedLine, email: prefs.poRejectedEmail },
+    poSent: { web: prefs.poSentWeb ?? true, line: prefs.poSentLine ?? true, email: prefs.poSentEmail ?? false },
+    poCancelled: { web: prefs.poCancelledWeb ?? true, line: prefs.poCancelledLine ?? true, email: prefs.poCancelledEmail ?? false },
     poReceived: { web: prefs.poReceivedWeb, line: prefs.poReceivedLine, email: prefs.poReceivedEmail },
     grnCreated: { web: prefs.grnCreatedWeb, line: prefs.grnCreatedLine, email: prefs.grnCreatedEmail },
     stockTake: { web: prefs.stockTakeWeb, line: prefs.stockTakeLine, email: prefs.stockTakeEmail },
@@ -174,6 +192,11 @@ function preferencesToDb(prefs: Partial<UserNotificationPreferences>) {
     result.movementPostedWeb = prefs.movementPosted.web
     result.movementPostedLine = prefs.movementPosted.line
     result.movementPostedEmail = prefs.movementPosted.email
+  }
+  if (prefs.movementPending) {
+    result.movementPendingWeb = prefs.movementPending.web
+    result.movementPendingLine = prefs.movementPending.line
+    result.movementPendingEmail = prefs.movementPending.email
   }
   if (prefs.prPending) {
     result.prPendingWeb = prefs.prPending.web
@@ -204,6 +227,16 @@ function preferencesToDb(prefs: Partial<UserNotificationPreferences>) {
     result.poRejectedWeb = prefs.poRejected.web
     result.poRejectedLine = prefs.poRejected.line
     result.poRejectedEmail = prefs.poRejected.email
+  }
+  if (prefs.poSent) {
+    result.poSentWeb = prefs.poSent.web
+    result.poSentLine = prefs.poSent.line
+    result.poSentEmail = prefs.poSent.email
+  }
+  if (prefs.poCancelled) {
+    result.poCancelledWeb = prefs.poCancelled.web
+    result.poCancelledLine = prefs.poCancelled.line
+    result.poCancelledEmail = prefs.poCancelled.email
   }
   if (prefs.poReceived) {
     result.poReceivedWeb = prefs.poReceived.web
