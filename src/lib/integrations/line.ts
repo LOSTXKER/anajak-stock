@@ -572,6 +572,96 @@ export const FlexTemplates = {
   },
 
   /**
+   * Movement Pending (Waiting for approval) Card
+   */
+  movementPending(data: { docNumber: string; type: string; itemCount: number; submittedBy: string; movementId: string }, appUrl: string): FlexBubble {
+    const typeConfig: Record<string, { icon: string; label: string; color: string }> = {
+      RECEIVE: { icon: '📥', label: 'รับเข้า', color: '#22c55e' },
+      ISSUE: { icon: '📤', label: 'เบิกออก', color: '#dc2626' },
+      TRANSFER: { icon: '🔄', label: 'โอนย้าย', color: '#3b82f6' },
+      ADJUST: { icon: '📝', label: 'ปรับยอด', color: '#f59e0b' },
+      RETURN: { icon: '↩️', label: 'คืนของ', color: '#8b5cf6' },
+    }
+
+    const config = typeConfig[data.type] || { icon: '📦', label: data.type, color: '#333333' }
+
+    return {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: `⏳ ${config.label}รอดำเนินการ`,
+            weight: 'bold',
+            size: 'lg',
+            color: '#f59e0b',
+          },
+          {
+            type: 'text',
+            text: data.docNumber,
+            size: 'md',
+            weight: 'bold',
+          },
+        ],
+        backgroundColor: '#fef3c7',
+        paddingAll: 'lg',
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'ประเภท:', size: 'sm', color: '#888888', flex: 1 },
+              { type: 'text', text: `${config.icon} ${config.label}`, size: 'sm', weight: 'bold', flex: 2 },
+            ],
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'รายการ:', size: 'sm', color: '#888888', flex: 1 },
+              { type: 'text', text: `${data.itemCount} รายการ`, size: 'sm', weight: 'bold', flex: 2 },
+            ],
+            margin: 'md',
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'ส่งโดย:', size: 'sm', color: '#888888', flex: 1 },
+              { type: 'text', text: data.submittedBy, size: 'sm', weight: 'bold', flex: 2 },
+            ],
+            margin: 'md',
+          },
+        ],
+        paddingAll: 'lg',
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'uri',
+              label: 'ตรวจสอบ',
+              uri: `${appUrl}/movements/${data.movementId}`,
+            },
+            style: 'primary',
+            color: '#f59e0b',
+          },
+        ],
+        paddingAll: 'lg',
+      },
+    }
+  },
+
+  /**
    * Movement Posted Card
    */
   movementPosted(data: { docNumber: string; type: string; itemCount: number; createdBy: string }, appUrl: string): FlexBubble {

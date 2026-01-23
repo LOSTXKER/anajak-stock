@@ -80,15 +80,21 @@ const DEFAULT_PREFERENCES: UserNotificationPreferences = {
 // Actions
 // ============================================
 
-export async function getUserNotificationPreferences(): Promise<ActionResult<UserNotificationPreferences>> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+export async function getUserNotificationPreferences(targetUserId?: string): Promise<ActionResult<UserNotificationPreferences>> {
+  let userId = targetUserId
+
+  // If no target user specified, use current session
+  if (!userId) {
+    const session = await getSession()
+    if (!session) {
+      return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+    }
+    userId = session.id
   }
 
   try {
     const prefs = await prisma.userNotificationPreference.findUnique({
-      where: { userId: session.id },
+      where: { userId },
     })
 
     if (!prefs) {

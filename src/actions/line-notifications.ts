@@ -492,6 +492,67 @@ export async function sendLineMovementPosted(movementId: string): Promise<Action
 }
 
 /**
+ * Send Movement Pending (Waiting for approval) Alert via LINE
+ */
+export async function sendLineMovementPending(movementId: string): Promise<ActionResult<void>> {
+  try {
+    const settingsResult = await getLineSettings()
+    if (!settingsResult.success || !settingsResult.data.enabled) {
+      return { success: true, data: undefined }
+    }
+
+    const client = await getLineClientFromSettings()
+    if (!client) {
+      return { success: false, error: 'LINE not configured' }
+    }
+
+    const recipientIds = await getRecipientIds()
+    if (recipientIds.length === 0) {
+      return { success: false, error: 'No recipients configured' }
+    }
+
+    const movement = await prisma.stockMovement.findUnique({
+      where: { id: movementId },
+      include: {
+        createdBy: true,
+        lines: true,
+      },
+    })
+
+    if (!movement) {
+      return { success: false, error: 'Movement not found' }
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const flexMessage = FlexTemplates.movementPending(
+      {
+        docNumber: movement.docNumber,
+        type: movement.type,
+        itemCount: movement.lines.length,
+        submittedBy: movement.createdBy.name,
+        movementId: movement.id,
+      },
+      appUrl
+    )
+
+    const result = await client.sendFlex(
+      recipientIds,
+      `⏳ ${movement.type}รอดำเนินการ: ${movement.docNumber}`,
+      flexMessage
+    )
+
+    if (!result.success) {
+      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
+    }
+
+    return { success: true, data: undefined }
+  } catch (error) {
+    console.error('LINE movement pending alert error:', error)
+    return { success: false, error: 'ไม่สามารถส่งแจ้งเตือนได้' }
+  }
+}
+
+/**
  * Send Expiring Stock Alert via LINE
  */
 export async function sendLineExpiringAlert(): Promise<ActionResult<void>> {

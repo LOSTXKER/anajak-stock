@@ -6,8 +6,9 @@ import { revalidatePath } from 'next/cache'
 import { MovementType, DocStatus } from '@/generated/prisma'
 import { serialize } from '@/lib/serialize'
 import type { ActionResult, PaginatedResult, MovementWithRelations } from '@/types'
-import { sendLineMovementPosted } from '@/actions/line-notifications'
+import { sendLineMovementPosted, sendLineMovementPending } from '@/actions/line-notifications'
 import { createNotification } from '@/actions/notifications'
+import { getUserNotificationPreferences } from '@/actions/user-notification-preferences'
 
 interface MovementLineInput {
   productId: string
@@ -1169,17 +1170,39 @@ async function notifyMovementSubmitted(
     select: { id: true },
   })
 
-  // Create in-app notifications for all approvers
-  const notificationPromises = approvers.map((approver) =>
-    createNotification({
-      userId: approver.id,
-      type: 'system',
-      title: `${typeLabel}รอดำเนินการ: ${docNumber}`,
-      message: `${submitterName} ส่งรายการ${typeLabel} ${docNumber} รอดำเนินการ`,
-      url: `/movements/${movementId}`,
-    })
+  // Create in-app notifications based on user preferences
+  const notificationPromises = approvers.map(async (approver) => {
+    // Check user's notification preferences
+    const prefsResult = await getUserNotificationPreferences(approver.id)
+    const prefs = prefsResult.success ? prefsResult.data : null
+
+    // Default to web notification if no preferences set
+    const sendWeb = prefs?.movementPending?.web ?? true
+    const sendLine = prefs?.movementPending?.line ?? false
+
+    const tasks: Promise<unknown>[] = []
+
+    // Send in-app (web) notification
+    if (sendWeb) {
+      tasks.push(
+        createNotification({
+          userId: approver.id,
+          type: 'system',
+          title: `${typeLabel}รอดำเนินการ: ${docNumber}`,
+          message: `${submitterName} ส่งรายการ${typeLabel} ${docNumber} รอดำเนินการ`,
+          url: `/movements/${movementId}`,
+        })
+      )
+    }
+
+    return Promise.allSettled(tasks)
+  })
+
+  // Send LINE notifications to users who have it enabled
+  const linePromise = sendLineMovementPending(movementId).catch((err) =>
+    console.error('Failed to send LINE movement pending notification:', err)
   )
 
   // Execute all in parallel
-  await Promise.allSettled(notificationPromises)
+  await Promise.allSettled([...notificationPromises, linePromise])
 }
