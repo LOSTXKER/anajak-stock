@@ -84,7 +84,24 @@ export async function getStockTake(id: string) {
             product: {
               include: { category: true },
             },
-            variant: true,
+            variant: {
+              include: {
+                optionValues: {
+                  include: {
+                    optionValue: {
+                      include: {
+                        optionType: true,
+                      },
+                    },
+                  },
+                  orderBy: {
+                    optionValue: {
+                      optionType: { displayOrder: 'asc' },
+                    },
+                  },
+                },
+              },
+            },
             location: true,
           },
           orderBy: [

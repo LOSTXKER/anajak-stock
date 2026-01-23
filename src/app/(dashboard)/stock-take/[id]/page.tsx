@@ -92,7 +92,17 @@ interface StockTakeData {
     variance: number | null
     note: string | null
     product: { id: string; sku: string; name: string; category: { name: string } | null }
-    variant: { id: string; sku: string; name: string | null } | null
+    variant: { 
+      id: string
+      sku: string
+      name: string | null
+      optionValues?: Array<{
+        optionValue: {
+          value: string
+          optionType: { name: string }
+        }
+      }>
+    } | null
     location: { id: string; code: string; name: string }
   }>
 }
@@ -459,6 +469,11 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
                     ? edit.countedQty - line.systemQty 
                     : line.variance
                   const isHighlighted = highlightedLineId === line.id
+                  
+                  // สร้างชื่อ variant จาก option values
+                  const variantName = line.variant?.optionValues
+                    ?.map((ov) => ov.optionValue.value)
+                    .join(', ') || line.variant?.name
 
                   return (
                     <TableRow 
@@ -470,11 +485,13 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
                           {line.variant?.sku || line.product.sku}
                         </Link>
                       </TableCell>
-                      <TableCell className="font-medium">
-                        {line.product.name}
-                        {line.variant?.name && (
-                          <span className="text-[var(--text-muted)] ml-2">({line.variant.name})</span>
-                        )}
+                      <TableCell>
+                        <div>
+                          <p className="font-medium text-[var(--text-primary)]">{line.product.name}</p>
+                          {variantName && (
+                            <p className="text-sm text-[var(--text-muted)]">{variantName}</p>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] font-mono text-sm">{line.location.code}</TableCell>
                       <TableCell className="text-right font-mono">

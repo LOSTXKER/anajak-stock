@@ -100,6 +100,24 @@ async function getMovement(id: string) {
               unit: true,
             },
           },
+          variant: {
+            include: {
+              optionValues: {
+                include: {
+                  optionValue: {
+                    include: {
+                      optionType: true,
+                    },
+                  },
+                },
+                orderBy: {
+                  optionValue: {
+                    optionType: { displayOrder: 'asc' },
+                  },
+                },
+              },
+            },
+          },
           fromLocation: {
             include: {
               warehouse: true,
@@ -240,7 +258,13 @@ async function MovementDetail({ id }: { id: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {movement.lines.map((line, index) => (
+              {movement.lines.map((line, index) => {
+                // สร้างชื่อ variant จาก option values
+                const variantName = line.variant?.optionValues
+                  ?.map((ov) => ov.optionValue.value)
+                  .join(', ') || line.variant?.name
+                
+                return (
                 <TableRow key={line.id}>
                   <TableCell className="text-[var(--text-muted)]">{index + 1}</TableCell>
                   <TableCell className="font-mono text-sm">
@@ -248,10 +272,17 @@ async function MovementDetail({ id }: { id: string }) {
                       href={`/products/${line.product.id}`}
                       className="text-[var(--accent-primary)] hover:underline"
                     >
-                      {line.product.sku}
+                      {line.variant?.sku || line.product.sku}
                     </Link>
                   </TableCell>
-                  <TableCell className="font-medium">{line.product.name}</TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium text-[var(--text-primary)]">{line.product.name}</p>
+                      {variantName && (
+                        <p className="text-sm text-[var(--text-muted)]">{variantName}</p>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-sm text-[var(--text-muted)]">
                     {line.fromLocation
                       ? (
@@ -283,7 +314,8 @@ async function MovementDetail({ id }: { id: string }) {
                     {line.product.unit?.name || '-'}
                   </TableCell>
                 </TableRow>
-              ))}
+              )})}
+              
               {/* Totals Row */}
               <TableRow className="bg-[var(--bg-secondary)]">
                 <TableCell colSpan={5} className="text-right font-medium">
