@@ -38,15 +38,12 @@ export function CopyOrderText({
 }: CopyOrderTextProps) {
   const [copied, setCopied] = useState<'simple' | 'detailed' | null>(null)
 
-  // แบบย่อ - ส่ง Supplier
+  // แบบย่อ - ส่ง Supplier (ใช้ SKU อย่างเดียว)
   function generateSimpleText() {
     let text = `สั่งซื้อ ${docNumber}\n\n`
     
     lines.forEach((line, index) => {
-      const name = line.variantName 
-        ? `${line.productName} (${line.variantName})`
-        : line.productName
-      text += `${index + 1}. ${name} x ${line.qty.toLocaleString()}\n`
+      text += `${index + 1}. ${line.sku} x ${line.qty.toLocaleString()}\n`
     })
     
     if (totalAmount !== undefined) {
