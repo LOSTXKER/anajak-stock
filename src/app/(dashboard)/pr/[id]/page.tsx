@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table'
 import { ArrowLeft, FileText, User, AlertCircle, CheckCircle2, XCircle, Clock, ArrowRightCircle, ShoppingCart, Link2 } from 'lucide-react'
 import { PRActions } from './pr-actions'
+import { CopyOrderText } from '@/components/copy-order-text'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -173,13 +174,28 @@ async function PRDetail({ id }: { id: string }) {
           </div>
         </div>
 
-        <PRActions
-          prId={pr.id}
-          prStatus={pr.status}
-          canApprove={!!canApprove}
-          canEdit={!!canEdit}
-          suppliers={suppliers}
-        />
+        <div className="flex items-center gap-2">
+          <CopyOrderText
+            docNumber={pr.prNumber}
+            docType="PR"
+            lines={pr.lines.map((line) => ({
+              productName: line.product.name,
+              variantName: line.variant?.optionValues
+                ?.map((ov) => ov.optionValue.value)
+                .join(', ') || line.variant?.name || undefined,
+              sku: line.variant?.sku || line.product.sku,
+              qty: Number(line.qty),
+            }))}
+            note={pr.note || undefined}
+          />
+          <PRActions
+            prId={pr.id}
+            prStatus={pr.status}
+            canApprove={!!canApprove}
+            canEdit={!!canEdit}
+            suppliers={suppliers}
+          />
+        </div>
       </div>
 
       {/* Info Cards */}

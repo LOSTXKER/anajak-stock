@@ -18,6 +18,7 @@ import {
 import { ArrowLeft, ShoppingCart, Truck, Clock, CheckCircle2, XCircle, Package, Send, Building2, FileText, Link2 } from 'lucide-react'
 import { POStats } from './po-stats'
 import { POActions } from './po-actions'
+import { CopyOrderText } from '@/components/copy-order-text'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -185,12 +186,30 @@ async function PODetail({ id }: { id: string }) {
           </div>
         </div>
 
-        <POActions
-          poId={po.id}
-          poStatus={po.status}
-          canApprove={!!canApprove}
-          canEdit={!!canEdit}
-        />
+        <div className="flex items-center gap-2">
+          <CopyOrderText
+            docNumber={po.poNumber}
+            docType="PO"
+            supplierName={po.supplier.name}
+            lines={po.lines.map((line) => ({
+              productName: line.product.name,
+              variantName: line.variant?.optionValues
+                ?.map((ov) => ov.optionValue.value)
+                .join(', ') || line.variant?.name || undefined,
+              sku: line.variant?.sku || line.product.sku,
+              qty: Number(line.qty),
+              unitPrice: Number(line.unitPrice),
+            }))}
+            totalAmount={totalAmount}
+            note={po.note || undefined}
+          />
+          <POActions
+            poId={po.id}
+            poStatus={po.status}
+            canApprove={!!canApprove}
+            canEdit={!!canEdit}
+          />
+        </div>
       </div>
 
       {/* Stats Cards */}
