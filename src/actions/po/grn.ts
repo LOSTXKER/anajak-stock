@@ -50,6 +50,7 @@ export async function createGRN(data: CreateGRNInput): Promise<ActionResult> {
             create: data.lines.map((line) => ({
               poLineId: line.poLineId,
               productId: line.productId,
+              variantId: line.variantId || null,
               locationId: line.locationId,
               qtyReceived: line.qtyReceived,
               unitCost: line.unitCost,
@@ -96,6 +97,7 @@ export async function createGRN(data: CreateGRNInput): Promise<ActionResult> {
               .filter((line) => line.locationId)
               .map((line) => ({
                 productId: line.productId,
+                variantId: line.variantId || null,
                 toLocationId: line.locationId,
                 qty: line.qtyReceived,
                 unitCost: line.unitCost,
