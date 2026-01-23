@@ -38,7 +38,7 @@ export function CopyOrderText({
 }: CopyOrderTextProps) {
   const [copied, setCopied] = useState<'simple' | 'detailed' | null>(null)
 
-  // แบบย่อ - ส่ง Supplier (สี/ไซส์ + จำนวน)
+  // แบบย่อ - ส่ง Supplier (สี/ไซส์ + จำนวน + ราคารวม)
   function generateSimpleText() {
     let text = ''
     
@@ -46,6 +46,10 @@ export function CopyOrderText({
       const variant = line.variantName || '-'
       text += `${index + 1}. ${variant} x ${line.qty.toLocaleString()}\n`
     })
+    
+    if (totalAmount !== undefined) {
+      text += `\nรวม: ฿${totalAmount.toLocaleString()}`
+    }
     
     return text.trim()
   }
