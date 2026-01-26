@@ -23,9 +23,11 @@ const stockTypeLabels: Record<string, { label: string; color: string }> = {
   DROP_SHIP: { label: 'Drop Ship', color: 'bg-[var(--status-info-light)] text-[var(--status-info)]' },
 }
 import { VariantsSection } from './variants-section'
+import { OptionGroupsSection } from './option-groups-section'
 import { ProductStats } from './product-stats'
 import { PageHeader, EmptyState } from '@/components/common'
 import { PrintLabelButton } from './print-label-button'
+import { OptionGroup } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -228,6 +230,15 @@ async function ProductDetail({ id }: { id: string }) {
         locationCount={product.stockBalances.length}
       />
 
+      {/* Option Groups Section - Show for products with variants */}
+      {product.hasVariants && (
+        <OptionGroupsSection
+          productId={product.id}
+          optionGroups={(product.optionGroups as unknown as OptionGroup[]) || []}
+          variantCount={product.variants.length}
+        />
+      )}
+
       {/* Variants Section */}
       {product.hasVariants && (
         <VariantsSection 
@@ -260,14 +271,7 @@ async function ProductDetail({ id }: { id: string }) {
               qty: Number(sb.qtyOnHand),
             })),
           }))}
-          availableOptionTypes={optionTypes.map(ot => ({
-            id: ot.id,
-            name: ot.name,
-            values: ot.values.map(v => ({
-              id: v.id,
-              value: v.value,
-            })),
-          }))}
+          productOptionGroups={(product.optionGroups as unknown as OptionGroup[]) || []}
         />
       )}
 

@@ -78,6 +78,7 @@ model Product {
   updatedAt      DateTime         @updatedAt
   deletedAt      DateTime?
   hasVariants    Boolean          @default(false)
+  optionGroups   Json?            // [{ "name": "สี", "values": ["แดง", "น้ำเงิน"] }, { "name": "ไซส์", "values": ["S", "M"] }]
   stockType      StockType        @default(STOCKED)
   grnLines       GRNLine[]
   lots           Lot[]

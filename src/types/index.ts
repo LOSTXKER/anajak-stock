@@ -29,6 +29,9 @@ import {
 // Re-export enums
 export { Role, MovementType, DocStatus, PRStatus, POStatus, GRNStatus, VatType, StockType }
 
+// Re-export option types
+export * from './options'
+
 // Extended types with relations
 export type UserSafe = Omit<User, 'passwordHash'>
 

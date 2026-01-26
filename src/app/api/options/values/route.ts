@@ -9,30 +9,57 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { optionTypeId, value } = await request.json()
+    const { optionTypeId, optionTypeName, value } = await request.json()
 
-    if (!optionTypeId || !value) {
+    if (!value) {
       return NextResponse.json(
-        { error: 'optionTypeId and value are required' },
+        { error: 'value is required' },
         { status: 400 }
       )
     }
 
-    // Check if option type exists
-    const optionType = await prisma.optionType.findUnique({
-      where: { id: optionTypeId },
-    })
-    if (!optionType) {
+    if (!optionTypeId && !optionTypeName) {
       return NextResponse.json(
-        { error: 'Option type not found' },
-        { status: 404 }
+        { error: 'optionTypeId or optionTypeName is required' },
+        { status: 400 }
       )
+    }
+
+    let resolvedOptionTypeId = optionTypeId
+
+    // If optionTypeName is provided, find or create the option type
+    if (!resolvedOptionTypeId && optionTypeName) {
+      let optionType = await prisma.optionType.findUnique({
+        where: { name: optionTypeName },
+      })
+
+      if (!optionType) {
+        // Create new option type
+        optionType = await prisma.optionType.create({
+          data: { name: optionTypeName },
+        })
+      }
+
+      resolvedOptionTypeId = optionType.id
+    }
+
+    // Check if option type exists (if using optionTypeId directly)
+    if (optionTypeId) {
+      const optionType = await prisma.optionType.findUnique({
+        where: { id: optionTypeId },
+      })
+      if (!optionType) {
+        return NextResponse.json(
+          { error: 'Option type not found' },
+          { status: 404 }
+        )
+      }
     }
 
     // Check if value already exists
     const existing = await prisma.optionValue.findFirst({
       where: {
-        optionTypeId,
+        optionTypeId: resolvedOptionTypeId,
         value: { equals: value, mode: 'insensitive' },
       },
     })
@@ -43,7 +70,7 @@ export async function POST(request: Request) {
     // Create new option value
     const optionValue = await prisma.optionValue.create({
       data: {
-        optionTypeId,
+        optionTypeId: resolvedOptionTypeId,
         value,
       },
     })

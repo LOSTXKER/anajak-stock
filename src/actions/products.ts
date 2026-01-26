@@ -528,3 +528,67 @@ export async function getProductById(id: string): Promise<ActionResult<ProductWi
     return { success: false, error: 'ไม่สามารถดึงข้อมูลสินค้าได้' }
   }
 }
+
+/**
+ * Update product option groups
+ */
+export async function updateProductOptionGroups(
+  productId: string,
+  optionGroups: { name: string; values: string[] }[]
+): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const existing = await prisma.product.findUnique({ where: { id: productId } })
+    if (!existing) {
+      return { success: false, error: 'ไม่พบสินค้า' }
+    }
+
+    // Validate option groups
+    for (const group of optionGroups) {
+      if (!group.name.trim()) {
+        return { success: false, error: 'ชื่อกลุ่มตัวเลือกต้องไม่ว่าง' }
+      }
+      if (group.values.length === 0) {
+        return { success: false, error: `กลุ่ม "${group.name}" ต้องมีค่าอย่างน้อย 1 ค่า` }
+      }
+      // Remove empty values and duplicates
+      group.values = [...new Set(group.values.filter(v => v.trim()))]
+    }
+
+    // Check for duplicate group names
+    const groupNames = optionGroups.map(g => g.name.toLowerCase().trim())
+    if (new Set(groupNames).size !== groupNames.length) {
+      return { success: false, error: 'ชื่อกลุ่มตัวเลือกต้องไม่ซ้ำกัน' }
+    }
+
+    await prisma.product.update({
+      where: { id: productId },
+      data: {
+        optionGroups: optionGroups,
+        hasVariants: optionGroups.length > 0,
+      },
+    })
+
+    // Audit log (run in background - non-blocking)
+    prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'UPDATE',
+        refType: 'PRODUCT',
+        refId: productId,
+        oldData: { optionGroups: existing.optionGroups },
+        newData: { optionGroups },
+      },
+    }).catch((err) => console.error('Failed to create audit log:', err))
+
+    revalidatePath(`/products/${productId}`)
+    return { success: true, data: undefined }
+  } catch (error) {
+    console.error('Update option groups error:', error)
+    return { success: false, error: 'ไม่สามารถอัปเดตตัวเลือกได้' }
+  }
+}
