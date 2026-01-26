@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Settings, Pencil, Plus, X, Loader2, Trash2, AlertTriangle } from 'lucide-react'
+import { Settings, Pencil, Plus, X, Loader2, Trash2, AlertTriangle, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateProductOptionGroups } from '@/actions/products'
 import { useRouter } from 'next/navigation'
@@ -23,6 +23,101 @@ interface OptionGroupsSectionProps {
   productId: string
   optionGroups: OptionGroup[]
   variantCount: number
+}
+
+// Editable Value Badge Component
+function EditableValueBadge({ 
+  value, 
+  onUpdate, 
+  onRemove 
+}: { 
+  value: string
+  onUpdate: (newValue: string) => void
+  onRemove: () => void
+}) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editValue, setEditValue] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isEditing])
+
+  const handleSave = () => {
+    const trimmed = editValue.trim()
+    if (trimmed && trimmed !== value) {
+      onUpdate(trimmed)
+    } else {
+      setEditValue(value) // Reset if empty or unchanged
+    }
+    setIsEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSave()
+    } else if (e.key === 'Escape') {
+      setEditValue(value)
+      setIsEditing(false)
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-1 bg-[var(--bg-secondary)] rounded-md border border-[var(--accent-primary)] p-1">
+        <Input
+          ref={inputRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleSave}
+          className="h-6 w-24 text-sm px-2 py-0"
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          className="text-[var(--status-success)] hover:text-[var(--status-success)]/80"
+        >
+          <Check className="w-3 h-3" />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <Badge 
+      variant="secondary"
+      className="text-sm py-1 px-2 flex items-center gap-1 cursor-pointer hover:bg-[var(--bg-tertiary)] group"
+    >
+      <span 
+        onClick={() => setIsEditing(true)}
+        className="hover:underline"
+        title="คลิกเพื่อแก้ไข"
+      >
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={() => setIsEditing(true)}
+        className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--accent-primary)]"
+        title="แก้ไข"
+      >
+        <Pencil className="w-3 h-3" />
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--status-error)]"
+        title="ลบ"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </Badge>
+  )
 }
 
 export function OptionGroupsSection({ 
@@ -82,6 +177,29 @@ export function OptionGroupsSection({
     newGroups[groupIndex] = {
       ...newGroups[groupIndex],
       values: newGroups[groupIndex].values.filter((_, i) => i !== valueIndex)
+    }
+    setGroups(newGroups)
+  }
+
+  // Update value in group
+  const updateValueInGroup = (groupIndex: number, valueIndex: number, newValue: string) => {
+    const newGroups = [...groups]
+    const currentValues = [...newGroups[groupIndex].values]
+    
+    // Check if the new value already exists (case-insensitive)
+    const duplicate = currentValues.some((v, i) => 
+      i !== valueIndex && v.toLowerCase() === newValue.toLowerCase()
+    )
+    
+    if (duplicate) {
+      toast.error('ค่านี้มีอยู่แล้ว')
+      return
+    }
+    
+    currentValues[valueIndex] = newValue
+    newGroups[groupIndex] = {
+      ...newGroups[groupIndex],
+      values: currentValues
     }
     setGroups(newGroups)
   }
@@ -213,23 +331,17 @@ export function OptionGroupsSection({
                 </div>
 
                 <div>
-                  <p className="text-sm text-[var(--text-muted)] mb-2">ค่าในกลุ่มนี้:</p>
+                  <p className="text-sm text-[var(--text-muted)] mb-2">
+                    ค่าในกลุ่มนี้: <span className="text-xs opacity-60">(คลิกที่ค่าเพื่อแก้ไข)</span>
+                  </p>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {group.values.map((value, valueIdx) => (
-                      <Badge 
-                        key={valueIdx} 
-                        variant="secondary"
-                        className="text-sm py-1 px-2 flex items-center gap-1"
-                      >
-                        {value}
-                        <button
-                          type="button"
-                          onClick={() => removeValueFromGroup(groupIdx, valueIdx)}
-                          className="ml-1 hover:text-[var(--status-error)]"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
+                      <EditableValueBadge
+                        key={valueIdx}
+                        value={value}
+                        onUpdate={(newValue) => updateValueInGroup(groupIdx, valueIdx, newValue)}
+                        onRemove={() => removeValueFromGroup(groupIdx, valueIdx)}
+                      />
                     ))}
                   </div>
                   <div className="flex items-center gap-2">

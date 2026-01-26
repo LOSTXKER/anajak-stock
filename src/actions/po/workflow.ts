@@ -6,8 +6,13 @@ import { handleActionError } from '@/lib/action-utils'
 import { revalidatePath } from 'next/cache'
 import { POStatus } from '@/generated/prisma'
 import type { ActionResult } from '@/types'
-import { createNotification, sendPOApprovalNotification } from '@/actions/notifications'
-import { sendLinePOStatusUpdate } from '@/actions/line-notifications'
+import { createNotification, sendPOApprovalNotification, sendPOApprovalEmail } from '@/actions/notifications'
+import { sendLinePOStatusUpdate, sendLineNotificationToUser } from '@/actions/line-notifications'
+import { 
+  getUserEnabledChannels,
+  getUserLineId,
+  type NotificationTypeKey 
+} from '@/actions/user-notification-preferences'
 
 /**
  * Submit a PO for approval (DRAFT → SUBMITTED)
@@ -167,7 +172,12 @@ export async function sendPO(id: string): Promise<ActionResult> {
       }),
     ])
 
-    // Send LINE notification for PO status update
+    // Send notifications based on user preferences
+    notifyPOSent(id, po.poNumber, po.createdById).catch((err) =>
+      console.error('Failed to send PO sent notifications:', err)
+    )
+
+    // Also send to global recipients
     sendLinePOStatusUpdate(id, 'ส่งให้ Supplier แล้ว').catch((err) =>
       console.error('Failed to send PO sent notification:', err)
     )
@@ -227,20 +237,9 @@ export async function rejectPO(id: string, reason?: string): Promise<ActionResul
       }),
     ])
 
-    // Send notification to PO creator
-    createNotification({
-      userId: po.createdById,
-      type: 'po_pending',
-      title: `PO ${po.poNumber} ไม่อนุมัติ`,
-      message: reason
-        ? `ใบสั่งซื้อ ${po.poNumber} ไม่ได้รับการอนุมัติโดย ${session.name}: ${reason}`
-        : `ใบสั่งซื้อ ${po.poNumber} ไม่ได้รับการอนุมัติโดย ${session.name}`,
-      url: `/po/${id}`,
-    }).catch((err) => console.error('Failed to create rejection notification:', err))
-
-    // Send LINE notification
-    sendLinePOStatusUpdate(id, 'ไม่อนุมัติ').catch((err) =>
-      console.error('Failed to send PO rejection notification:', err)
+    // Send notifications based on user preferences
+    notifyPORejected(id, po.poNumber, po.createdById, session.name, reason).catch((err) =>
+      console.error('Failed to send PO rejection notifications:', err)
     )
 
     revalidatePath('/po')
@@ -297,7 +296,12 @@ export async function cancelPO(id: string, reason?: string): Promise<ActionResul
       }),
     ])
 
-    // Send LINE notification for PO cancellation
+    // Send notifications based on user preferences
+    notifyPOCancelled(id, po.poNumber, po.createdById).catch((err) =>
+      console.error('Failed to send PO cancellation notifications:', err)
+    )
+
+    // Also send to global recipients
     sendLinePOStatusUpdate(id, 'ยกเลิกแล้ว').catch((err) =>
       console.error('Failed to send PO cancellation notification:', err)
     )
@@ -316,7 +320,7 @@ export async function cancelPO(id: string, reason?: string): Promise<ActionResul
 
 /**
  * Send notifications when a PO is submitted for approval
- * Sends via in-app notification and LINE to all approvers
+ * Respects user notification preferences for each channel
  */
 async function notifyPOSubmitted(poId: string, poNumber: string, requesterName: string) {
   // Get all approvers (ADMIN and APPROVER roles)
@@ -326,47 +330,229 @@ async function notifyPOSubmitted(poId: string, poNumber: string, requesterName: 
       deletedAt: null,
       role: { in: ['ADMIN', 'APPROVER'] },
     },
-    select: { id: true },
+    select: { id: true, email: true },
   })
 
-  // Create in-app notifications for all approvers
-  const notificationPromises = approvers.map((approver) =>
-    createNotification({
-      userId: approver.id,
-      type: 'po_pending',
-      title: `PO ใหม่รออนุมัติ: ${poNumber}`,
-      message: `${requesterName} ส่งใบสั่งซื้อ ${poNumber} รออนุมัติ`,
-      url: `/po/${poId}`,
-    })
-  )
+  const notificationType: NotificationTypeKey = 'poPending'
 
-  // Send LINE notification
+  // Send notifications based on each user's preferences
+  const notificationPromises = approvers.map(async (approver) => {
+    const channels = await getUserEnabledChannels(approver.id, notificationType)
+    const tasks: Promise<unknown>[] = []
+
+    // Web notification
+    if (channels.web) {
+      tasks.push(
+        createNotification({
+          userId: approver.id,
+          type: 'po_pending',
+          title: `PO ใหม่รออนุมัติ: ${poNumber}`,
+          message: `${requesterName} ส่งใบสั่งซื้อ ${poNumber} รออนุมัติ`,
+          url: `/po/${poId}`,
+        })
+      )
+    }
+
+    // LINE notification
+    if (channels.line) {
+      const lineUserId = await getUserLineId(approver.id)
+      if (lineUserId) {
+        tasks.push(sendLineNotificationToUser(lineUserId, 'poPending', {
+          poId,
+          poNumber,
+        }))
+      }
+    }
+
+    return Promise.allSettled(tasks)
+  })
+
+  // Also send LINE to global recipients
   const linePromise = sendLinePOStatusUpdate(poId, 'รออนุมัติ')
 
-  // Execute all in parallel
   await Promise.allSettled([...notificationPromises, linePromise])
 }
 
 /**
  * Send notifications when a PO is approved
- * Sends via in-app notification, email, and LINE
+ * Respects user notification preferences
  */
 async function notifyPOApproved(poId: string, poNumber: string, creatorId: string, approverName: string) {
-  // Create in-app notification for PO creator
-  const inAppPromise = createNotification({
-    userId: creatorId,
-    type: 'po_pending',
-    title: `PO ${poNumber} อนุมัติแล้ว`,
-    message: `ใบสั่งซื้อ ${poNumber} ได้รับการอนุมัติโดย ${approverName}`,
-    url: `/po/${poId}`,
+  const notificationType: NotificationTypeKey = 'poApproved'
+  const channels = await getUserEnabledChannels(creatorId, notificationType)
+  const tasks: Promise<unknown>[] = []
+
+  // Get PO details for notification
+  const po = await prisma.pO.findUnique({
+    where: { id: poId },
+    include: { supplier: true, createdBy: true },
   })
 
-  // Send email to PO creator
-  const emailPromise = sendPOApprovalNotification(poId)
+  // Web notification
+  if (channels.web) {
+    tasks.push(
+      createNotification({
+        userId: creatorId,
+        type: 'po_pending',
+        title: `PO ${poNumber} อนุมัติแล้ว`,
+        message: `ใบสั่งซื้อ ${poNumber} ได้รับการอนุมัติโดย ${approverName}`,
+        url: `/po/${poId}`,
+      })
+    )
+  }
 
-  // Send LINE notification
+  // Email notification
+  if (channels.email && po?.createdBy?.email) {
+    tasks.push(sendPOApprovalEmail(poId, po.createdBy.email))
+  }
+
+  // LINE notification
+  if (channels.line) {
+    const lineUserId = await getUserLineId(creatorId)
+    if (lineUserId) {
+      tasks.push(sendLineNotificationToUser(lineUserId, 'poApproved', {
+        poId,
+        poNumber,
+        supplierName: po?.supplier?.name,
+        approverName,
+        eta: po?.eta ? new Date(po.eta).toLocaleDateString('th-TH') : undefined,
+      }))
+    }
+  }
+
+  // Also send LINE to global recipients
   const linePromise = sendLinePOStatusUpdate(poId, 'อนุมัติแล้ว')
 
-  // Execute all in parallel
-  await Promise.allSettled([inAppPromise, emailPromise, linePromise])
+  await Promise.allSettled([...tasks, linePromise])
+}
+
+/**
+ * Send notifications when a PO is rejected
+ * Respects user notification preferences
+ */
+async function notifyPORejected(
+  poId: string, 
+  poNumber: string, 
+  creatorId: string, 
+  approverName: string, 
+  reason?: string
+) {
+  const notificationType: NotificationTypeKey = 'poRejected'
+  const channels = await getUserEnabledChannels(creatorId, notificationType)
+  const tasks: Promise<unknown>[] = []
+
+  const message = reason
+    ? `ใบสั่งซื้อ ${poNumber} ไม่ได้รับการอนุมัติโดย ${approverName}: ${reason}`
+    : `ใบสั่งซื้อ ${poNumber} ไม่ได้รับการอนุมัติโดย ${approverName}`
+
+  // Web notification
+  if (channels.web) {
+    tasks.push(
+      createNotification({
+        userId: creatorId,
+        type: 'po_pending',
+        title: `PO ${poNumber} ไม่อนุมัติ`,
+        message,
+        url: `/po/${poId}`,
+      })
+    )
+  }
+
+  // LINE notification
+  if (channels.line) {
+    const lineUserId = await getUserLineId(creatorId)
+    if (lineUserId) {
+      tasks.push(sendLineNotificationToUser(lineUserId, 'poRejected', {
+        poId,
+        poNumber,
+        approverName,
+        reason,
+      }))
+    }
+  }
+
+  // Also send LINE to global recipients
+  const linePromise = sendLinePOStatusUpdate(poId, 'ไม่อนุมัติ')
+
+  await Promise.allSettled([...tasks, linePromise])
+}
+
+/**
+ * Send notifications when a PO is sent to supplier
+ * Respects user notification preferences
+ */
+async function notifyPOSent(poId: string, poNumber: string, creatorId: string) {
+  const notificationType: NotificationTypeKey = 'poSent'
+  const channels = await getUserEnabledChannels(creatorId, notificationType)
+  const tasks: Promise<unknown>[] = []
+
+  // Get PO details
+  const po = await prisma.pO.findUnique({
+    where: { id: poId },
+    include: { supplier: true },
+  })
+
+  // Web notification
+  if (channels.web) {
+    tasks.push(
+      createNotification({
+        userId: creatorId,
+        type: 'po_pending',
+        title: `PO ${poNumber} ส่งแล้ว`,
+        message: `ใบสั่งซื้อ ${poNumber} ส่งให้ Supplier แล้ว`,
+        url: `/po/${poId}`,
+      })
+    )
+  }
+
+  // LINE notification
+  if (channels.line) {
+    const lineUserId = await getUserLineId(creatorId)
+    if (lineUserId) {
+      tasks.push(sendLineNotificationToUser(lineUserId, 'poSent', {
+        poId,
+        poNumber,
+        supplierName: po?.supplier?.name,
+        eta: po?.eta ? new Date(po.eta).toLocaleDateString('th-TH') : undefined,
+      }))
+    }
+  }
+
+  await Promise.allSettled(tasks)
+}
+
+/**
+ * Send notifications when a PO is cancelled
+ * Respects user notification preferences
+ */
+async function notifyPOCancelled(poId: string, poNumber: string, creatorId: string) {
+  const notificationType: NotificationTypeKey = 'poCancelled'
+  const channels = await getUserEnabledChannels(creatorId, notificationType)
+  const tasks: Promise<unknown>[] = []
+
+  // Web notification
+  if (channels.web) {
+    tasks.push(
+      createNotification({
+        userId: creatorId,
+        type: 'po_pending',
+        title: `PO ${poNumber} ยกเลิกแล้ว`,
+        message: `ใบสั่งซื้อ ${poNumber} ถูกยกเลิกแล้ว`,
+        url: `/po/${poId}`,
+      })
+    )
+  }
+
+  // LINE notification
+  if (channels.line) {
+    const lineUserId = await getUserLineId(creatorId)
+    if (lineUserId) {
+      tasks.push(sendLineNotificationToUser(lineUserId, 'poCancelled', {
+        poId,
+        poNumber,
+      }))
+    }
+  }
+
+  await Promise.allSettled(tasks)
 }

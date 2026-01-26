@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,8 +22,106 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, X, Palette, Ruler, Image as ImageIcon, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, X, Palette, Ruler, Image as ImageIcon, Trash2, RefreshCw, Pencil, Check } from 'lucide-react'
 import { toast } from 'sonner'
+
+// Editable Value Component
+function EditableValue({ 
+  value, 
+  onUpdate, 
+  onRemove,
+  showColorIcon = false
+}: { 
+  value: string
+  onUpdate: (newValue: string) => void
+  onRemove: () => void
+  showColorIcon?: boolean
+}) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editValue, setEditValue] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isEditing])
+
+  const handleSave = () => {
+    const trimmed = editValue.trim()
+    if (trimmed && trimmed !== value) {
+      onUpdate(trimmed)
+    } else {
+      setEditValue(value)
+    }
+    setIsEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSave()
+    } else if (e.key === 'Escape') {
+      setEditValue(value)
+      setIsEditing(false)
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-1 bg-[var(--bg-secondary)] rounded-md border border-[var(--accent-primary)] px-2 py-1">
+        <Input
+          ref={inputRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleSave}
+          className="h-6 w-20 text-sm px-1 py-0"
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          className="text-[var(--status-success)] hover:text-[var(--status-success)]/80"
+        >
+          <Check className="w-3 h-3" />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-md px-3 py-1.5 group">
+      {showColorIcon && (
+        <button className="w-6 h-6 rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] flex items-center justify-center hover:bg-[var(--bg-tertiary)]">
+          <ImageIcon className="w-3 h-3 text-[var(--text-muted)]" />
+        </button>
+      )}
+      <span 
+        className="text-sm cursor-pointer hover:underline"
+        onClick={() => setIsEditing(true)}
+        title="คลิกเพื่อแก้ไข"
+      >
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={() => setIsEditing(true)}
+        className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--text-muted)] hover:text-[var(--accent-primary)]"
+        title="แก้ไข"
+      >
+        <Pencil className="w-3 h-3" />
+      </button>
+      <button
+        onClick={onRemove}
+        className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--text-muted)] hover:text-[var(--status-error)]"
+        title="ลบ"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  )
+}
 
 // Size presets
 const SIZE_PRESETS = {
@@ -194,6 +292,26 @@ export function VariantMatrixBuilder({
     onOptionsChange(updated)
   }
 
+  // Update value in option
+  const updateValueInOption = (optionId: string, valueId: string, newValue: string) => {
+    const updated = options.map(o => {
+      if (o.id === optionId) {
+        // Check if value already exists
+        if (o.values.some(v => v.id !== valueId && v.value.toLowerCase() === newValue.toLowerCase())) {
+          toast.error('ค่านี้มีอยู่แล้ว')
+          return o
+        }
+        return {
+          ...o,
+          values: o.values.map(v => v.id === valueId ? { ...v, value: newValue } : v),
+        }
+      }
+      return o
+    })
+    setOptions(updated)
+    onOptionsChange(updated)
+  }
+
   // Apply size preset
   const applySizePreset = (preset: string) => {
     setSelectedSizePreset(preset)
@@ -340,28 +458,18 @@ export function VariantMatrixBuilder({
                 {/* Option values */}
                 <div className="space-y-2">
                   <Label className="text-sm text-[var(--text-muted)] flex items-center gap-1">
-                    ตัวเลือก
+                    ตัวเลือก <span className="text-xs opacity-60">(คลิกที่ค่าเพื่อแก้ไข)</span>
                     <span className="text-[var(--status-error)]">●</span>
                   </Label>
                   <div className="flex flex-wrap gap-2">
                     {option.values.map((val) => (
-                      <div
+                      <EditableValue
                         key={val.id}
-                        className="flex items-center gap-1 bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-md px-3 py-1.5"
-                      >
-                        {option.name.toLowerCase().includes('สี') && (
-                          <button className="w-6 h-6 rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] flex items-center justify-center hover:bg-[var(--bg-tertiary)]">
-                            <ImageIcon className="w-3 h-3 text-[var(--text-muted)]" />
-                          </button>
-                        )}
-                        <span className="text-sm">{val.value}</span>
-                        <button
-                          onClick={() => removeValueFromOption(option.id, val.id)}
-                          className="ml-1 text-[var(--text-muted)] hover:text-[var(--status-error)]"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
+                        value={val.value}
+                        onUpdate={(newValue) => updateValueInOption(option.id, val.id, newValue)}
+                        onRemove={() => removeValueFromOption(option.id, val.id)}
+                        showColorIcon={option.name.toLowerCase().includes('สี')}
+                      />
                     ))}
                     <AddValueInput
                       placeholder={option.name.toLowerCase().includes('สี') ? 'เพิ่มสี...' : 'เพิ่มค่า...'}

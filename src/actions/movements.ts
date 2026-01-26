@@ -6,9 +6,13 @@ import { revalidatePath } from 'next/cache'
 import { MovementType, DocStatus } from '@/generated/prisma'
 import { serialize } from '@/lib/serialize'
 import type { ActionResult, PaginatedResult, MovementWithRelations } from '@/types'
-import { sendLineMovementPosted, sendLineMovementPending } from '@/actions/line-notifications'
+import { sendLineMovementPosted, sendLineMovementPending, sendLineNotificationToUser } from '@/actions/line-notifications'
 import { createNotification } from '@/actions/notifications'
-import { getUserNotificationPreferences } from '@/actions/user-notification-preferences'
+import { 
+  getUserEnabledChannels,
+  getUserLineId,
+  type NotificationTypeKey 
+} from '@/actions/user-notification-preferences'
 
 interface MovementLineInput {
   productId: string
@@ -623,7 +627,12 @@ export async function postMovement(id: string): Promise<ActionResult> {
       maxWait: 10000,
     })
 
-    // Send LINE notification for movement posted (if enabled)
+    // Send notifications based on user preferences
+    notifyMovementPosted(id, result.docNumber, result.type, result.createdById).catch((err) =>
+      console.error('Failed to send movement posted notifications:', err)
+    )
+
+    // Also send LINE to global recipients
     sendLineMovementPosted(id).catch((err) =>
       console.error('Failed to send movement posted notification:', err)
     )
@@ -1153,6 +1162,7 @@ const MOVEMENT_TYPE_LABELS: Record<string, string> = {
 
 /**
  * Send notifications to all approvers when a movement is submitted
+ * Respects user notification preferences for each channel
  */
 async function notifyMovementSubmitted(
   movementId: string, 
@@ -1161,6 +1171,7 @@ async function notifyMovementSubmitted(
   submitterName: string
 ) {
   const typeLabel = MOVEMENT_TYPE_LABELS[type] || type
+  const notificationType: NotificationTypeKey = 'movementPending'
 
   // Get all approvers (ADMIN and APPROVER roles)
   const approvers = await prisma.user.findMany({
@@ -1172,20 +1183,13 @@ async function notifyMovementSubmitted(
     select: { id: true },
   })
 
-  // Create in-app notifications based on user preferences
+  // Create notifications based on user preferences
   const notificationPromises = approvers.map(async (approver) => {
-    // Check user's notification preferences
-    const prefsResult = await getUserNotificationPreferences(approver.id)
-    const prefs = prefsResult.success ? prefsResult.data : null
-
-    // Default to web notification if no preferences set
-    const sendWeb = prefs?.movementPending?.web ?? true
-    const sendLine = prefs?.movementPending?.line ?? false
-
+    const channels = await getUserEnabledChannels(approver.id, notificationType)
     const tasks: Promise<unknown>[] = []
 
-    // Send in-app (web) notification
-    if (sendWeb) {
+    // Web notification
+    if (channels.web) {
       tasks.push(
         createNotification({
           userId: approver.id,
@@ -1197,14 +1201,70 @@ async function notifyMovementSubmitted(
       )
     }
 
+    // LINE notification (individual)
+    if (channels.line) {
+      const lineUserId = await getUserLineId(approver.id)
+      if (lineUserId) {
+        tasks.push(sendLineNotificationToUser(lineUserId, 'movementPending', {
+          movementId,
+          docNumber,
+          type: typeLabel,
+          requesterName: submitterName,
+        }))
+      }
+    }
+
     return Promise.allSettled(tasks)
   })
 
-  // Send LINE notifications to users who have it enabled
+  // Also send LINE to global recipients
   const linePromise = sendLineMovementPending(movementId).catch((err) =>
     console.error('Failed to send LINE movement pending notification:', err)
   )
 
   // Execute all in parallel
   await Promise.allSettled([...notificationPromises, linePromise])
+}
+
+/**
+ * Send notifications when a movement is posted
+ * Respects user notification preferences
+ */
+async function notifyMovementPosted(
+  movementId: string,
+  docNumber: string,
+  type: string,
+  creatorId: string
+) {
+  const typeLabel = MOVEMENT_TYPE_LABELS[type] || type
+  const notificationType: NotificationTypeKey = 'movementPosted'
+  const channels = await getUserEnabledChannels(creatorId, notificationType)
+  const tasks: Promise<unknown>[] = []
+
+  // Web notification
+  if (channels.web) {
+    tasks.push(
+      createNotification({
+        userId: creatorId,
+        type: 'system',
+        title: `${typeLabel} Posted: ${docNumber}`,
+        message: `รายการ${typeLabel} ${docNumber} ถูก Post แล้ว`,
+        url: `/movements/${movementId}`,
+      })
+    )
+  }
+
+  // LINE notification (individual)
+  if (channels.line) {
+    const lineUserId = await getUserLineId(creatorId)
+    if (lineUserId) {
+      tasks.push(sendLineNotificationToUser(lineUserId, 'movementPosted', {
+        movementId,
+        docNumber,
+        type: typeLabel,
+      }))
+    }
+  }
+
+  await Promise.allSettled(tasks)
 }

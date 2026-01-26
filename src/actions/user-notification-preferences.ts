@@ -314,6 +314,87 @@ export async function getUserPreferencesForNotification(userId: string): Promise
   }
 }
 
+// ============================================
+// Notification Helper Functions
+// ============================================
+
+// Notification type keys matching UserNotificationPreferences
+export type NotificationTypeKey = 
+  | 'lowStock'
+  | 'expiring'
+  | 'movementPosted'
+  | 'movementPending'
+  | 'prPending'
+  | 'prApproved'
+  | 'prRejected'
+  | 'poPending'
+  | 'poApproved'
+  | 'poRejected'
+  | 'poSent'
+  | 'poCancelled'
+  | 'poReceived'
+  | 'grnCreated'
+  | 'stockTake'
+
+/**
+ * Check if a user should receive a notification via a specific channel
+ */
+export async function shouldNotifyUser(
+  userId: string,
+  notificationType: NotificationTypeKey,
+  channel: 'web' | 'line' | 'email'
+): Promise<boolean> {
+  const prefs = await getUserPreferencesForNotification(userId)
+  if (!prefs) return true // Default to send if no preferences
+  
+  const typePrefs = prefs[notificationType] as NotificationChannels | undefined
+  if (!typePrefs) return true // Default to send if type not found
+  
+  return typePrefs[channel] ?? true
+}
+
+/**
+ * Get users who should be notified for a specific notification type and channel
+ * Returns filtered list of user IDs
+ */
+export async function getNotifiableUsers(
+  userIds: string[],
+  notificationType: NotificationTypeKey,
+  channel: 'web' | 'line' | 'email'
+): Promise<string[]> {
+  const results = await Promise.all(
+    userIds.map(async (userId) => {
+      const shouldNotify = await shouldNotifyUser(userId, notificationType, channel)
+      return shouldNotify ? userId : null
+    })
+  )
+  return results.filter((id): id is string => id !== null)
+}
+
+/**
+ * Get notification channels enabled for a user
+ */
+export async function getUserEnabledChannels(
+  userId: string,
+  notificationType: NotificationTypeKey
+): Promise<NotificationChannels> {
+  const prefs = await getUserPreferencesForNotification(userId)
+  if (!prefs) {
+    return { web: true, line: true, email: true }
+  }
+  
+  const typePrefs = prefs[notificationType] as NotificationChannels | undefined
+  return typePrefs ?? { web: true, line: true, email: true }
+}
+
+/**
+ * Get LINE User ID for a user (if they have one set in their preferences)
+ */
+export async function getUserLineId(userId: string): Promise<string | null> {
+  const prefs = await getUserPreferencesForNotification(userId)
+  return prefs?.lineUserId ?? null
+}
+
 
 // ============================================
 // Notification Delivery Logs

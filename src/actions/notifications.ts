@@ -6,6 +6,7 @@ import { getSession } from '@/lib/auth'
 import type { AppNotification, NotificationType } from '@/lib/notifications'
 import type { ActionResult } from '@/types'
 import { serialize } from '@/lib/serialize'
+import { shouldNotifyUser, type NotificationTypeKey } from '@/actions/user-notification-preferences'
 
 // ============================================
 // Service Status
@@ -305,12 +306,28 @@ export async function sendLowStockAlert() {
       role: { in: ['ADMIN', 'APPROVER', 'INVENTORY'] },
       email: { not: null },
     },
-    select: { email: true },
+    select: { id: true, email: true },
   })
 
   if (recipients.length === 0) {
     console.log('[Email] Low stock alert: No recipients found')
     return { success: false, error: 'No recipients found' }
+  }
+
+  // Filter recipients based on their notification preferences
+  const notificationType: NotificationTypeKey = 'lowStock'
+  const eligibleRecipients: string[] = []
+  
+  for (const recipient of recipients) {
+    const shouldSend = await shouldNotifyUser(recipient.id, notificationType, 'email')
+    if (shouldSend && recipient.email) {
+      eligibleRecipients.push(recipient.email)
+    }
+  }
+
+  if (eligibleRecipients.length === 0) {
+    console.log('[Email] Low stock alert: No recipients with email enabled')
+    return { success: true, message: 'No recipients with email enabled' }
   }
 
   // Find low stock items
@@ -358,13 +375,12 @@ export async function sendLowStockAlert() {
     return { success: true, message: 'No low stock items' }
   }
 
-  const emails = recipients.map((r) => r.email).filter((e): e is string => e !== null)
   const html = lowStockAlertEmail(criticalItems)
 
-  console.log(`[Email] Sending low stock alert to ${emails.length} recipients for ${criticalItems.length} items`)
+  console.log(`[Email] Sending low stock alert to ${eligibleRecipients.length} recipients for ${criticalItems.length} items`)
   
   const result = await sendEmail({
-    to: emails,
+    to: eligibleRecipients,
     subject: `[แจ้งเตือน] สินค้าใกล้หมด ${criticalItems.length} รายการ`,
     html,
   })
@@ -437,6 +453,42 @@ export async function sendPRApprovalRequest(prId: string) {
   return result
 }
 
+/**
+ * Send PR approval request email to a specific recipient
+ * Used when respecting user preferences
+ */
+export async function sendPRApprovalEmail(prId: string, recipientEmail: string) {
+  console.log(`[Email] Sending PR approval request to ${recipientEmail}`)
+  
+  const pr = await prisma.pR.findUnique({
+    where: { id: prId },
+    include: {
+      requester: true,
+      _count: { select: { lines: true } },
+    },
+  })
+
+  if (!pr) {
+    return { success: false, error: 'PR not found' }
+  }
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const html = prApprovalRequestEmail({
+    prNumber: pr.prNumber,
+    requesterName: pr.requester.name,
+    itemCount: pr._count.lines,
+    url: `${baseUrl}/pr/${pr.id}`,
+  })
+
+  const result = await sendEmail({
+    to: recipientEmail,
+    subject: `[รออนุมัติ] ใบขอซื้อ ${pr.prNumber}`,
+    html,
+  })
+
+  return result
+}
+
 export async function sendPOApprovalNotification(poId: string) {
   console.log(`[Email] Starting PO approval notification for poId=${poId}`)
   
@@ -478,6 +530,40 @@ export async function sendPOApprovalNotification(poId: string) {
   } else {
     console.error(`[Email] PO approval notification failed for ${po.poNumber}:`, result.error)
   }
+
+  return result
+}
+
+/**
+ * Send PO approval email to a specific recipient
+ * Used when respecting user preferences
+ */
+export async function sendPOApprovalEmail(poId: string, recipientEmail: string) {
+  console.log(`[Email] Sending PO approval notification to ${recipientEmail}`)
+  
+  const po = await prisma.pO.findUnique({
+    where: { id: poId },
+    include: {
+      supplier: true,
+    },
+  })
+
+  if (!po) {
+    return { success: false, error: 'PO not found' }
+  }
+
+  const { poApprovedEmail } = await import('@/lib/email')
+  const html = poApprovedEmail({
+    poNumber: po.poNumber,
+    supplierName: po.supplier.name,
+    total: Number(po.total),
+  })
+
+  const result = await sendEmail({
+    to: recipientEmail,
+    subject: `[อนุมัติแล้ว] ใบสั่งซื้อ ${po.poNumber}`,
+    html,
+  })
 
   return result
 }

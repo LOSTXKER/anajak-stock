@@ -12,6 +12,11 @@ import {
 } from '@/lib/integrations/line'
 import type { ActionResult } from '@/types'
 import { revalidatePath } from 'next/cache'
+import { 
+  shouldNotifyUser,
+  getUserLineId,
+  type NotificationTypeKey 
+} from '@/actions/user-notification-preferences'
 
 // ============================================
 // Settings Management
@@ -201,6 +206,7 @@ async function getRecipientIds(): Promise<string[]> {
 
 /**
  * Send Low Stock Alert via LINE
+ * Sends to global recipients and individual users based on their preferences
  */
 export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
   try {
@@ -214,22 +220,13 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
       return { success: false, error: 'LINE not configured' }
     }
 
-    const recipientIds = await getRecipientIds()
-    if (recipientIds.length === 0) {
-      return { success: false, error: 'No recipients configured' }
-    }
-
-    // Get low stock items
-    // For products without variants: check product.stockType = STOCKED
-    // For variants: check variant.stockType = STOCKED
+    // Get low stock items first
     const products = await prisma.product.findMany({
       where: {
         active: true,
         deletedAt: null,
         OR: [
-          // Products without variants: stockType = STOCKED
           { hasVariants: false, stockType: 'STOCKED', reorderPoint: { gt: 0 } },
-          // Products with variants (we'll check variant-level stockType below)
           { hasVariants: true },
         ],
       },
@@ -246,7 +243,6 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
 
     for (const product of products) {
       if (!product.hasVariants) {
-        // Simple product
         const totalStock = product.stockBalances.reduce(
           (sum, sb) => sum + Number(sb.qtyOnHand),
           0
@@ -261,7 +257,6 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
           })
         }
       } else {
-        // Product with variants - check each STOCKED variant
         for (const variant of product.variants) {
           const totalStock = variant.stockBalances.reduce(
             (sum, sb) => sum + Number(sb.qtyOnHand),
@@ -288,16 +283,37 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const flexMessage = FlexTemplates.lowStockAlert(lowStockItems, appUrl)
+    const altText = `⚠️ สินค้าใกล้หมด ${lowStockItems.length} รายการ`
 
-    const result = await client.sendFlex(
-      recipientIds,
-      `⚠️ สินค้าใกล้หมด ${lowStockItems.length} รายการ`,
-      flexMessage
-    )
+    // Send to global recipients
+    const globalRecipientIds = await getRecipientIds()
+    const tasks: Promise<unknown>[] = []
 
-    if (!result.success) {
-      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
+    if (globalRecipientIds.length > 0) {
+      tasks.push(client.sendFlex(globalRecipientIds, altText, flexMessage))
     }
+
+    // Also send to individual users who have LINE enabled for lowStock
+    const users = await prisma.user.findMany({
+      where: {
+        active: true,
+        deletedAt: null,
+        role: { in: ['ADMIN', 'APPROVER', 'INVENTORY'] },
+      },
+      select: { id: true },
+    })
+
+    for (const user of users) {
+      const shouldSend = await shouldNotifyUser(user.id, 'lowStock', 'line')
+      if (shouldSend) {
+        const lineUserId = await getUserLineId(user.id)
+        if (lineUserId && !globalRecipientIds.includes(lineUserId)) {
+          tasks.push(client.sendFlex([lineUserId], altText, flexMessage))
+        }
+      }
+    }
+
+    await Promise.allSettled(tasks)
 
     return { success: true, data: undefined }
   } catch (error) {
@@ -554,6 +570,7 @@ export async function sendLineMovementPending(movementId: string): Promise<Actio
 
 /**
  * Send Expiring Stock Alert via LINE
+ * Sends to global recipients and individual users based on their preferences
  */
 export async function sendLineExpiringAlert(): Promise<ActionResult<void>> {
   try {
@@ -565,11 +582,6 @@ export async function sendLineExpiringAlert(): Promise<ActionResult<void>> {
     const client = await getLineClientFromSettings()
     if (!client) {
       return { success: false, error: 'LINE not configured' }
-    }
-
-    const recipientIds = await getRecipientIds()
-    if (recipientIds.length === 0) {
-      return { success: false, error: 'No recipients configured' }
     }
 
     // Get expiring lots (within 30 days)
@@ -607,16 +619,37 @@ export async function sendLineExpiringAlert(): Promise<ActionResult<void>> {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const flexMessage = FlexTemplates.expiringStockAlert(items, appUrl)
+    const altText = `⏰ สินค้าใกล้หมดอายุ ${items.length} รายการ`
 
-    const result = await client.sendFlex(
-      recipientIds,
-      `⏰ สินค้าใกล้หมดอายุ ${items.length} รายการ`,
-      flexMessage
-    )
+    // Send to global recipients
+    const globalRecipientIds = await getRecipientIds()
+    const tasks: Promise<unknown>[] = []
 
-    if (!result.success) {
-      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
+    if (globalRecipientIds.length > 0) {
+      tasks.push(client.sendFlex(globalRecipientIds, altText, flexMessage))
     }
+
+    // Also send to individual users who have LINE enabled for expiring
+    const users = await prisma.user.findMany({
+      where: {
+        active: true,
+        deletedAt: null,
+        role: { in: ['ADMIN', 'APPROVER', 'INVENTORY'] },
+      },
+      select: { id: true },
+    })
+
+    for (const user of users) {
+      const shouldSend = await shouldNotifyUser(user.id, 'expiring', 'line')
+      if (shouldSend) {
+        const lineUserId = await getUserLineId(user.id)
+        if (lineUserId && !globalRecipientIds.includes(lineUserId)) {
+          tasks.push(client.sendFlex([lineUserId], altText, flexMessage))
+        }
+      }
+    }
+
+    await Promise.allSettled(tasks)
 
     return { success: true, data: undefined }
   } catch (error) {
@@ -699,5 +732,196 @@ export async function sendLineTextMessage(text: string): Promise<ActionResult<vo
   } catch (error) {
     console.error('LINE text message error:', error)
     return { success: false, error: 'ไม่สามารถส่งข้อความได้' }
+  }
+}
+
+// ============================================
+// Individual User Notifications
+// ============================================
+
+type NotificationData = {
+  // PR
+  prId?: string
+  prNumber?: string
+  requesterName?: string
+  approverName?: string
+  reason?: string
+  // PO
+  poId?: string
+  poNumber?: string
+  supplierName?: string
+  status?: string
+  eta?: string
+  // Movement
+  movementId?: string
+  docNumber?: string
+  type?: string
+  itemCount?: number
+  // Low Stock
+  lowStockItems?: { name: string; sku: string; qty: number; rop: number }[]
+}
+
+/**
+ * Send LINE notification to a specific user based on notification type
+ * Used when respecting individual user preferences
+ */
+export async function sendLineNotificationToUser(
+  lineUserId: string,
+  notificationType: string,
+  data: NotificationData
+): Promise<ActionResult<void>> {
+  try {
+    const client = await getLineClientFromSettings()
+    if (!client) {
+      return { success: false, error: 'LINE not configured' }
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    let flexMessage: FlexContainer
+    let altText: string
+
+    switch (notificationType) {
+      case 'prPending':
+        flexMessage = FlexTemplates.prApprovalRequest(
+          {
+            prNumber: data.prNumber || '',
+            requester: data.requesterName || '',
+            itemCount: 0,
+            totalAmount: undefined,
+          },
+          appUrl
+        )
+        altText = `📋 ใบขอซื้อรออนุมัติ: ${data.prNumber}`
+        break
+
+      case 'prApproved':
+        flexMessage = FlexTemplates.customCard(
+          `✅ PR ${data.prNumber} อนุมัติแล้ว`,
+          `ใบขอซื้อ ${data.prNumber} ได้รับการอนุมัติโดย ${data.approverName}`,
+          'ดูรายละเอียด',
+          `${appUrl}/pr/${data.prId}`
+        )
+        altText = `✅ PR ${data.prNumber} อนุมัติแล้ว`
+        break
+
+      case 'prRejected':
+        flexMessage = FlexTemplates.customCard(
+          `❌ PR ${data.prNumber} ถูกปฏิเสธ`,
+          data.reason 
+            ? `ใบขอซื้อถูกปฏิเสธโดย ${data.approverName}: ${data.reason}`
+            : `ใบขอซื้อถูกปฏิเสธโดย ${data.approverName}`,
+          'ดูรายละเอียด',
+          `${appUrl}/pr/${data.prId}`
+        )
+        altText = `❌ PR ${data.prNumber} ถูกปฏิเสธ`
+        break
+
+      case 'poPending':
+        flexMessage = FlexTemplates.customCard(
+          `📦 PO ใหม่รออนุมัติ`,
+          `ใบสั่งซื้อ ${data.poNumber} รออนุมัติ`,
+          'ดูรายละเอียด',
+          `${appUrl}/po/${data.poId}`
+        )
+        altText = `📦 PO รออนุมัติ: ${data.poNumber}`
+        break
+
+      case 'poApproved':
+        flexMessage = FlexTemplates.poStatusUpdate(
+          {
+            poNumber: data.poNumber || '',
+            supplier: data.supplierName || '',
+            status: 'อนุมัติแล้ว',
+            eta: data.eta,
+          },
+          appUrl
+        )
+        altText = `✅ PO ${data.poNumber} อนุมัติแล้ว`
+        break
+
+      case 'poRejected':
+        flexMessage = FlexTemplates.customCard(
+          `❌ PO ${data.poNumber} ไม่อนุมัติ`,
+          data.reason 
+            ? `ใบสั่งซื้อไม่ได้รับการอนุมัติ: ${data.reason}`
+            : `ใบสั่งซื้อไม่ได้รับการอนุมัติ`,
+          'ดูรายละเอียด',
+          `${appUrl}/po/${data.poId}`
+        )
+        altText = `❌ PO ${data.poNumber} ไม่อนุมัติ`
+        break
+
+      case 'poSent':
+        flexMessage = FlexTemplates.poStatusUpdate(
+          {
+            poNumber: data.poNumber || '',
+            supplier: data.supplierName || '',
+            status: 'ส่งให้ Supplier แล้ว',
+            eta: data.eta,
+          },
+          appUrl
+        )
+        altText = `📤 PO ${data.poNumber} ส่งแล้ว`
+        break
+
+      case 'poCancelled':
+        flexMessage = FlexTemplates.customCard(
+          `🚫 PO ${data.poNumber} ยกเลิก`,
+          `ใบสั่งซื้อ ${data.poNumber} ถูกยกเลิกแล้ว`,
+          'ดูรายละเอียด',
+          `${appUrl}/po/${data.poId}`
+        )
+        altText = `🚫 PO ${data.poNumber} ยกเลิก`
+        break
+
+      case 'movementPending':
+        flexMessage = FlexTemplates.movementPending(
+          {
+            docNumber: data.docNumber || '',
+            type: data.type || '',
+            itemCount: data.itemCount || 0,
+            submittedBy: data.requesterName || '',
+            movementId: data.movementId || '',
+          },
+          appUrl
+        )
+        altText = `⏳ ${data.type}รอดำเนินการ: ${data.docNumber}`
+        break
+
+      case 'movementPosted':
+        flexMessage = FlexTemplates.movementPosted(
+          {
+            docNumber: data.docNumber || '',
+            type: data.type || '',
+            itemCount: data.itemCount || 0,
+            createdBy: data.requesterName || '',
+          },
+          appUrl
+        )
+        altText = `📦 ${data.type}: ${data.docNumber}`
+        break
+
+      case 'lowStock':
+        if (!data.lowStockItems || data.lowStockItems.length === 0) {
+          return { success: true, data: undefined }
+        }
+        flexMessage = FlexTemplates.lowStockAlert(data.lowStockItems, appUrl)
+        altText = `⚠️ สินค้าใกล้หมด ${data.lowStockItems.length} รายการ`
+        break
+
+      default:
+        return { success: false, error: `Unknown notification type: ${notificationType}` }
+    }
+
+    const result = await client.sendFlex([lineUserId], altText, flexMessage)
+
+    if (!result.success) {
+      return { success: false, error: result.error || 'ไม่สามารถส่งแจ้งเตือนได้' }
+    }
+
+    return { success: true, data: undefined }
+  } catch (error) {
+    console.error('LINE individual notification error:', error)
+    return { success: false, error: 'ไม่สามารถส่งแจ้งเตือนได้' }
   }
 }

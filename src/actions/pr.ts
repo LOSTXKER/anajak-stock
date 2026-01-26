@@ -5,8 +5,14 @@ import { getSession } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { PRStatus } from '@/generated/prisma'
 import type { ActionResult, PaginatedResult, PRWithRelations } from '@/types'
-import { createNotification, sendPRApprovalRequest } from '@/actions/notifications'
-import { sendLinePRPendingAlert } from '@/actions/line-notifications'
+import { createNotification, sendPRApprovalRequest, sendPRApprovalEmail } from '@/actions/notifications'
+import { sendLinePRPendingAlert, sendLineNotificationToUser } from '@/actions/line-notifications'
+import { 
+  shouldNotifyUser, 
+  getUserEnabledChannels,
+  getUserLineId,
+  type NotificationTypeKey 
+} from '@/actions/user-notification-preferences'
 
 interface PRLineInput {
   productId: string
@@ -335,14 +341,10 @@ export async function approvePR(id: string): Promise<ActionResult> {
       },
     }).catch((err) => console.error('Failed to create audit log:', err))
 
-    // Send notification to requester (already in background)
-    createNotification({
-      userId: pr.requesterId,
-      type: 'pr_pending',
-      title: `PR ${pr.prNumber} อนุมัติแล้ว`,
-      message: `ใบขอซื้อ ${pr.prNumber} ได้รับการอนุมัติโดย ${session.name}`,
-      url: `/pr/${id}`,
-    }).catch((err) => console.error('Failed to create approval notification:', err))
+    // Send notification to requester based on their preferences
+    notifyPRApproved(id, pr.prNumber, pr.requesterId, session.name).catch((err) =>
+      console.error('Failed to send PR approval notifications:', err)
+    )
 
     revalidatePath('/pr')
     revalidatePath(`/pr/${id}`)
@@ -391,16 +393,10 @@ export async function rejectPR(id: string, reason?: string): Promise<ActionResul
       },
     }).catch((err) => console.error('Failed to create audit log:', err))
 
-    // Send notification to requester (already in background)
-    createNotification({
-      userId: pr.requesterId,
-      type: 'pr_pending',
-      title: `PR ${pr.prNumber} ถูกปฏิเสธ`,
-      message: reason 
-        ? `ใบขอซื้อ ${pr.prNumber} ถูกปฏิเสธโดย ${session.name}: ${reason}`
-        : `ใบขอซื้อ ${pr.prNumber} ถูกปฏิเสธโดย ${session.name}`,
-      url: `/pr/${id}`,
-    }).catch((err) => console.error('Failed to create rejection notification:', err))
+    // Send notification to requester based on their preferences
+    notifyPRRejected(id, pr.prNumber, pr.requesterId, session.name, reason).catch((err) =>
+      console.error('Failed to send PR rejection notifications:', err)
+    )
 
     revalidatePath('/pr')
     revalidatePath(`/pr/${id}`)
@@ -496,7 +492,7 @@ export async function updatePR(id: string, data: UpdatePRInput): Promise<ActionR
 
 /**
  * Send notifications to all approvers when a PR is submitted
- * Sends via in-app notification, email, and LINE
+ * Respects user notification preferences for each channel
  */
 async function notifyPRSubmitted(prId: string, prNumber: string, requesterName: string) {
   // Get all approvers (ADMIN and APPROVER roles)
@@ -506,26 +502,139 @@ async function notifyPRSubmitted(prId: string, prNumber: string, requesterName: 
       deletedAt: null,
       role: { in: ['ADMIN', 'APPROVER'] },
     },
-    select: { id: true },
+    select: { id: true, email: true },
   })
 
-  // Create in-app notifications for all approvers
-  const notificationPromises = approvers.map((approver) =>
-    createNotification({
-      userId: approver.id,
-      type: 'pr_pending',
-      title: `PR ใหม่รออนุมัติ: ${prNumber}`,
-      message: `${requesterName} ส่งใบขอซื้อ ${prNumber} รออนุมัติ`,
-      url: `/pr/${prId}`,
-    })
-  )
+  const notificationType: NotificationTypeKey = 'prPending'
 
-  // Send email to approvers
-  const emailPromise = sendPRApprovalRequest(prId)
+  // Send notifications based on each user's preferences
+  const notificationPromises = approvers.map(async (approver) => {
+    const channels = await getUserEnabledChannels(approver.id, notificationType)
+    const tasks: Promise<unknown>[] = []
 
-  // Send LINE notification
+    // Web notification
+    if (channels.web) {
+      tasks.push(
+        createNotification({
+          userId: approver.id,
+          type: 'pr_pending',
+          title: `PR ใหม่รออนุมัติ: ${prNumber}`,
+          message: `${requesterName} ส่งใบขอซื้อ ${prNumber} รออนุมัติ`,
+          url: `/pr/${prId}`,
+        })
+      )
+    }
+
+    // Email notification
+    if (channels.email && approver.email) {
+      tasks.push(sendPRApprovalEmail(prId, approver.email))
+    }
+
+    // LINE notification
+    if (channels.line) {
+      const lineUserId = await getUserLineId(approver.id)
+      if (lineUserId) {
+        tasks.push(sendLineNotificationToUser(lineUserId, 'prPending', {
+          prId,
+          prNumber,
+          requesterName,
+        }))
+      }
+    }
+
+    return Promise.allSettled(tasks)
+  })
+
+  // Also send LINE to global recipients (for admins who may not have individual LINE ID)
   const linePromise = sendLinePRPendingAlert(prId)
 
-  // Execute all in parallel
-  await Promise.allSettled([...notificationPromises, emailPromise, linePromise])
+  await Promise.allSettled([...notificationPromises, linePromise])
+}
+
+/**
+ * Send notification when a PR is approved
+ * Respects user notification preferences
+ */
+async function notifyPRApproved(prId: string, prNumber: string, requesterId: string, approverName: string) {
+  const notificationType: NotificationTypeKey = 'prApproved'
+  const channels = await getUserEnabledChannels(requesterId, notificationType)
+  const tasks: Promise<unknown>[] = []
+
+  // Web notification
+  if (channels.web) {
+    tasks.push(
+      createNotification({
+        userId: requesterId,
+        type: 'pr_pending',
+        title: `PR ${prNumber} อนุมัติแล้ว`,
+        message: `ใบขอซื้อ ${prNumber} ได้รับการอนุมัติโดย ${approverName}`,
+        url: `/pr/${prId}`,
+      })
+    )
+  }
+
+  // LINE notification
+  if (channels.line) {
+    const lineUserId = await getUserLineId(requesterId)
+    if (lineUserId) {
+      tasks.push(sendLineNotificationToUser(lineUserId, 'prApproved', {
+        prId,
+        prNumber,
+        approverName,
+      }))
+    }
+  }
+
+  // Email notification (if implemented)
+  // if (channels.email) { ... }
+
+  await Promise.allSettled(tasks)
+}
+
+/**
+ * Send notification when a PR is rejected
+ * Respects user notification preferences
+ */
+async function notifyPRRejected(
+  prId: string, 
+  prNumber: string, 
+  requesterId: string, 
+  approverName: string,
+  reason?: string
+) {
+  const notificationType: NotificationTypeKey = 'prRejected'
+  const channels = await getUserEnabledChannels(requesterId, notificationType)
+  const tasks: Promise<unknown>[] = []
+
+  const message = reason
+    ? `ใบขอซื้อ ${prNumber} ถูกปฏิเสธโดย ${approverName}: ${reason}`
+    : `ใบขอซื้อ ${prNumber} ถูกปฏิเสธโดย ${approverName}`
+
+  // Web notification
+  if (channels.web) {
+    tasks.push(
+      createNotification({
+        userId: requesterId,
+        type: 'pr_pending',
+        title: `PR ${prNumber} ถูกปฏิเสธ`,
+        message,
+        url: `/pr/${prId}`,
+      })
+    )
+  }
+
+  // LINE notification
+  if (channels.line) {
+    const lineUserId = await getUserLineId(requesterId)
+    if (lineUserId) {
+      tasks.push(sendLineNotificationToUser(lineUserId, 'prRejected', {
+        prId,
+        prNumber,
+        approverName,
+        reason,
+      }))
+    }
+  }
+
+  await Promise.allSettled(tasks)
 }
