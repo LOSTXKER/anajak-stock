@@ -246,6 +246,7 @@ interface UpdatePOLineInput {
 }
 
 interface UpdatePOInput {
+  supplierId?: string
   eta?: Date
   terms?: string
   note?: string
@@ -288,10 +289,17 @@ export async function updatePO(id: string, data: UpdatePOInput): Promise<ActionR
       where: { poId: id },
     })
 
+    // Build timeline note
+    const timelineNotes: string[] = [`แก้ไขโดย ${session.name}`]
+    if (data.supplierId && data.supplierId !== po.supplierId) {
+      timelineNotes.push('เปลี่ยน Supplier')
+    }
+
     // Update PO and create new lines
     await prisma.pO.update({
       where: { id },
       data: {
+        supplierId: data.supplierId || po.supplierId,
         eta: data.eta,
         terms: data.terms,
         note: data.note,
@@ -312,7 +320,7 @@ export async function updatePO(id: string, data: UpdatePOInput): Promise<ActionR
         timelines: {
           create: {
             action: 'แก้ไข PO',
-            note: `แก้ไขโดย ${session.name}`,
+            note: timelineNotes.join(' - '),
           },
         },
       },

@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/table'
 import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Save, Package, ListPlus } from 'lucide-react'
 import { BulkAddModal, BulkAddResult, BulkAddVariant } from '@/components/bulk-add-modal'
-import { getPO, updatePO } from '@/actions/po'
+import { getPO, updatePO, getSuppliers } from '@/actions/po'
 import { getProducts } from '@/actions/products'
 import { toast } from 'sonner'
 import type { ProductWithRelations } from '@/types'
@@ -67,6 +67,12 @@ interface POLine {
   note?: string
 }
 
+interface Supplier {
+  id: string
+  name: string
+  code?: string
+}
+
 export default function EditPOPage(props: PageProps) {
   const params = use(props.params)
   const router = useRouter()
@@ -74,7 +80,7 @@ export default function EditPOPage(props: PageProps) {
   const [isLoadingData, setIsLoadingData] = useState(true)
   
   const [poNumber, setPONumber] = useState('')
-  const [supplierName, setSupplierName] = useState('')
+  const [supplierId, setSupplierId] = useState('')
   const [eta, setEta] = useState('')
   const [terms, setTerms] = useState('')
   const [note, setNote] = useState('')
@@ -82,6 +88,7 @@ export default function EditPOPage(props: PageProps) {
   const [vatRate, setVatRate] = useState(7)
   const [lines, setLines] = useState<POLine[]>([])
   
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [showBulkAddModal, setShowBulkAddModal] = useState(false)
   const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
@@ -91,9 +98,10 @@ export default function EditPOPage(props: PageProps) {
     async function loadData() {
       setIsLoadingData(true)
       try {
-        const [po, productsResult] = await Promise.all([
+        const [po, productsResult, suppliersResult] = await Promise.all([
           getPO(params.id),
           getProducts({ limit: 1000 }),
+          getSuppliers(),
         ])
 
         if (!po) {
@@ -109,9 +117,12 @@ export default function EditPOPage(props: PageProps) {
           return
         }
 
+        // Set suppliers
+        setSuppliers(suppliersResult || [])
+
         // Set form data
         setPONumber(po.poNumber)
-        setSupplierName(po.supplier.name)
+        setSupplierId(po.supplierId)
         setEta(po.eta ? new Date(po.eta).toISOString().split('T')[0] : '')
         setTerms(po.terms || '')
         setNote(po.note || '')
@@ -360,6 +371,7 @@ export default function EditPOPage(props: PageProps) {
     setIsLoading(true)
 
     const result = await updatePO(params.id, {
+      supplierId,
       eta: eta ? new Date(eta) : undefined,
       terms,
       note,
@@ -404,7 +416,6 @@ export default function EditPOPage(props: PageProps) {
         </Button>
         <PageHeader
           title={`แก้ไข ${poNumber}`}
-          description={`Supplier: ${supplierName}`}
           icon={<ShoppingCart className="w-6 h-6" />}
         />
       </div>
@@ -416,6 +427,23 @@ export default function EditPOPage(props: PageProps) {
             <CardTitle className="text-base">ข้อมูลใบสั่งซื้อ</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Supplier Selection */}
+            <div className="space-y-2">
+              <Label>Supplier</Label>
+              <Select value={supplierId} onValueChange={setSupplierId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="เลือก Supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id}>
+                      {supplier.code ? `[${supplier.code}] ` : ''}{supplier.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>คาดว่าจะได้รับ (ETA)</Label>
