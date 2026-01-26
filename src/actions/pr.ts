@@ -260,8 +260,9 @@ export async function submitPR(id: string): Promise<ActionResult> {
       return { success: false, error: 'ไม่พบ PR' }
     }
 
-    if (pr.status !== PRStatus.DRAFT) {
-      return { success: false, error: 'ไม่สามารถส่ง PR ที่ไม่ใช่ Draft ได้' }
+    // Allow submit for DRAFT and REJECTED status (can be resubmitted for approval)
+    if (pr.status !== PRStatus.DRAFT && pr.status !== PRStatus.REJECTED) {
+      return { success: false, error: 'ไม่สามารถส่ง PR ที่ส่งอนุมัติหรือดำเนินการแล้วได้' }
     }
 
     if (pr.lines.length === 0) {
@@ -441,8 +442,9 @@ export async function updatePR(id: string, data: UpdatePRInput): Promise<ActionR
       return { success: false, error: 'ไม่พบ PR' }
     }
 
-    if (pr.status !== PRStatus.DRAFT) {
-      return { success: false, error: 'ไม่สามารถแก้ไข PR ที่ไม่ใช่ Draft ได้' }
+    // Allow editing for DRAFT and REJECTED status (can be resubmitted for approval)
+    if (pr.status !== PRStatus.DRAFT && pr.status !== PRStatus.REJECTED) {
+      return { success: false, error: 'ไม่สามารถแก้ไข PR ที่ส่งอนุมัติหรือดำเนินการแล้วได้' }
     }
 
     // Delete old lines

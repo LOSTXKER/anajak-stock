@@ -142,6 +142,32 @@ export function PRActions({ prId, prStatus: initialStatus, canApprove, canEdit, 
           </>
         )}
 
+        {/* REJECTED: Edit + Submit again */}
+        {prStatus === 'REJECTED' && (
+          <>
+            {canEdit && (
+              <Button variant="outline" asChild>
+                <Link href={`/pr/${prId}/edit`}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  แก้ไข
+                </Link>
+              </Button>
+            )}
+            <Button 
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="bg-[var(--status-info)] hover:bg-[var(--status-info)]/90 text-white"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 mr-2" />
+              )}
+              ส่งอนุมัติอีกครั้ง
+            </Button>
+          </>
+        )}
+
         {/* SUBMITTED: Approve + Reject (for approvers) */}
         {prStatus === 'SUBMITTED' && canApprove && (
           <>

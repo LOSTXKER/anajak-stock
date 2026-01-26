@@ -102,8 +102,9 @@ export default function EditPOPage(props: PageProps) {
           return
         }
 
-        if (po.status !== 'DRAFT') {
-          toast.error('ไม่สามารถแก้ไข PO ที่ไม่ใช่ Draft ได้')
+        // Allow editing for DRAFT and REJECTED status (can be resubmitted for approval)
+        if (po.status !== 'DRAFT' && po.status !== 'REJECTED') {
+          toast.error('ไม่สามารถแก้ไข PO ที่ส่งอนุมัติหรือดำเนินการแล้วได้')
           router.push(`/po/${params.id}`)
           return
         }

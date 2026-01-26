@@ -133,8 +133,9 @@ export default function EditMovementPage(props: PageProps) {
           return
         }
 
-        if (movement.status !== 'DRAFT') {
-          toast.error('ไม่สามารถแก้ไขรายการที่ไม่ใช่ Draft ได้')
+        // Allow editing for DRAFT and REJECTED status (can be resubmitted for approval)
+        if (movement.status !== 'DRAFT' && movement.status !== 'REJECTED') {
+          toast.error('ไม่สามารถแก้ไขรายการที่ส่งอนุมัติหรือดำเนินการแล้วได้')
           router.push(`/movements/${params.id}`)
           return
         }

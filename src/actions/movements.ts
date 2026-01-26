@@ -327,8 +327,9 @@ export async function submitMovement(id: string): Promise<ActionResult> {
       return { success: false, error: 'ไม่พบรายการ' }
     }
 
-    if (movement.status !== DocStatus.DRAFT) {
-      return { success: false, error: 'ไม่สามารถส่งรายการที่ไม่ใช่ Draft ได้' }
+    // Allow submit for DRAFT and REJECTED status (can be resubmitted for approval)
+    if (movement.status !== DocStatus.DRAFT && movement.status !== DocStatus.REJECTED) {
+      return { success: false, error: 'ไม่สามารถส่งรายการที่ส่งอนุมัติหรือดำเนินการแล้วได้' }
     }
 
     if (movement.lines.length === 0) {
@@ -719,8 +720,9 @@ export async function updateMovement(id: string, data: UpdateMovementInput): Pro
       return { success: false, error: 'ไม่พบรายการ' }
     }
 
-    if (movement.status !== DocStatus.DRAFT) {
-      return { success: false, error: 'ไม่สามารถแก้ไขรายการที่ไม่ใช่ Draft ได้' }
+    // Allow editing for DRAFT and REJECTED status (can be resubmitted for approval)
+    if (movement.status !== DocStatus.DRAFT && movement.status !== DocStatus.REJECTED) {
+      return { success: false, error: 'ไม่สามารถแก้ไขรายการที่ส่งอนุมัติหรือดำเนินการแล้วได้' }
     }
 
     // Delete old lines

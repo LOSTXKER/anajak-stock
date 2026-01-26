@@ -255,7 +255,7 @@ interface UpdatePOInput {
 }
 
 /**
- * Update a PO (only DRAFT status)
+ * Update a PO (only DRAFT or REJECTED status)
  */
 export async function updatePO(id: string, data: UpdatePOInput): Promise<ActionResult> {
   const session = await getSession()
@@ -273,8 +273,9 @@ export async function updatePO(id: string, data: UpdatePOInput): Promise<ActionR
       return { success: false, error: 'ไม่พบ PO' }
     }
 
-    if (po.status !== POStatus.DRAFT) {
-      return { success: false, error: 'ไม่สามารถแก้ไข PO ที่ไม่ใช่ Draft ได้' }
+    // Allow editing for DRAFT and REJECTED status (can be resubmitted for approval)
+    if (po.status !== POStatus.DRAFT && po.status !== POStatus.REJECTED) {
+      return { success: false, error: 'ไม่สามารถแก้ไข PO ที่ส่งอนุมัติหรือดำเนินการแล้วได้' }
     }
 
     // Calculate totals

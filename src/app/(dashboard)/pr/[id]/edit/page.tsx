@@ -105,8 +105,9 @@ export default function EditPRPage(props: PageProps) {
           return
         }
 
-        if (pr.status !== 'DRAFT') {
-          toast.error('ไม่สามารถแก้ไข PR ที่ไม่ใช่ Draft ได้')
+        // Allow editing for DRAFT and REJECTED status (can be resubmitted for approval)
+        if (pr.status !== 'DRAFT' && pr.status !== 'REJECTED') {
+          toast.error('ไม่สามารถแก้ไข PR ที่ส่งอนุมัติหรือดำเนินการแล้วได้')
           router.push(`/pr/${params.id}`)
           return
         }

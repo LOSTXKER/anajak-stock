@@ -172,6 +172,27 @@ export function MovementActions({ movementId, status: initialStatus, type, canAp
           </>
         )}
 
+        {/* REJECTED: Edit + Submit again */}
+        {status === 'REJECTED' && (
+          <>
+            {canEdit && (
+              <Button variant="outline" asChild>
+                <Link href={`/movements/${movementId}/edit`}>
+                  <FileEdit className="w-4 h-4 mr-2" />
+                  แก้ไข
+                </Link>
+              </Button>
+            )}
+            <Button
+              onClick={() => setSubmitDialogOpen(true)}
+              className="bg-[var(--status-info)] hover:bg-[var(--status-info)]/90 text-white"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              ส่งขออนุมัติอีกครั้ง
+            </Button>
+          </>
+        )}
+
         {/* SUBMITTED: Approve or Reject */}
         {status === 'SUBMITTED' && canApprove && (
           <>
