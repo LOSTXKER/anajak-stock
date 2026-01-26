@@ -44,8 +44,16 @@ const stockTypeLabels: Record<StockType, string> = {
 }
 
 interface VariantOption {
+  optionTypeId: string
   typeName: string
+  optionValueId: string
   value: string
+}
+
+interface AvailableOptionType {
+  id: string
+  name: string
+  values: { id: string; value: string }[]
 }
 
 interface StockLocation {
@@ -77,6 +85,7 @@ interface VariantsSectionProps {
   productSku: string
   productName: string
   variants: Variant[]
+  availableOptionTypes: AvailableOptionType[]
 }
 
 // Editable variant state
@@ -84,7 +93,7 @@ interface EditableVariant extends Variant {
   isDirty?: boolean
 }
 
-export function VariantsSection({ productId, productSku, productName, variants: initialVariants }: VariantsSectionProps) {
+export function VariantsSection({ productId, productSku, productName, variants: initialVariants, availableOptionTypes }: VariantsSectionProps) {
   const router = useRouter()
   const [expandedVariants, setExpandedVariants] = useState<Set<string>>(new Set())
   
@@ -137,6 +146,26 @@ export function VariantsSection({ productId, productSku, productName, variants: 
     ))
   }, [])
 
+  // Update option value for a variant
+  const updateVariantOption = useCallback((variantId: string, optionTypeId: string, newOptionValueId: string) => {
+    // Find the option type to get the new value text
+    const optionType = availableOptionTypes.find(ot => ot.id === optionTypeId)
+    const newOptionValue = optionType?.values.find(v => v.id === newOptionValueId)
+    if (!newOptionValue) return
+
+    setVariants(prev => prev.map(v => {
+      if (v.id !== variantId) return v
+      
+      const newOptions = v.options.map(opt => 
+        opt.optionTypeId === optionTypeId
+          ? { ...opt, optionValueId: newOptionValueId, value: newOptionValue.value }
+          : opt
+      )
+      
+      return { ...v, options: newOptions, isDirty: true }
+    }))
+  }, [availableOptionTypes])
+
   // Save all changes
   const saveAllChanges = async () => {
     const dirtyVariants = variants.filter(v => v.isDirty)
@@ -152,6 +181,9 @@ export function VariantsSection({ productId, productSku, productName, variants: 
 
     for (const variant of dirtyVariants) {
       try {
+        // Get option value IDs from the variant's options
+        const optionValueIds = variant.options.map(opt => opt.optionValueId)
+        
         const result = await updateVariant(variant.id, {
           barcode: variant.barcode || undefined,
           stockType: variant.stockType,
@@ -161,6 +193,7 @@ export function VariantsSection({ productId, productSku, productName, variants: 
           minQty: variant.minQty,
           maxQty: variant.maxQty,
           lowStockAlert: variant.lowStockAlert,
+          optionValueIds,
         })
 
         if (result.success) {
@@ -348,24 +381,47 @@ export function VariantsSection({ productId, productSku, productName, variants: 
                           </TableCell>
                           
                           {/* Option columns - show first option only on first row of group */}
-                          {variant.options.map((opt, optIdx) => (
+                          {variant.options.map((opt, optIdx) => {
+                            const optionType = availableOptionTypes.find(ot => ot.id === opt.optionTypeId)
+                            
+                            return (
                             <TableCell key={optIdx}>
-                              {optIdx === 0 ? (
-                                varIdx === 0 ? (
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] flex items-center justify-center text-xs font-medium">
-                                      {opt.value.substring(0, 2)}
-                                    </div>
-                                    <span className="font-medium">{opt.value}</span>
-                                  </div>
-                                ) : null
+                              {isEditMode ? (
+                                // Edit mode: show dropdown
+                                <Select
+                                  value={opt.optionValueId}
+                                  onValueChange={(v) => updateVariantOption(variant.id, opt.optionTypeId, v)}
+                                >
+                                  <SelectTrigger className="h-8 w-24">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {optionType?.values.map((val) => (
+                                      <SelectItem key={val.id} value={val.id}>
+                                        {val.value}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               ) : (
-                                <span className={varIdx === 0 ? 'font-medium text-[var(--accent-primary)]' : ''}>
-                                  {opt.value}
-                                </span>
+                                // View mode: show text (first option shows icon on first row)
+                                optIdx === 0 ? (
+                                  varIdx === 0 ? (
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-8 h-8 rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] flex items-center justify-center text-xs font-medium">
+                                        {opt.value.substring(0, 2)}
+                                      </div>
+                                      <span className="font-medium">{opt.value}</span>
+                                    </div>
+                                  ) : null
+                                ) : (
+                                  <span className={varIdx === 0 ? 'font-medium text-[var(--accent-primary)]' : ''}>
+                                    {opt.value}
+                                  </span>
+                                )
                               )}
                             </TableCell>
-                          ))}
+                          )})}
                           
                           {optionTypes.length === 0 && (
                             <TableCell>

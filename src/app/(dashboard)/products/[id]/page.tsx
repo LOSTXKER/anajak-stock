@@ -82,6 +82,17 @@ async function getProduct(id: string) {
   return product
 }
 
+async function getOptionTypes() {
+  return prisma.optionType.findMany({
+    include: {
+      values: {
+        orderBy: { displayOrder: 'asc' },
+      },
+    },
+    orderBy: { displayOrder: 'asc' },
+  })
+}
+
 async function getRecentMovements(productId: string) {
   const movements = await prisma.movementLine.findMany({
     where: { productId },
@@ -121,9 +132,10 @@ const typeColors: Record<string, string> = {
 }
 
 async function ProductDetail({ id }: { id: string }) {
-  const [product, recentMovements] = await Promise.all([
+  const [product, recentMovements, optionTypes] = await Promise.all([
     getProduct(id),
     getRecentMovements(id),
+    getOptionTypes(),
   ])
 
   if (!product) {
@@ -235,7 +247,9 @@ async function ProductDetail({ id }: { id: string }) {
             maxQty: Number(v.maxQty),
             lowStockAlert: v.lowStockAlert,
             options: v.optionValues.map(ov => ({
+              optionTypeId: ov.optionValue.optionType.id,
               typeName: ov.optionValue.optionType.name,
+              optionValueId: ov.optionValue.id,
               value: ov.optionValue.value,
             })),
             totalStock: v.stockBalances.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0),
@@ -244,6 +258,14 @@ async function ProductDetail({ id }: { id: string }) {
               locationCode: sb.location.code,
               warehouseName: sb.location.warehouse.name,
               qty: Number(sb.qtyOnHand),
+            })),
+          }))}
+          availableOptionTypes={optionTypes.map(ot => ({
+            id: ot.id,
+            name: ot.name,
+            values: ot.values.map(v => ({
+              id: v.id,
+              value: v.value,
             })),
           }))}
         />
