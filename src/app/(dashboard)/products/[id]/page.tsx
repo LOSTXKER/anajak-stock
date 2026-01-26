@@ -14,7 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeft, Edit, Package, Warehouse, History, Layers } from 'lucide-react'
+import { ArrowLeft, Edit, Package, Warehouse, History, Layers, Clock, Box } from 'lucide-react'
+import { formatDateTime } from '@/lib/date'
+
+const stockTypeLabels: Record<string, { label: string; color: string }> = {
+  STOCKED: { label: 'สต๊อค', color: 'bg-[var(--status-success-light)] text-[var(--status-success)]' },
+  MADE_TO_ORDER: { label: 'MTO', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
+  DROP_SHIP: { label: 'Drop Ship', color: 'bg-[var(--status-info-light)] text-[var(--status-info)]' },
+}
 import { VariantsSection } from './variants-section'
 import { ProductStats } from './product-stats'
 import { PageHeader, EmptyState } from '@/components/common'
@@ -161,6 +168,12 @@ async function ProductDetail({ id }: { id: string }) {
               >
                 {product.active ? 'ใช้งาน' : 'ปิดใช้งาน'}
               </Badge>
+              {stockTypeLabels[product.stockType] && (
+                <Badge className={stockTypeLabels[product.stockType].color}>
+                  <Box className="w-3 h-3 mr-1" />
+                  {stockTypeLabels[product.stockType].label}
+                </Badge>
+              )}
               {product.hasVariants && (
                 <Badge className="bg-[var(--accent-light)] text-[var(--accent-primary)]">
                   <Layers className="w-3 h-3 mr-1" />
@@ -218,6 +231,8 @@ async function ProductDetail({ id }: { id: string }) {
             costPrice: Number(v.costPrice),
             sellingPrice: Number(v.sellingPrice),
             reorderPoint: Number(v.reorderPoint),
+            minQty: Number(v.minQty),
+            maxQty: Number(v.maxQty),
             lowStockAlert: v.lowStockAlert,
             options: v.optionValues.map(ov => ({
               typeName: ov.optionValue.optionType.name,
@@ -267,6 +282,26 @@ async function ProductDetail({ id }: { id: string }) {
               <div>
                 <p className="text-sm text-[var(--text-muted)]">Max Qty</p>
                 <p className="font-medium">{Number(product.maxQty).toLocaleString()}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-[var(--border-default)]">
+              <div>
+                <p className="text-sm text-[var(--text-muted)]">ราคาทุนมาตรฐาน</p>
+                <p className="font-medium font-mono">฿{Number(product.standardCost).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-sm text-[var(--text-muted)]">ราคาทุนล่าสุด</p>
+                <p className="font-medium font-mono">฿{Number(product.lastCost).toLocaleString()}</p>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-[var(--border-default)] text-xs text-[var(--text-muted)] space-y-1">
+              <div className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                <span>สร้างเมื่อ: {formatDateTime(product.createdAt)}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                <span>แก้ไขล่าสุด: {formatDateTime(product.updatedAt)}</span>
               </div>
             </div>
           </CardContent>

@@ -285,3 +285,123 @@ export function groupVariantRows(rows: ProductVariantImportRow[]): GroupedProduc
 
   return Array.from(productMap.values())
 }
+
+/**
+ * Detect if CSV has variant columns (สี, ไซส์, Variant SKU)
+ */
+export function detectHasVariantColumns(csvContent: string): boolean {
+  const lines = csvContent.split('\n').filter((line) => line.trim())
+  if (lines.length < 1) return false
+
+  const headerLine = lines[0].toLowerCase()
+  const variantKeywords = ['variant sku', 'variantsku', 'รหัส variant', 'สี', 'color', 'ไซส์', 'size']
+  
+  return variantKeywords.some(keyword => headerLine.includes(keyword))
+}
+
+/**
+ * Parse CSV for variant update (update existing variants)
+ */
+export interface VariantUpdateRow {
+  sku: string
+  barcode?: string
+  stockType?: string
+  sellingPrice?: number
+  costPrice?: number
+  reorderPoint?: number
+  minQty?: number
+  maxQty?: number
+  lowStockAlert?: string
+}
+
+export function parseVariantUpdateCSV(csvContent: string): VariantUpdateRow[] {
+  const lines = csvContent.split('\n').filter((line) => line.trim())
+
+  if (lines.length < 2) {
+    return []
+  }
+
+  // Parse header
+  const headerLine = lines[0]
+  const headers = headerLine.split(',').map((h) => h.trim().replace(/^"|"$/g, '').toLowerCase())
+
+  // Map headers to fields
+  const headerMap: Record<string, keyof VariantUpdateRow> = {
+    sku: 'sku',
+    'variant sku': 'sku',
+    variantsku: 'sku',
+    'รหัส variant': 'sku',
+    barcode: 'barcode',
+    'ประเภทสต๊อค': 'stockType',
+    'ประเภท': 'stockType',
+    stocktype: 'stockType',
+    'stock type': 'stockType',
+    'ราคาขาย': 'sellingPrice',
+    sellingprice: 'sellingPrice',
+    'selling price': 'sellingPrice',
+    'ราคาทุน': 'costPrice',
+    costprice: 'costPrice',
+    'cost price': 'costPrice',
+    'reorder point': 'reorderPoint',
+    reorderpoint: 'reorderPoint',
+    reorder: 'reorderPoint',
+    'min qty': 'minQty',
+    minqty: 'minQty',
+    min: 'minQty',
+    'max qty': 'maxQty',
+    maxqty: 'maxQty',
+    max: 'maxQty',
+    'แจ้งเตือน': 'lowStockAlert',
+    alert: 'lowStockAlert',
+    lowstockalert: 'lowStockAlert',
+  }
+
+  const columnIndices: Partial<Record<keyof VariantUpdateRow, number>> = {}
+
+  headers.forEach((header, index) => {
+    const field = headerMap[header]
+    if (field) {
+      columnIndices[field] = index
+    }
+  })
+
+  // Parse rows
+  const rows: VariantUpdateRow[] = []
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]
+    const values = parseCSVLine(line)
+
+    const getValue = (field: keyof VariantUpdateRow): string | undefined => {
+      const idx = columnIndices[field]
+      return idx !== undefined ? values[idx]?.trim() : undefined
+    }
+
+    const getNumber = (field: keyof VariantUpdateRow): number | undefined => {
+      const val = getValue(field)
+      if (!val) return undefined
+      const num = parseFloat(val)
+      return isNaN(num) ? undefined : num
+    }
+
+    const sku = getValue('sku')
+    if (!sku) continue
+
+    const row: VariantUpdateRow = {
+      sku,
+      barcode: getValue('barcode'),
+      stockType: getValue('stockType'),
+      sellingPrice: getNumber('sellingPrice'),
+      costPrice: getNumber('costPrice'),
+      reorderPoint: getNumber('reorderPoint'),
+      minQty: getNumber('minQty'),
+      maxQty: getNumber('maxQty'),
+      lowStockAlert: getValue('lowStockAlert'),
+    }
+
+    rows.push(row)
+  }
+
+  return rows
+}
+

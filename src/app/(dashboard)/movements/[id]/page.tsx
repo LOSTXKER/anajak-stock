@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeft, ArrowLeftRight, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, CheckCircle2, XCircle, Clock, Send, FileText } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, CheckCircle2, XCircle, Send, FileText, FolderOpen } from 'lucide-react'
 import { MovementStats } from './movement-stats'
 import { MovementActions } from './movement-actions'
 import { MovementAttachments } from './movement-attachments'
@@ -164,7 +164,7 @@ async function MovementDetail({ id }: { id: string }) {
             </Link>
           </Button>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold">{movement.docNumber}</h1>
               <Badge className={typeInfo.color}>
                 {typeInfo.icon}
@@ -174,6 +174,12 @@ async function MovementDetail({ id }: { id: string }) {
                 {statusInfo.icon}
                 <span className="ml-1">{statusInfo.label}</span>
               </Badge>
+              {movement.projectCode && (
+                <Badge variant="outline" className="text-[var(--text-secondary)]">
+                  <FolderOpen className="w-3 h-3 mr-1" />
+                  {movement.projectCode}
+                </Badge>
+              )}
             </div>
             <p className="text-[var(--text-muted)] mt-1">
               {formatDateTime(movement.createdAt, {
@@ -245,6 +251,7 @@ async function MovementDetail({ id }: { id: string }) {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -255,6 +262,8 @@ async function MovementDetail({ id }: { id: string }) {
                 <TableHead>ไป</TableHead>
                 <TableHead className="text-right">จำนวน</TableHead>
                 <TableHead>หน่วย</TableHead>
+                <TableHead className="text-right">ราคาทุน</TableHead>
+                <TableHead>หมายเหตุ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -263,6 +272,9 @@ async function MovementDetail({ id }: { id: string }) {
                 const variantName = line.variant?.optionValues
                   ?.map((ov) => ov.optionValue.value)
                   .join(', ') || line.variant?.name
+                
+                const unitCost = Number(line.unitCost)
+                const totalLineCost = unitCost * Number(line.qty)
                 
                 return (
                 <TableRow key={line.id}>
@@ -313,6 +325,19 @@ async function MovementDetail({ id }: { id: string }) {
                   <TableCell className="text-[var(--text-muted)]">
                     {line.product.unit?.name || '-'}
                   </TableCell>
+                  <TableCell className="text-right text-sm">
+                    {unitCost > 0 ? (
+                      <div>
+                        <p className="font-mono">฿{unitCost.toLocaleString()}</p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          รวม ฿{totalLineCost.toLocaleString()}
+                        </p>
+                      </div>
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell className="text-sm text-[var(--text-muted)] max-w-[150px] truncate">
+                    {line.note || '-'}
+                  </TableCell>
                 </TableRow>
               )})}
               
@@ -325,9 +350,14 @@ async function MovementDetail({ id }: { id: string }) {
                   {totalQty.toLocaleString()}
                 </TableCell>
                 <TableCell></TableCell>
+                <TableCell className="text-right font-mono font-medium text-[var(--accent-primary)]">
+                  ฿{movement.lines.reduce((sum, line) => sum + (Number(line.unitCost) * Number(line.qty)), 0).toLocaleString()}
+                </TableCell>
+                <TableCell></TableCell>
               </TableRow>
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

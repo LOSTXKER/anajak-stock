@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { getStockBalances, getWarehouses, getStockSummary } from '@/actions/stock'
+import { getStockBalances, getWarehouses, getStockSummary, type StockSortField, type SortOrder } from '@/actions/stock'
 import { getCategories } from '@/actions/products'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,12 +9,12 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Warehouse, Package, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight, FileDown } from 'lucide-react'
+import { Warehouse, Package, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react'
 import { StockSearch } from './stock-search'
+import { StockTableHeader } from './stock-table-header'
 import { PageHeader, StatCard, StatCardGrid, EmptyState } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
 import { ExportButton } from '@/components/export-button'
@@ -26,6 +26,8 @@ interface PageProps {
     warehouse?: string
     category?: string
     lowStock?: string
+    sortBy?: string
+    sortOrder?: string
   }>
 }
 
@@ -36,6 +38,8 @@ async function StockContent({ searchParams }: PageProps) {
   const warehouseId = params.warehouse || ''
   const categoryId = params.category || ''
   const lowStockOnly = params.lowStock === 'true'
+  const sortBy = (params.sortBy as StockSortField) || 'sku'
+  const sortOrder = (params.sortOrder as SortOrder) || 'asc'
 
   const [
     { items: stockBalances, total, totalPages },
@@ -50,6 +54,8 @@ async function StockContent({ searchParams }: PageProps) {
       warehouseId: warehouseId || undefined,
       categoryId: categoryId || undefined,
       lowStockOnly,
+      sortBy,
+      sortOrder,
     }),
     getWarehouses(),
     getCategories(),
@@ -64,6 +70,8 @@ async function StockContent({ searchParams }: PageProps) {
     if (warehouseId) params.set('warehouse', warehouseId)
     if (categoryId) params.set('category', categoryId)
     if (lowStockOnly) params.set('lowStock', 'true')
+    if (sortBy && sortBy !== 'sku') params.set('sortBy', sortBy)
+    if (sortOrder && sortOrder !== 'asc') params.set('sortOrder', sortOrder)
     return `/stock?${params.toString()}`
   }
 
@@ -125,19 +133,7 @@ async function StockContent({ searchParams }: PageProps) {
           ) : (
             <div className="overflow-x-auto mobile-scroll">
               <Table className="min-w-[900px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>สินค้า</TableHead>
-                  <TableHead>ตัวเลือก</TableHead>
-                  <TableHead>หมวดหมู่</TableHead>
-                  <TableHead>คลัง</TableHead>
-                  <TableHead>โลเคชัน</TableHead>
-                  <TableHead className="text-right">คงเหลือ</TableHead>
-                  <TableHead className="text-right">ROP</TableHead>
-                  <TableHead className="text-center">สถานะ</TableHead>
-                </TableRow>
-              </TableHeader>
+              <StockTableHeader sortBy={sortBy} sortOrder={sortOrder} />
               <TableBody>
                 {stockBalances.map((balance) => {
                   const isLowStock =

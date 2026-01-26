@@ -16,9 +16,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Upload, ArrowLeft, FileSpreadsheet, Loader2, Check, X, Download, Package, Warehouse, AlertTriangle, Palette } from 'lucide-react'
+import { Upload, ArrowLeft, FileSpreadsheet, Loader2, Check, X, Download, Package, Warehouse, AlertTriangle, RefreshCw } from 'lucide-react'
 import { importProducts, importStock, validateProductImport, validateStockImport, importProductsWithVariants, type StockImportRow } from '@/actions/import'
-import { parseCSV, parseCSVWithVariants, groupVariantRows, type ProductImportRow, type GroupedProductImport } from '@/lib/csv-parser'
+import { updateVariantsFromCSV } from '@/actions/variants/import'
+import { parseCSV, parseCSVWithVariants, groupVariantRows, detectHasVariantColumns, parseVariantUpdateCSV, type ProductImportRow, type GroupedProductImport, type VariantUpdateRow } from '@/lib/csv-parser'
 import { toast } from 'sonner'
 
 interface ValidationError {
@@ -31,14 +32,19 @@ export default function ImportPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('products')
   
-  // Product import state
+  // Product import state (unified - supports both basic and variants)
   const [productCsvContent, setProductCsvContent] = useState('')
   const [productPreviewRows, setProductPreviewRows] = useState<ProductImportRow[]>([])
+  const [productPreviewVariants, setProductPreviewVariants] = useState<GroupedProductImport[]>([])
+  const [hasVariantColumns, setHasVariantColumns] = useState(false)
   const [productValidationErrors, setProductValidationErrors] = useState<ValidationError[]>([])
   const [isImportingProducts, setIsImportingProducts] = useState(false)
   const [productImportResult, setProductImportResult] = useState<{
+    type: 'basic' | 'variants'
     created: number
     updated: number
+    variantsCreated?: number
+    variantsUpdated?: number
     errors: string[]
   } | null>(null)
 
@@ -53,19 +59,17 @@ export default function ImportPage() {
     errors: Array<{ row: number; message: string }>
   } | null>(null)
 
-  // Variant import state
+  // Variant update state
   const [variantCsvContent, setVariantCsvContent] = useState('')
-  const [variantPreviewProducts, setVariantPreviewProducts] = useState<GroupedProductImport[]>([])
-  const [isImportingVariants, setIsImportingVariants] = useState(false)
-  const [variantImportResult, setVariantImportResult] = useState<{
-    productsCreated: number
-    productsUpdated: number
-    variantsCreated: number
-    variantsUpdated: number
+  const [variantPreviewRows, setVariantPreviewRows] = useState<VariantUpdateRow[]>([])
+  const [isUpdatingVariants, setIsUpdatingVariants] = useState(false)
+  const [variantUpdateResult, setVariantUpdateResult] = useState<{
+    updated: number
+    skipped: number
     errors: string[]
   } | null>(null)
 
-  // Product handlers
+  // ============ PRODUCT HANDLERS (Unified) ============
   function handleProductFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -80,51 +84,120 @@ export default function ImportPage() {
   }
 
   async function handleProductPreview(content: string = productCsvContent) {
-    const rows = parseCSV(content)
-    const { valid, errors } = await validateProductImport(rows)
-    setProductPreviewRows(rows.slice(0, 10))
-    setProductValidationErrors(errors)
+    // Detect if has variant columns
+    const hasVariants = detectHasVariantColumns(content)
+    setHasVariantColumns(hasVariants)
+
+    if (hasVariants) {
+      // Parse as variant import
+      const rows = parseCSVWithVariants(content)
+      const grouped = groupVariantRows(rows)
+      setProductPreviewVariants(grouped)
+      setProductPreviewRows([])
+      setProductValidationErrors([])
+    } else {
+      // Parse as basic import
+      const rows = parseCSV(content)
+      const { errors } = await validateProductImport(rows)
+      setProductPreviewRows(rows.slice(0, 10))
+      setProductPreviewVariants([])
+      setProductValidationErrors(errors)
+    }
     setProductImportResult(null)
   }
 
   async function handleProductImport() {
-    const rows = parseCSV(productCsvContent)
-    if (rows.length === 0) {
-      toast.error('ไม่พบข้อมูลที่จะนำเข้า')
-      return
-    }
+    if (hasVariantColumns) {
+      // Import with variants
+      const rows = parseCSVWithVariants(productCsvContent)
+      const grouped = groupVariantRows(rows)
+      
+      if (grouped.length === 0) {
+        toast.error('ไม่พบข้อมูลที่จะนำเข้า')
+        return
+      }
 
-    setIsImportingProducts(true)
-    const result = await importProducts(rows)
-    setIsImportingProducts(false)
+      setIsImportingProducts(true)
+      const result = await importProductsWithVariants(grouped)
+      setIsImportingProducts(false)
 
-    if (result.success) {
-      setProductImportResult(result.data)
-      toast.success(`นำเข้าสำเร็จ: สร้าง ${result.data.created}, อัปเดต ${result.data.updated}`)
-      if (result.data.errors.length === 0) {
-        setTimeout(() => router.push('/products'), 2000)
+      if (result.success) {
+        setProductImportResult({
+          type: 'variants',
+          created: result.data.productsCreated,
+          updated: result.data.productsUpdated,
+          variantsCreated: result.data.variantsCreated,
+          variantsUpdated: result.data.variantsUpdated,
+          errors: result.data.errors,
+        })
+        toast.success(`นำเข้าสำเร็จ: สินค้า ${result.data.productsCreated + result.data.productsUpdated}, ตัวเลือก ${result.data.variantsCreated + result.data.variantsUpdated}`)
+        if (result.data.errors.length === 0) {
+          setTimeout(() => router.push('/products'), 2000)
+        }
+      } else {
+        toast.error(result.error)
       }
     } else {
-      toast.error(result.error)
+      // Basic import
+      const rows = parseCSV(productCsvContent)
+      if (rows.length === 0) {
+        toast.error('ไม่พบข้อมูลที่จะนำเข้า')
+        return
+      }
+
+      setIsImportingProducts(true)
+      const result = await importProducts(rows)
+      setIsImportingProducts(false)
+
+      if (result.success) {
+        setProductImportResult({
+          type: 'basic',
+          created: result.data.created,
+          updated: result.data.updated,
+          errors: result.data.errors,
+        })
+        toast.success(`นำเข้าสำเร็จ: สร้าง ${result.data.created}, อัปเดต ${result.data.updated}`)
+        if (result.data.errors.length === 0) {
+          setTimeout(() => router.push('/products'), 2000)
+        }
+      } else {
+        toast.error(result.error)
+      }
     }
   }
 
-  function downloadProductTemplate() {
+  function downloadBasicTemplate() {
     const template = `SKU,ชื่อสินค้า,รายละเอียด,Barcode,หมวดหมู่,หน่วย,Reorder Point,Min Qty,Max Qty,ต้นทุน
-SHIRT-001,เสื้อยืดคอกลม ขาว S,,8851234567890,เสื้อ,PCS,50,10,200,120
-SHIRT-002,เสื้อยืดคอกลม ขาว M,,8851234567891,เสื้อ,PCS,50,10,200,120
-FABRIC-001,ผ้าฝ้าย 100% ขาว,ผ้าฝ้ายคุณภาพสูง,,วัตถุดิบ,M,100,50,500,85`
+FABRIC-001,ผ้าฝ้าย 100% ขาว,ผ้าฝ้ายคุณภาพสูง,,วัตถุดิบ,M,100,50,500,85
+BUTTON-001,กระดุมพลาสติก ขาว,,,วัตถุดิบ,PCS,500,100,2000,0.5`
 
     const blob = new Blob(['\ufeff' + template], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'product-import-template.csv'
+    link.download = 'product-basic-template.csv'
     link.click()
     URL.revokeObjectURL(url)
   }
 
-  // Stock handlers
+  function downloadVariantTemplate() {
+    const template = `รหัสสินค้า,ชื่อสินค้า,หมวดหมู่,หน่วย,ต้นทุน,Variant SKU,สี,ไซส์,Barcode
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-WH-S,ขาว,S,8851234567890
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-WH-M,ขาว,M,8851234567891
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-WH-L,ขาว,L,8851234567892
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-BK-S,ดำ,S,8851234567893
+SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-BK-M,ดำ,M,8851234567894`
+
+    const blob = new Blob(['\ufeff' + template], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'product-variants-template.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // ============ STOCK HANDLERS ============
   function handleStockFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -155,7 +228,7 @@ FABRIC-001,ผ้าฝ้าย 100% ขาว,ผ้าฝ้ายคุณ�
       }
     }
 
-    const { valid, errors } = await validateStockImport(rows)
+    const { errors } = await validateStockImport(rows)
     setStockPreviewRows(rows.slice(0, 10))
     setStockValidationErrors(errors)
     setStockImportResult(null)
@@ -198,8 +271,8 @@ FABRIC-001,ผ้าฝ้าย 100% ขาว,ผ้าฝ้ายคุณ�
 
   function downloadStockTemplate() {
     const template = `SKU,ตำแหน่ง,จำนวน,ราคาทุน
-SHIRT-001,WH01/A01,100,120
-SHIRT-002,WH01/A01,80,120
+SHIRT-001-WH-S,WH01/A01,100,120
+SHIRT-001-WH-M,WH01/A01,80,120
 FABRIC-001,WH01/B01,500,85`
 
     const blob = new Blob(['\ufeff' + template], { type: 'text/csv;charset=utf-8;' })
@@ -211,7 +284,7 @@ FABRIC-001,WH01/B01,500,85`
     URL.revokeObjectURL(url)
   }
 
-  // Variant handlers
+  // ============ VARIANT UPDATE HANDLERS ============
   function handleVariantFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -226,28 +299,25 @@ FABRIC-001,WH01/B01,500,85`
   }
 
   function handleVariantPreview(content: string = variantCsvContent) {
-    const rows = parseCSVWithVariants(content)
-    const grouped = groupVariantRows(rows)
-    setVariantPreviewProducts(grouped.slice(0, 10))
-    setVariantImportResult(null)
+    const rows = parseVariantUpdateCSV(content)
+    setVariantPreviewRows(rows.slice(0, 10))
+    setVariantUpdateResult(null)
   }
 
-  async function handleVariantImport() {
-    const rows = parseCSVWithVariants(variantCsvContent)
-    const grouped = groupVariantRows(rows)
-    
-    if (grouped.length === 0) {
-      toast.error('ไม่พบข้อมูลที่จะนำเข้า')
+  async function handleVariantUpdate() {
+    const rows = parseVariantUpdateCSV(variantCsvContent)
+    if (rows.length === 0) {
+      toast.error('ไม่พบข้อมูลที่จะอัปเดต')
       return
     }
 
-    setIsImportingVariants(true)
-    const result = await importProductsWithVariants(grouped)
-    setIsImportingVariants(false)
+    setIsUpdatingVariants(true)
+    const result = await updateVariantsFromCSV(rows)
+    setIsUpdatingVariants(false)
 
     if (result.success) {
-      setVariantImportResult(result.data)
-      toast.success(`นำเข้าสำเร็จ: สินค้า ${result.data.productsCreated + result.data.productsUpdated}, ตัวเลือก ${result.data.variantsCreated + result.data.variantsUpdated}`)
+      setVariantUpdateResult(result.data)
+      toast.success(`อัปเดตสำเร็จ: ${result.data.updated} รายการ`)
       if (result.data.errors.length === 0) {
         setTimeout(() => router.push('/products'), 2000)
       }
@@ -256,26 +326,28 @@ FABRIC-001,WH01/B01,500,85`
     }
   }
 
-  function downloadVariantTemplate() {
-    const template = `รหัสสินค้า,ชื่อสินค้า,หมวดหมู่,หน่วย,ต้นทุน,Variant SKU,สี,ไซส์,Barcode
-SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-WH-S,ขาว,S,8851234567890
-SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-WH-M,ขาว,M,8851234567891
-SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-WH-L,ขาว,L,8851234567892
-SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-BK-S,ดำ,S,8851234567893
-SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-BK-M,ดำ,M,8851234567894
-SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,SHIRT-001-BK-L,ดำ,L,8851234567895
-POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV-S,กรม,S,8851234568001
-POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV-M,กรม,M,8851234568002
-POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV-L,กรม,L,8851234568003`
+  function downloadVariantUpdateTemplate() {
+    const template = `SKU,Barcode,ประเภทสต๊อค,ราคาขาย,ราคาทุน,Reorder Point,Min Qty,Max Qty,แจ้งเตือน
+SHIRT-001-WH-S,8851234567890,สต๊อค,140,70,10,0,0,Y
+SHIRT-001-WH-M,8851234567891,สต๊อค,150,75,10,0,0,Y
+SHIRT-001-BK-S,,MTO,140,70,0,0,0,N`
 
     const blob = new Blob(['\ufeff' + template], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'product-variants-import-template.csv'
+    link.download = 'variant-update-template.csv'
     link.click()
     URL.revokeObjectURL(url)
   }
+
+  async function exportCurrentVariants() {
+    window.location.href = '/api/export/variants'
+  }
+
+  const totalProductRows = hasVariantColumns 
+    ? productPreviewVariants.reduce((sum, p) => sum + Math.max(1, p.variants.length), 0)
+    : parseCSV(productCsvContent).length
 
   return (
     <div className="space-y-6">
@@ -291,7 +363,7 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
             <Upload className="w-6 h-6 text-[var(--accent-primary)]" />
             นำเข้าข้อมูล
           </h1>
-          <p className="text-[var(--text-muted)] mt-1">นำเข้าสินค้าหรือสต๊อคจากไฟล์ CSV</p>
+          <p className="text-[var(--text-muted)] mt-1">นำเข้าสินค้า สต๊อค หรืออัปเดตตัวเลือก</p>
         </div>
       </div>
 
@@ -303,14 +375,7 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
             className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white"
           >
             <Package className="w-4 h-4" />
-            สินค้าพื้นฐาน
-          </TabsTrigger>
-          <TabsTrigger 
-            value="variants" 
-            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-[var(--status-info)] data-[state=active]:text-white"
-          >
-            <Palette className="w-4 h-4" />
-            สินค้า+ตัวเลือก
+            นำเข้าสินค้า
           </TabsTrigger>
           <TabsTrigger 
             value="stock" 
@@ -319,49 +384,47 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
             <Warehouse className="w-4 h-4" />
             นำเข้าสต๊อค
           </TabsTrigger>
+          <TabsTrigger 
+            value="update-variants" 
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-[var(--status-info)] data-[state=active]:text-white"
+          >
+            <RefreshCw className="w-4 h-4" />
+            อัปเดตตัวเลือก
+          </TabsTrigger>
         </TabsList>
 
-        {/* Product Import Tab */}
+        {/* ============ PRODUCT IMPORT TAB ============ */}
         <TabsContent value="products" className="space-y-6">
-          {/* Instructions */}
           <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
             <CardHeader>
               <CardTitle className="text-lg text-[var(--text-primary)]">คำแนะนำ - นำเข้าสินค้า</CardTitle>
               <CardDescription className="text-[var(--text-muted)]">
-                เตรียมไฟล์ CSV ที่มี header ตามรูปแบบที่กำหนด
+                ระบบจะตรวจจับอัตโนมัติว่าเป็นสินค้าพื้นฐานหรือสินค้า+ตัวเลือก
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-[var(--text-primary)] font-medium mb-2">Columns ที่รองรับ:</p>
-                  <ul className="text-[var(--text-muted)] space-y-1">
-                    <li>• <code className="text-[var(--accent-primary)]">SKU</code> - รหัสสินค้า (จำเป็น)</li>
-                    <li>• <code className="text-[var(--accent-primary)]">ชื่อสินค้า</code> - ชื่อ (จำเป็น)</li>
-                    <li>• <code className="text-[var(--accent-primary)]">รายละเอียด</code></li>
-                    <li>• <code className="text-[var(--accent-primary)]">Barcode</code></li>
-                    <li>• <code className="text-[var(--accent-primary)]">หมวดหมู่</code></li>
-                  </ul>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 border border-[var(--border-default)] rounded-lg">
+                  <p className="font-medium text-[var(--text-primary)] mb-2">สินค้าพื้นฐาน (ไม่มีตัวเลือก)</p>
+                  <p className="text-sm text-[var(--text-muted)] mb-3">
+                    เหมาะสำหรับวัตถุดิบ, อุปกรณ์ที่ไม่มีสี/ไซส์
+                  </p>
+                  <Button variant="outline" size="sm" onClick={downloadBasicTemplate}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Template สินค้าพื้นฐาน
+                  </Button>
                 </div>
-                <div>
-                  <p className="text-[var(--text-primary)] font-medium mb-2">&nbsp;</p>
-                  <ul className="text-[var(--text-muted)] space-y-1">
-                    <li>• <code className="text-[var(--accent-primary)]">หน่วย</code> - รหัสหน่วย (PCS, M, KG)</li>
-                    <li>• <code className="text-[var(--accent-primary)]">Reorder Point</code></li>
-                    <li>• <code className="text-[var(--accent-primary)]">Min Qty</code></li>
-                    <li>• <code className="text-[var(--accent-primary)]">Max Qty</code></li>
-                    <li>• <code className="text-[var(--accent-primary)]">ต้นทุน</code></li>
-                  </ul>
+                <div className="p-4 border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/5 rounded-lg">
+                  <p className="font-medium text-[var(--text-primary)] mb-2">สินค้า + ตัวเลือก (สี/ไซส์)</p>
+                  <p className="text-sm text-[var(--text-muted)] mb-3">
+                    CSV ต้องมีคอลัมน์ <code>Variant SKU</code>, <code>สี</code>, <code>ไซส์</code>
+                  </p>
+                  <Button variant="outline" size="sm" onClick={downloadVariantTemplate}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Template สินค้า+ตัวเลือก
+                  </Button>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                onClick={downloadProductTemplate}
-                className="border-[var(--border-default)] text-[var(--text-secondary)]"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                ดาวน์โหลด Template
-              </Button>
             </CardContent>
           </Card>
 
@@ -409,6 +472,25 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
             </CardContent>
           </Card>
 
+          {/* Detection Result */}
+          {(productPreviewRows.length > 0 || productPreviewVariants.length > 0) && (
+            <Card className={`border-2 ${hasVariantColumns ? 'border-[var(--accent-primary)]' : 'border-[var(--status-info)]'}`}>
+              <CardContent className="py-4">
+                <div className="flex items-center gap-2">
+                  <Badge className={hasVariantColumns ? 'bg-[var(--accent-primary)]' : 'bg-[var(--status-info)]'}>
+                    {hasVariantColumns ? 'สินค้า + ตัวเลือก' : 'สินค้าพื้นฐาน'}
+                  </Badge>
+                  <span className="text-[var(--text-muted)]">
+                    {hasVariantColumns 
+                      ? `พบ ${productPreviewVariants.length} สินค้า, ${productPreviewVariants.reduce((s, p) => s + p.variants.length, 0)} ตัวเลือก`
+                      : `พบ ${parseCSV(productCsvContent).length} สินค้า`
+                    }
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Validation Errors */}
           {productValidationErrors.length > 0 && (
             <Card className="bg-[var(--status-error)]/10 border-[var(--status-error)]/30">
@@ -430,12 +512,12 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
             </Card>
           )}
 
-          {/* Preview */}
-          {productPreviewRows.length > 0 && (
+          {/* Preview - Basic Products */}
+          {productPreviewRows.length > 0 && !hasVariantColumns && (
             <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
               <CardHeader>
                 <CardTitle className="text-lg text-[var(--text-primary)] flex items-center justify-between">
-                  <span>ตัวอย่างข้อมูล (แสดง 10 รายการแรก จากทั้งหมด {parseCSV(productCsvContent).length})</span>
+                  <span>ตัวอย่างข้อมูล (แสดง 10 รายการแรก)</span>
                   {productValidationErrors.length === 0 && (
                     <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)]">พร้อมนำเข้า</Badge>
                   )}
@@ -456,22 +538,60 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
                   <TableBody>
                     {productPreviewRows.map((row, idx) => (
                       <TableRow key={idx} className="border-[var(--border-default)]">
-                        <TableCell className="font-mono text-[var(--accent-primary)] text-sm">
-                          {row.sku}
-                        </TableCell>
+                        <TableCell className="font-mono text-[var(--accent-primary)] text-sm">{row.sku}</TableCell>
                         <TableCell className="text-[var(--text-primary)]">{row.name}</TableCell>
                         <TableCell className="text-[var(--text-secondary)]">{row.categoryName || '-'}</TableCell>
                         <TableCell className="text-[var(--text-secondary)]">{row.unitCode || '-'}</TableCell>
-                        <TableCell className="text-right text-[var(--text-secondary)]">
-                          {row.reorderPoint ?? '-'}
-                        </TableCell>
-                        <TableCell className="text-right text-[var(--text-secondary)]">
-                          {row.standardCost ? `฿${row.standardCost}` : '-'}
-                        </TableCell>
+                        <TableCell className="text-right text-[var(--text-secondary)]">{row.reorderPoint ?? '-'}</TableCell>
+                        <TableCell className="text-right text-[var(--text-secondary)]">{row.standardCost ? `฿${row.standardCost}` : '-'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Preview - Products with Variants */}
+          {productPreviewVariants.length > 0 && hasVariantColumns && (
+            <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+              <CardHeader>
+                <CardTitle className="text-lg text-[var(--text-primary)] flex items-center justify-between">
+                  <span>ตัวอย่างข้อมูล (แสดง 10 สินค้าแรก)</span>
+                  <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)]">พร้อมนำเข้า</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {productPreviewVariants.slice(0, 10).map((product, idx) => (
+                  <div key={idx} className="border border-[var(--border-default)] rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-medium text-[var(--text-primary)]">{product.name}</p>
+                        <p className="text-sm text-[var(--text-muted)]">
+                          SKU: <span className="font-mono text-[var(--accent-primary)]">{product.sku}</span>
+                          {product.categoryName && <span className="ml-3">หมวด: {product.categoryName}</span>}
+                        </p>
+                      </div>
+                      <Badge className="bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]">
+                        {product.variants.length} ตัวเลือก
+                      </Badge>
+                    </div>
+                    {product.variants.length > 0 && (
+                      <div className="bg-[var(--bg-tertiary)] rounded-lg p-3">
+                        <div className="flex flex-wrap gap-2">
+                          {product.variants.map((v, vIdx) => (
+                            <div key={vIdx} className="bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-md px-3 py-1.5 text-sm">
+                              <span className="font-mono text-[var(--accent-primary)]">{v.variantSku}</span>
+                              <span className="text-[var(--text-muted)] ml-2">
+                                {[v.color, v.size].filter(Boolean).join(' / ')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
@@ -490,15 +610,23 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
+                <div className={`grid gap-4 ${productImportResult.type === 'variants' ? 'grid-cols-4' : 'grid-cols-3'}`}>
                   <div className="text-center p-4 bg-[var(--status-success-light)] rounded-lg border border-[var(--status-success)]/20">
                     <p className="text-2xl font-bold text-[var(--status-success)]">{productImportResult.created}</p>
-                    <p className="text-sm text-[var(--text-muted)]">สร้างใหม่</p>
+                    <p className="text-sm text-[var(--text-muted)]">สินค้าสร้างใหม่</p>
                   </div>
                   <div className="text-center p-4 bg-[var(--status-info)]/10 rounded-lg border border-[var(--status-info)]/20">
                     <p className="text-2xl font-bold text-[var(--status-info)]">{productImportResult.updated}</p>
-                    <p className="text-sm text-[var(--text-muted)]">อัปเดต</p>
+                    <p className="text-sm text-[var(--text-muted)]">สินค้าอัปเดต</p>
                   </div>
+                  {productImportResult.type === 'variants' && (
+                    <div className="text-center p-4 bg-[var(--accent-primary)]/10 rounded-lg border border-[var(--accent-primary)]/20">
+                      <p className="text-2xl font-bold text-[var(--accent-primary)]">
+                        {(productImportResult.variantsCreated || 0) + (productImportResult.variantsUpdated || 0)}
+                      </p>
+                      <p className="text-sm text-[var(--text-muted)]">ตัวเลือก</p>
+                    </div>
+                  )}
                   <div className="text-center p-4 bg-[var(--status-error)]/10 rounded-lg border border-[var(--status-error)]/20">
                     <p className="text-2xl font-bold text-[var(--status-error)]">{productImportResult.errors.length}</p>
                     <p className="text-sm text-[var(--text-muted)]">ข้อผิดพลาด</p>
@@ -528,7 +656,7 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
             </Link>
             <Button
               onClick={handleProductImport}
-              disabled={isImportingProducts || productPreviewRows.length === 0 || productValidationErrors.length > 0}
+              disabled={isImportingProducts || (productPreviewRows.length === 0 && productPreviewVariants.length === 0) || productValidationErrors.length > 0}
               className="bg-[var(--accent-primary)] hover:bg-[var(--accent-primary-hover)]"
             >
               {isImportingProducts ? (
@@ -539,226 +667,15 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
               ) : (
                 <>
                   <Upload className="w-4 h-4 mr-2" />
-                  นำเข้าสินค้า ({parseCSV(productCsvContent).length} รายการ)
+                  นำเข้าสินค้า ({totalProductRows} รายการ)
                 </>
               )}
             </Button>
           </div>
         </TabsContent>
 
-        {/* Variant Import Tab */}
-        <TabsContent value="variants" className="space-y-6">
-          {/* Instructions */}
-          <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
-            <CardHeader>
-              <CardTitle className="text-lg text-[var(--text-primary)]">คำแนะนำ - นำเข้าสินค้าพร้อมตัวเลือก (สี/ไซส์)</CardTitle>
-              <CardDescription className="text-[var(--text-muted)]">
-                นำเข้าสินค้าที่มีหลายสีหลายไซส์พร้อมกัน แต่ละแถวคือ 1 ตัวเลือก
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-[var(--text-primary)] font-medium mb-2">ข้อมูลสินค้า:</p>
-                  <ul className="text-[var(--text-muted)] space-y-1">
-                    <li>• <code className="text-[var(--status-info)]">รหัสสินค้า</code> - SKU หลัก (จำเป็น)</li>
-                    <li>• <code className="text-[var(--status-info)]">ชื่อสินค้า</code> - ชื่อ (จำเป็น)</li>
-                    <li>• <code className="text-[var(--status-info)]">หมวดหมู่</code></li>
-                    <li>• <code className="text-[var(--status-info)]">หน่วย</code></li>
-                    <li>• <code className="text-[var(--status-info)]">ต้นทุน</code></li>
-                  </ul>
-                </div>
-                <div>
-                  <p className="text-[var(--text-primary)] font-medium mb-2">ข้อมูลตัวเลือก:</p>
-                  <ul className="text-[var(--text-muted)] space-y-1">
-                    <li>• <code className="text-[var(--accent-primary)]">Variant SKU</code> - รหัส Variant</li>
-                    <li>• <code className="text-[var(--accent-primary)]">สี</code> - สีของตัวเลือก</li>
-                    <li>• <code className="text-[var(--accent-primary)]">ไซส์</code> - ไซส์ของตัวเลือก</li>
-                    <li>• <code className="text-[var(--accent-primary)]">Barcode</code> - Barcode ของ Variant</li>
-                  </ul>
-                </div>
-              </div>
-              <div className="p-3 bg-[var(--status-info)]/10 border border-[var(--status-info)]/30 rounded-lg">
-                <p className="text-[var(--status-info)] text-sm">
-                  💡 สินค้าเดียวกัน (SKU เดียวกัน) สามารถมีหลายแถวได้ ระบบจะจัดกลุ่มให้อัตโนมัติ
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={downloadVariantTemplate}
-                className="border-[var(--border-default)] text-[var(--text-secondary)]"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                ดาวน์โหลด Template
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Upload */}
-          <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
-            <CardHeader>
-              <CardTitle className="text-lg text-[var(--text-primary)]">อัปโหลดไฟล์</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="border-2 border-dashed border-[var(--border-default)] rounded-lg p-8 text-center hover:border-[var(--status-info)]/50 transition-colors">
-                <FileSpreadsheet className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleVariantFileUpload}
-                  className="hidden"
-                  id="variant-csv-upload"
-                />
-                <label
-                  htmlFor="variant-csv-upload"
-                  className="cursor-pointer text-[var(--status-info)] hover:opacity-80 font-medium"
-                >
-                  เลือกไฟล์ CSV
-                </label>
-                <p className="text-[var(--text-muted)] text-sm mt-2">หรือวางเนื้อหา CSV ด้านล่าง</p>
-              </div>
-
-              <div className="space-y-2">
-                <Textarea
-                  value={variantCsvContent}
-                  onChange={(e) => setVariantCsvContent(e.target.value)}
-                  placeholder="รหัสสินค้า,ชื่อสินค้า,หมวดหมู่,หน่วย,ต้นทุน,Variant SKU,สี,ไซส์,Barcode&#10;SHIRT-001,เสื้อยืดคอกลม,เสื้อ,PCS,120,SHIRT-001-WH-S,ขาว,S,8851234567890"
-                  rows={6}
-                  className="bg-[var(--bg-tertiary)] border-[var(--border-default)] text-[var(--text-primary)] font-mono text-sm"
-                />
-                <Button
-                  onClick={() => handleVariantPreview()}
-                  disabled={!variantCsvContent}
-                  variant="outline"
-                  className="border-[var(--border-default)] text-[var(--text-secondary)]"
-                >
-                  แสดงตัวอย่าง
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Preview */}
-          {variantPreviewProducts.length > 0 && (
-            <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
-              <CardHeader>
-                <CardTitle className="text-lg text-[var(--text-primary)] flex items-center justify-between">
-                  <span>ตัวอย่างข้อมูล ({variantPreviewProducts.length} สินค้า, {variantPreviewProducts.reduce((sum, p) => sum + p.variants.length, 0)} ตัวเลือก)</span>
-                  <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)]">พร้อมนำเข้า</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {variantPreviewProducts.map((product, idx) => (
-                  <div key={idx} className="border border-[var(--border-default)] rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="font-medium text-[var(--text-primary)]">{product.name}</p>
-                        <p className="text-sm text-[var(--text-muted)]">
-                          SKU: <span className="font-mono text-[var(--status-info)]">{product.sku}</span>
-                          {product.categoryName && <span className="ml-3">หมวด: {product.categoryName}</span>}
-                        </p>
-                      </div>
-                      <Badge className="bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]">
-                        {product.variants.length} ตัวเลือก
-                      </Badge>
-                    </div>
-                    {product.variants.length > 0 && (
-                      <div className="bg-[var(--bg-tertiary)] rounded-lg p-3">
-                        <div className="flex flex-wrap gap-2">
-                          {product.variants.map((v, vIdx) => (
-                            <div key={vIdx} className="bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-md px-3 py-1.5 text-sm">
-                              <span className="font-mono text-[var(--accent-primary)]">{v.variantSku}</span>
-                              <span className="text-[var(--text-muted)] ml-2">
-                                {[v.color, v.size].filter(Boolean).join(' / ')}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Import Result */}
-          {variantImportResult && (
-            <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
-              <CardHeader>
-                <CardTitle className="text-lg text-[var(--text-primary)] flex items-center gap-2">
-                  {variantImportResult.errors.length === 0 ? (
-                    <Check className="w-5 h-5 text-[var(--status-success)]" />
-                  ) : (
-                    <X className="w-5 h-5 text-[var(--status-warning)]" />
-                  )}
-                  ผลการนำเข้า
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="text-center p-4 bg-[var(--status-success-light)] rounded-lg border border-[var(--status-success)]/20">
-                    <p className="text-2xl font-bold text-[var(--status-success)]">{variantImportResult.productsCreated}</p>
-                    <p className="text-sm text-[var(--text-muted)]">สินค้าใหม่</p>
-                  </div>
-                  <div className="text-center p-4 bg-[var(--status-info)]/10 rounded-lg border border-[var(--status-info)]/20">
-                    <p className="text-2xl font-bold text-[var(--status-info)]">{variantImportResult.productsUpdated}</p>
-                    <p className="text-sm text-[var(--text-muted)]">สินค้าอัปเดต</p>
-                  </div>
-                  <div className="text-center p-4 bg-[var(--accent-primary)]/10 rounded-lg border border-[var(--accent-primary)]/20">
-                    <p className="text-2xl font-bold text-[var(--accent-primary)]">{variantImportResult.variantsCreated}</p>
-                    <p className="text-sm text-[var(--text-muted)]">ตัวเลือกใหม่</p>
-                  </div>
-                  <div className="text-center p-4 bg-[var(--status-error)]/10 rounded-lg border border-[var(--status-error)]/20">
-                    <p className="text-2xl font-bold text-[var(--status-error)]">{variantImportResult.errors.length}</p>
-                    <p className="text-sm text-[var(--text-muted)]">ข้อผิดพลาด</p>
-                  </div>
-                </div>
-
-                {variantImportResult.errors.length > 0 && (
-                  <div className="bg-[var(--status-error)]/10 border border-[var(--status-error)]/20 rounded-lg p-4">
-                    <p className="text-[var(--status-error)] font-medium mb-2">ข้อผิดพลาด:</p>
-                    <ul className="text-sm text-[var(--status-error)]/80 space-y-1 max-h-40 overflow-y-auto">
-                      {variantImportResult.errors.map((err, idx) => (
-                        <li key={idx}>• {err}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Actions */}
-          <div className="flex justify-end gap-3">
-            <Link href="/products">
-              <Button variant="outline" className="border-[var(--border-default)] text-[var(--text-secondary)]">
-                ยกเลิก
-              </Button>
-            </Link>
-            <Button
-              onClick={handleVariantImport}
-              disabled={isImportingVariants || variantPreviewProducts.length === 0}
-              className="bg-[var(--status-info)] hover:opacity-90"
-            >
-              {isImportingVariants ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  กำลังนำเข้า...
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4 mr-2" />
-                  นำเข้าสินค้า+ตัวเลือก
-                </>
-              )}
-            </Button>
-          </div>
-        </TabsContent>
-
-        {/* Stock Import Tab */}
+        {/* ============ STOCK IMPORT TAB ============ */}
         <TabsContent value="stock" className="space-y-6">
-          {/* Instructions */}
           <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
             <CardHeader>
               <CardTitle className="text-lg text-[var(--text-primary)]">คำแนะนำ - นำเข้าสต๊อค</CardTitle>
@@ -782,11 +699,7 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
                   ระบบจะสร้าง Adjust Movement อัตโนมัติเพื่อเพิ่มสต๊อคตามจำนวนที่ระบุ
                 </p>
               </div>
-              <Button
-                variant="outline"
-                onClick={downloadStockTemplate}
-                className="border-[var(--border-default)] text-[var(--text-secondary)]"
-              >
+              <Button variant="outline" onClick={downloadStockTemplate} className="border-[var(--border-default)] text-[var(--text-secondary)]">
                 <Download className="w-4 h-4 mr-2" />
                 ดาวน์โหลด Template
               </Button>
@@ -801,17 +714,8 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
             <CardContent className="space-y-4">
               <div className="border-2 border-dashed border-[var(--border-default)] rounded-lg p-8 text-center hover:border-[var(--status-success)]/50 transition-colors">
                 <FileSpreadsheet className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleStockFileUpload}
-                  className="hidden"
-                  id="stock-csv-upload"
-                />
-                <label
-                  htmlFor="stock-csv-upload"
-                  className="cursor-pointer text-[var(--status-success)] hover:opacity-80 font-medium"
-                >
+                <input type="file" accept=".csv" onChange={handleStockFileUpload} className="hidden" id="stock-csv-upload" />
+                <label htmlFor="stock-csv-upload" className="cursor-pointer text-[var(--status-success)] hover:opacity-80 font-medium">
                   เลือกไฟล์ CSV
                 </label>
                 <p className="text-[var(--text-muted)] text-sm mt-2">หรือวางเนื้อหา CSV ด้านล่าง</p>
@@ -825,12 +729,7 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
                   rows={6}
                   className="bg-[var(--bg-tertiary)] border-[var(--border-default)] text-[var(--text-primary)] font-mono text-sm"
                 />
-                <Button
-                  onClick={() => handleStockPreview()}
-                  disabled={!stockCsvContent}
-                  variant="outline"
-                  className="border-[var(--border-default)] text-[var(--text-secondary)]"
-                >
+                <Button onClick={() => handleStockPreview()} disabled={!stockCsvContent} variant="outline">
                   แสดงตัวอย่าง
                 </Button>
               </div>
@@ -863,7 +762,7 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
             <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
               <CardHeader>
                 <CardTitle className="text-lg text-[var(--text-primary)] flex items-center justify-between">
-                  <span>ตัวอย่างข้อมูล (แสดง 10 รายการแรก)</span>
+                  <span>ตัวอย่างข้อมูล</span>
                   {stockValidationErrors.length === 0 && (
                     <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)]">พร้อมนำเข้า</Badge>
                   )}
@@ -882,16 +781,10 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
                   <TableBody>
                     {stockPreviewRows.map((row, idx) => (
                       <TableRow key={idx} className="border-[var(--border-default)]">
-                        <TableCell className="font-mono text-[var(--status-success)] text-sm">
-                          {row.sku}
-                        </TableCell>
+                        <TableCell className="font-mono text-[var(--status-success)] text-sm">{row.sku}</TableCell>
                         <TableCell className="text-[var(--text-primary)]">{row.locationCode}</TableCell>
-                        <TableCell className="text-right text-[var(--text-secondary)]">
-                          {row.qty.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right text-[var(--text-secondary)]">
-                          {row.unitCost ? `฿${row.unitCost}` : '-'}
-                        </TableCell>
+                        <TableCell className="text-right text-[var(--text-secondary)]">{row.qty.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-[var(--text-secondary)]">{row.unitCost ? `฿${row.unitCost}` : '-'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -924,7 +817,6 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
                     <p className="text-sm text-[var(--text-muted)]">ข้อผิดพลาด</p>
                   </div>
                 </div>
-
                 {stockImportResult.errors.length > 0 && (
                   <div className="bg-[var(--status-error)]/10 border border-[var(--status-error)]/20 rounded-lg p-4">
                     <p className="text-[var(--status-error)] font-medium mb-2">ข้อผิดพลาด:</p>
@@ -960,6 +852,196 @@ POLO-001,เสื้อโปโล Premium,เสื้อ,PCS,250,POLO-001-NV
                 <>
                   <Upload className="w-4 h-4 mr-2" />
                   นำเข้าสต๊อค ({stockPreviewRows.length} รายการ)
+                </>
+              )}
+            </Button>
+          </div>
+        </TabsContent>
+
+        {/* ============ UPDATE VARIANTS TAB ============ */}
+        <TabsContent value="update-variants" className="space-y-6">
+          <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+            <CardHeader>
+              <CardTitle className="text-lg text-[var(--text-primary)]">อัปเดตราคา/ข้อมูลตัวเลือกสินค้า</CardTitle>
+              <CardDescription className="text-[var(--text-muted)]">
+                อัปเดตราคา, ประเภทสต๊อค, Reorder Point ของ Variants ที่มีอยู่แล้ว
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-[var(--status-info)]/10 border border-[var(--status-info)]/30 rounded-lg">
+                <p className="text-[var(--status-info)] text-sm mb-3">
+                  <strong>วิธีใช้งาน:</strong>
+                </p>
+                <ol className="text-sm text-[var(--text-secondary)] space-y-1 list-decimal list-inside">
+                  <li>กดปุ่ม &quot;Export ข้อมูลปัจจุบัน&quot; เพื่อดาวน์โหลดไฟล์ Excel ของ Variants ทั้งหมด</li>
+                  <li>เปิดไฟล์ใน Excel แล้วแก้ไขราคา/ข้อมูลที่ต้องการ</li>
+                  <li>บันทึกเป็น CSV แล้วอัปโหลดกลับมา</li>
+                </ol>
+              </div>
+              <div className="flex gap-3">
+                <Button onClick={exportCurrentVariants} className="bg-[var(--status-info)]">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export ข้อมูลปัจจุบัน
+                </Button>
+                <Button variant="outline" onClick={downloadVariantUpdateTemplate}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Template อัปเดต
+                </Button>
+              </div>
+
+              <div className="text-sm pt-4 border-t border-[var(--border-default)]">
+                <p className="text-[var(--text-primary)] font-medium mb-2">Columns ที่รองรับ:</p>
+                <div className="grid grid-cols-2 gap-2 text-[var(--text-muted)]">
+                  <div>
+                    <li>• <code className="text-[var(--status-info)]">SKU</code> - รหัส Variant (จำเป็น)</li>
+                    <li>• <code className="text-[var(--status-info)]">Barcode</code></li>
+                    <li>• <code className="text-[var(--status-info)]">ประเภทสต๊อค</code> - สต๊อค/MTO/Drop</li>
+                    <li>• <code className="text-[var(--status-info)]">ราคาขาย</code></li>
+                  </div>
+                  <div>
+                    <li>• <code className="text-[var(--status-info)]">ราคาทุน</code></li>
+                    <li>• <code className="text-[var(--status-info)]">Reorder Point</code></li>
+                    <li>• <code className="text-[var(--status-info)]">Min/Max Qty</code></li>
+                    <li>• <code className="text-[var(--status-info)]">แจ้งเตือน</code> - Y/N</li>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Upload */}
+          <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+            <CardHeader>
+              <CardTitle className="text-lg text-[var(--text-primary)]">อัปโหลดไฟล์ที่แก้ไขแล้ว</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="border-2 border-dashed border-[var(--border-default)] rounded-lg p-8 text-center hover:border-[var(--status-info)]/50 transition-colors">
+                <FileSpreadsheet className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
+                <input type="file" accept=".csv" onChange={handleVariantFileUpload} className="hidden" id="variant-csv-upload" />
+                <label htmlFor="variant-csv-upload" className="cursor-pointer text-[var(--status-info)] hover:opacity-80 font-medium">
+                  เลือกไฟล์ CSV
+                </label>
+                <p className="text-[var(--text-muted)] text-sm mt-2">หรือวางเนื้อหา CSV ด้านล่าง</p>
+              </div>
+
+              <div className="space-y-2">
+                <Textarea
+                  value={variantCsvContent}
+                  onChange={(e) => setVariantCsvContent(e.target.value)}
+                  placeholder="SKU,Barcode,ประเภทสต๊อค,ราคาขาย,ราคาทุน,Reorder Point,แจ้งเตือน&#10;SHIRT-001-WH-S,8851234567890,สต๊อค,140,70,10,Y"
+                  rows={6}
+                  className="bg-[var(--bg-tertiary)] border-[var(--border-default)] text-[var(--text-primary)] font-mono text-sm"
+                />
+                <Button onClick={() => handleVariantPreview()} disabled={!variantCsvContent} variant="outline">
+                  แสดงตัวอย่าง
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Preview */}
+          {variantPreviewRows.length > 0 && (
+            <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+              <CardHeader>
+                <CardTitle className="text-lg text-[var(--text-primary)] flex items-center justify-between">
+                  <span>ตัวอย่างข้อมูล (แสดง 10 รายการแรก จากทั้งหมด {parseVariantUpdateCSV(variantCsvContent).length})</span>
+                  <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)]">พร้อมอัปเดต</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[var(--border-default)]">
+                      <TableHead className="text-[var(--text-muted)]">SKU</TableHead>
+                      <TableHead className="text-[var(--text-muted)]">Barcode</TableHead>
+                      <TableHead className="text-[var(--text-muted)]">ประเภท</TableHead>
+                      <TableHead className="text-[var(--text-muted)] text-right">ราคาขาย</TableHead>
+                      <TableHead className="text-[var(--text-muted)] text-right">ราคาทุน</TableHead>
+                      <TableHead className="text-[var(--text-muted)] text-right">Reorder</TableHead>
+                      <TableHead className="text-[var(--text-muted)] text-center">แจ้งเตือน</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {variantPreviewRows.map((row, idx) => (
+                      <TableRow key={idx} className="border-[var(--border-default)]">
+                        <TableCell className="font-mono text-[var(--status-info)] text-sm">{row.sku}</TableCell>
+                        <TableCell className="font-mono text-xs text-[var(--text-muted)]">{row.barcode || '-'}</TableCell>
+                        <TableCell className="text-[var(--text-secondary)]">{row.stockType || '-'}</TableCell>
+                        <TableCell className="text-right">{row.sellingPrice !== undefined ? `฿${row.sellingPrice}` : '-'}</TableCell>
+                        <TableCell className="text-right text-[var(--text-muted)]">{row.costPrice !== undefined ? `฿${row.costPrice}` : '-'}</TableCell>
+                        <TableCell className="text-right text-[var(--text-muted)]">{row.reorderPoint ?? '-'}</TableCell>
+                        <TableCell className="text-center">{row.lowStockAlert || '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Update Result */}
+          {variantUpdateResult && (
+            <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
+              <CardHeader>
+                <CardTitle className="text-lg text-[var(--text-primary)] flex items-center gap-2">
+                  {variantUpdateResult.errors.length === 0 ? (
+                    <Check className="w-5 h-5 text-[var(--status-success)]" />
+                  ) : (
+                    <X className="w-5 h-5 text-[var(--status-warning)]" />
+                  )}
+                  ผลการอัปเดต
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center p-4 bg-[var(--status-success-light)] rounded-lg border border-[var(--status-success)]/20">
+                    <p className="text-2xl font-bold text-[var(--status-success)]">{variantUpdateResult.updated}</p>
+                    <p className="text-sm text-[var(--text-muted)]">อัปเดตแล้ว</p>
+                  </div>
+                  <div className="text-center p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-default)]">
+                    <p className="text-2xl font-bold text-[var(--text-muted)]">{variantUpdateResult.skipped}</p>
+                    <p className="text-sm text-[var(--text-muted)]">ไม่มีการเปลี่ยนแปลง</p>
+                  </div>
+                  <div className="text-center p-4 bg-[var(--status-error)]/10 rounded-lg border border-[var(--status-error)]/20">
+                    <p className="text-2xl font-bold text-[var(--status-error)]">{variantUpdateResult.errors.length}</p>
+                    <p className="text-sm text-[var(--text-muted)]">ข้อผิดพลาด</p>
+                  </div>
+                </div>
+                {variantUpdateResult.errors.length > 0 && (
+                  <div className="bg-[var(--status-error)]/10 border border-[var(--status-error)]/20 rounded-lg p-4">
+                    <p className="text-[var(--status-error)] font-medium mb-2">ข้อผิดพลาด:</p>
+                    <ul className="text-sm text-[var(--status-error)]/80 space-y-1 max-h-40 overflow-y-auto">
+                      {variantUpdateResult.errors.map((err, idx) => (
+                        <li key={idx}>• {err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3">
+            <Link href="/products">
+              <Button variant="outline" className="border-[var(--border-default)] text-[var(--text-secondary)]">
+                ยกเลิก
+              </Button>
+            </Link>
+            <Button
+              onClick={handleVariantUpdate}
+              disabled={isUpdatingVariants || variantPreviewRows.length === 0}
+              className="bg-[var(--status-info)]"
+            >
+              {isUpdatingVariants ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  กำลังอัปเดต...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  อัปเดต ({parseVariantUpdateCSV(variantCsvContent).length} รายการ)
                 </>
               )}
             </Button>
