@@ -22,7 +22,8 @@ import { MovementAttachments } from './movement-attachments'
 import { LinkedMovements } from './linked-movements'
 import { EmptyState } from '@/components/common'
 import { movementStatusConfig } from '@/lib/status-config'
-import { DocStatus } from '@/generated/prisma'
+import { hasPermission } from '@/lib/permissions'
+import { DocStatus, Role } from '@/generated/prisma'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -118,9 +119,9 @@ async function MovementDetail({ id }: { id: string }) {
   const statusInfo = movementStatusConfig[movement.status as DocStatus] || movementStatusConfig.DRAFT
 
   // Check permissions
-  const userRole = session?.role || 'VIEWER'
-  const canApprove = ['ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER'].includes(userRole)
-  const canEdit = movement.createdById === session?.id || ['ADMIN', 'MANAGER'].includes(userRole)
+  const userRole = (session?.role || 'VIEWER') as Role
+  const canApprove = hasPermission(userRole, 'movements:approve', session?.customPermissions)
+  const canEdit = movement.createdById === session?.id || hasPermission(userRole, 'movements:write', session?.customPermissions)
 
   return (
     <div className="space-y-6">

@@ -20,7 +20,8 @@ import { POStats } from './po-stats'
 import { POActions } from './po-actions'
 import { CopyOrderText } from '@/components/copy-order-text'
 import { poStatusConfig, prStatusConfig, grnStatusConfig } from '@/lib/status-config'
-import { POStatus, PRStatus, GRNStatus } from '@/generated/prisma'
+import { hasPermission } from '@/lib/permissions'
+import { POStatus, PRStatus, GRNStatus, Role } from '@/generated/prisma'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -97,14 +98,16 @@ async function PODetail({ id }: { id: string }) {
 
   const statusInfo = poStatusConfig[po.status as POStatus] || poStatusConfig.DRAFT
   
+  const userRole = (session?.role || 'VIEWER') as Role
+  
   const canApprove =
     session &&
-    (session.role === 'ADMIN' || session.role === 'APPROVER' || session.role === 'PURCHASING') &&
+    hasPermission(userRole, 'po:approve', session.customPermissions) &&
     po.status === 'SUBMITTED'
 
   const canEdit =
     session &&
-    (session.role === 'ADMIN' || session.role === 'PURCHASING') &&
+    hasPermission(userRole, 'po:write', session.customPermissions) &&
     (po.status === 'DRAFT' || po.status === 'REJECTED')
 
   return (

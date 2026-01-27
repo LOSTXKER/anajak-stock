@@ -18,7 +18,8 @@ import { ArrowLeft, ClipboardCheck, User, Calendar, Package, Link2, ShoppingCart
 import { GRNActions } from './grn-actions'
 import { formatDateTime, formatDate, formatTime } from '@/lib/date'
 import { grnStatusConfig } from '@/lib/status-config'
-import { GRNStatus } from '@/generated/prisma'
+import { hasPermission } from '@/lib/permissions'
+import { GRNStatus, Role } from '@/generated/prisma'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -80,8 +81,8 @@ async function GRNDetail({ id }: { id: string }) {
   const statusInfo = grnStatusConfig[grn.status as GRNStatus] || grnStatusConfig.DRAFT
 
   // Check permissions
-  const userRole = session?.role || 'VIEWER'
-  const canPost = grn.status === 'DRAFT' && ['ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER'].includes(userRole)
+  const userRole = (session?.role || 'VIEWER') as Role
+  const canPost = grn.status === 'DRAFT' && hasPermission(userRole, 'grn:write', session?.customPermissions)
 
   const totalQty = grn.lines.reduce((sum, line) => sum + Number(line.qtyReceived), 0)
 

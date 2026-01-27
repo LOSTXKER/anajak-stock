@@ -19,7 +19,8 @@ import { ArrowLeft, FileText, User, AlertCircle, ShoppingCart, Link2, CheckCircl
 import { PRActions } from './pr-actions'
 import { CopyOrderText } from '@/components/copy-order-text'
 import { prStatusConfig, poStatusConfig } from '@/lib/status-config'
-import { PRStatus, POStatus } from '@/generated/prisma'
+import { hasPermission } from '@/lib/permissions'
+import { PRStatus, POStatus, Role } from '@/generated/prisma'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -102,14 +103,16 @@ async function PRDetail({ id }: { id: string }) {
     notFound()
   }
 
+  const userRole = (session?.role || 'VIEWER') as Role
+  
   const canApprove =
     session &&
-    (session.role === 'ADMIN' || session.role === 'APPROVER') &&
+    hasPermission(userRole, 'pr:approve', session.customPermissions) &&
     pr.status === 'SUBMITTED'
 
   const canEdit =
     session &&
-    (session.role === 'ADMIN' || session.id === pr.requesterId) &&
+    (hasPermission(userRole, 'pr:write', session.customPermissions) || session.id === pr.requesterId) &&
     pr.status === 'DRAFT'
 
   const statusInfo = prStatusConfig[pr.status as PRStatus] || prStatusConfig.DRAFT
