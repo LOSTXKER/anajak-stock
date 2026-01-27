@@ -36,6 +36,13 @@ export async function GET() {
               },
             },
           },
+          orderBy: {
+            optionValue: {
+              optionType: {
+                displayOrder: 'asc',
+              },
+            },
+          },
         },
         stockBalances: true,
       },
@@ -45,24 +52,42 @@ export async function GET() {
       ],
     })
 
-    // Transform to Excel format
+    // Get all unique option types used across all variants
+    const optionTypeSet = new Set<string>()
+    const optionTypeOrder: string[] = []
+    
+    variants.forEach((variant) => {
+      variant.optionValues.forEach((ov) => {
+        const typeName = ov.optionValue.optionType.name
+        if (!optionTypeSet.has(typeName)) {
+          optionTypeSet.add(typeName)
+          optionTypeOrder.push(typeName)
+        }
+      })
+    })
+
+    // Transform to Excel format with separate option columns
     const rows = variants.map((variant) => {
       const totalStock = variant.stockBalances.reduce(
         (sum, sb) => sum + Number(sb.qtyOnHand),
         0
       )
 
-      // Get option values
-      const options = variant.optionValues
-        .map(ov => `${ov.optionValue.optionType.name}: ${ov.optionValue.value}`)
-        .join(', ')
+      // Build option columns
+      const optionColumns: Record<string, string> = {}
+      optionTypeOrder.forEach((typeName) => {
+        const ov = variant.optionValues.find(
+          (v) => v.optionValue.optionType.name === typeName
+        )
+        optionColumns[typeName] = ov?.optionValue.value || ''
+      })
 
       return {
         'รหัสสินค้า': variant.product.sku,
         'ชื่อสินค้า': variant.product.name,
         'SKU': variant.sku,
         'Barcode': variant.barcode || '',
-        'ตัวเลือก': options,
+        ...optionColumns,  // Spread option columns (สี, ไซส์, etc.)
         'ประเภทสต๊อค': stockTypeLabels[variant.stockType] || variant.stockType,
         'ราคาขาย': Number(variant.sellingPrice),
         'ราคาทุน': Number(variant.costPrice),
@@ -78,13 +103,18 @@ export async function GET() {
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.json_to_sheet(rows)
 
-    // Set column widths
-    ws['!cols'] = [
+    // Set column widths dynamically
+    const baseColWidths = [
       { wch: 15 },  // รหัสสินค้า
       { wch: 30 },  // ชื่อสินค้า
       { wch: 18 },  // SKU
       { wch: 15 },  // Barcode
-      { wch: 25 },  // ตัวเลือก
+    ]
+    
+    // Add column widths for each option type
+    const optionColWidths = optionTypeOrder.map(() => ({ wch: 15 }))
+    
+    const endColWidths = [
       { wch: 12 },  // ประเภทสต๊อค
       { wch: 10 },  // ราคาขาย
       { wch: 10 },  // ราคาทุน
@@ -94,6 +124,8 @@ export async function GET() {
       { wch: 10 },  // สต๊อค
       { wch: 10 },  // แจ้งเตือน
     ]
+
+    ws['!cols'] = [...baseColWidths, ...optionColWidths, ...endColWidths]
 
     XLSX.utils.book_append_sheet(wb, ws, 'Variants')
 

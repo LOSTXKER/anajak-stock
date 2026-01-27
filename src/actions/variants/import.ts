@@ -11,7 +11,68 @@ interface UpdateVariantsResult {
   total: number
   updated: number
   skipped: number
+  optionsUpdated: number
   errors: string[]
+}
+
+// Cache for option types and values to avoid repeated DB queries
+const optionTypeCache = new Map<string, string>() // name -> id
+const optionValueCache = new Map<string, string>() // "typeId:value" -> id
+
+/**
+ * Get or create option type by name
+ */
+async function getOrCreateOptionType(name: string): Promise<string> {
+  const cacheKey = name.toLowerCase()
+  if (optionTypeCache.has(cacheKey)) {
+    return optionTypeCache.get(cacheKey)!
+  }
+
+  // Try to find existing
+  let optionType = await prisma.optionType.findFirst({
+    where: { name: { equals: name, mode: 'insensitive' } },
+  })
+
+  if (!optionType) {
+    // Create new option type
+    optionType = await prisma.optionType.create({
+      data: { name },
+    })
+  }
+
+  optionTypeCache.set(cacheKey, optionType.id)
+  return optionType.id
+}
+
+/**
+ * Get or create option value
+ */
+async function getOrCreateOptionValue(optionTypeId: string, value: string): Promise<string> {
+  const cacheKey = `${optionTypeId}:${value.toLowerCase()}`
+  if (optionValueCache.has(cacheKey)) {
+    return optionValueCache.get(cacheKey)!
+  }
+
+  // Try to find existing
+  let optionValue = await prisma.optionValue.findFirst({
+    where: {
+      optionTypeId,
+      value: { equals: value, mode: 'insensitive' },
+    },
+  })
+
+  if (!optionValue) {
+    // Create new option value
+    optionValue = await prisma.optionValue.create({
+      data: {
+        optionTypeId,
+        value,
+      },
+    })
+  }
+
+  optionValueCache.set(cacheKey, optionValue.id)
+  return optionValue.id
 }
 
 /**
@@ -26,10 +87,15 @@ export async function updateVariantsFromCSV(
     return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
   }
 
+  // Clear cache at start of import
+  optionTypeCache.clear()
+  optionValueCache.clear()
+
   const result: UpdateVariantsResult = {
     total: rows.length,
     updated: 0,
     skipped: 0,
+    optionsUpdated: 0,
     errors: [],
   }
 
@@ -56,9 +122,18 @@ export async function updateVariantsFromCSV(
         continue
       }
 
-      // Find variant by SKU
+      // Find variant by SKU with current options
       const variant = await prisma.productVariant.findUnique({
         where: { sku: row.sku },
+        include: {
+          optionValues: {
+            include: {
+              optionValue: {
+                include: { optionType: true },
+              },
+            },
+          },
+        },
       })
 
       if (!variant) {
@@ -69,6 +144,7 @@ export async function updateVariantsFromCSV(
       // Build update data
       const updateData: Record<string, unknown> = {}
       let hasChanges = false
+      let optionChanges = false
 
       // Barcode
       if (row.barcode !== undefined) {
@@ -129,13 +205,55 @@ export async function updateVariantsFromCSV(
         }
       }
 
-      // Update if has changes
+      // Handle option value updates (สี, ไซส์, etc.)
+      if (row.options && Object.keys(row.options).length > 0) {
+        for (const [optionTypeName, newValue] of Object.entries(row.options)) {
+          // Find current option value for this type
+          const currentOption = variant.optionValues.find(
+            ov => ov.optionValue.optionType.name.toLowerCase() === optionTypeName.toLowerCase()
+          )
+
+          if (currentOption) {
+            // Check if value changed
+            if (currentOption.optionValue.value !== newValue) {
+              // Get or create the new option value
+              const optionTypeId = currentOption.optionValue.optionTypeId
+              const newOptionValueId = await getOrCreateOptionValue(optionTypeId, newValue)
+
+              // Update the variant-option relation
+              await prisma.variantOptionValue.update({
+                where: { id: currentOption.id },
+                data: { optionValueId: newOptionValueId },
+              })
+
+              optionChanges = true
+            }
+          } else {
+            // This variant doesn't have this option type - create it
+            const optionTypeId = await getOrCreateOptionType(optionTypeName)
+            const optionValueId = await getOrCreateOptionValue(optionTypeId, newValue)
+
+            await prisma.variantOptionValue.create({
+              data: {
+                variantId: variant.id,
+                optionValueId,
+              },
+            })
+
+            optionChanges = true
+          }
+        }
+      }
+
+      // Update variant if has field changes
       if (hasChanges) {
         await prisma.productVariant.update({
           where: { id: variant.id },
           data: updateData,
         })
         result.updated++
+      } else if (optionChanges) {
+        result.optionsUpdated++
       } else {
         result.skipped++
       }
@@ -155,6 +273,7 @@ export async function updateVariantsFromCSV(
       newData: {
         total: result.total,
         updated: result.updated,
+        optionsUpdated: result.optionsUpdated,
         skipped: result.skipped,
         errorCount: result.errors.length,
       },
@@ -163,7 +282,7 @@ export async function updateVariantsFromCSV(
 
   revalidatePath('/products')
 
-  if (result.errors.length > 0 && result.updated === 0) {
+  if (result.errors.length > 0 && result.updated === 0 && result.optionsUpdated === 0) {
     return { success: false, error: result.errors.join('\n') }
   }
 

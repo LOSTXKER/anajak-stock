@@ -312,21 +312,44 @@ export interface VariantUpdateRow {
   minQty?: number
   maxQty?: number
   lowStockAlert?: string
+  // Dynamic option columns - key is option type name (e.g., "สี", "ไซส์")
+  options?: Record<string, string>
 }
 
-export function parseVariantUpdateCSV(csvContent: string): VariantUpdateRow[] {
+// Known column names that are NOT option columns
+const KNOWN_COLUMNS = new Set([
+  'sku', 'variant sku', 'variantsku', 'รหัส variant',
+  'barcode',
+  'ประเภทสต๊อค', 'ประเภท', 'stocktype', 'stock type',
+  'ราคาขาย', 'sellingprice', 'selling price',
+  'ราคาทุน', 'costprice', 'cost price',
+  'reorder point', 'reorderpoint', 'reorder',
+  'min qty', 'minqty', 'min',
+  'max qty', 'maxqty', 'max',
+  'แจ้งเตือน', 'alert', 'lowstockalert',
+  // Non-editable columns (ignored)
+  'รหัสสินค้า', 'ชื่อสินค้า', 'สต๊อค', 'stock',
+])
+
+export interface VariantUpdateParseResult {
+  rows: VariantUpdateRow[]
+  optionColumns: string[]  // List of detected option column names
+}
+
+export function parseVariantUpdateCSV(csvContent: string): VariantUpdateParseResult {
   const lines = csvContent.split('\n').filter((line) => line.trim())
 
   if (lines.length < 2) {
-    return []
+    return { rows: [], optionColumns: [] }
   }
 
   // Parse header
   const headerLine = lines[0]
-  const headers = headerLine.split(',').map((h) => h.trim().replace(/^"|"$/g, '').toLowerCase())
+  const rawHeaders = headerLine.split(',').map((h) => h.trim().replace(/^"|"$/g, ''))
+  const headers = rawHeaders.map(h => h.toLowerCase())
 
   // Map headers to fields
-  const headerMap: Record<string, keyof VariantUpdateRow> = {
+  const headerMap: Record<string, keyof Omit<VariantUpdateRow, 'options'>> = {
     sku: 'sku',
     'variant sku': 'sku',
     variantsku: 'sku',
@@ -356,14 +379,22 @@ export function parseVariantUpdateCSV(csvContent: string): VariantUpdateRow[] {
     lowstockalert: 'lowStockAlert',
   }
 
-  const columnIndices: Partial<Record<keyof VariantUpdateRow, number>> = {}
+  const columnIndices: Partial<Record<keyof Omit<VariantUpdateRow, 'options'>, number>> = {}
+  
+  // Detect option columns (columns that are not in KNOWN_COLUMNS)
+  const optionColumnIndices: { index: number; name: string }[] = []
 
   headers.forEach((header, index) => {
     const field = headerMap[header]
     if (field) {
       columnIndices[field] = index
+    } else if (!KNOWN_COLUMNS.has(header) && rawHeaders[index].trim()) {
+      // This is likely an option column (สี, ไซส์, etc.)
+      optionColumnIndices.push({ index, name: rawHeaders[index].trim() })
     }
   })
+
+  const optionColumns = optionColumnIndices.map(oc => oc.name)
 
   // Parse rows
   const rows: VariantUpdateRow[] = []
@@ -372,12 +403,12 @@ export function parseVariantUpdateCSV(csvContent: string): VariantUpdateRow[] {
     const line = lines[i]
     const values = parseCSVLine(line)
 
-    const getValue = (field: keyof VariantUpdateRow): string | undefined => {
+    const getValue = (field: keyof Omit<VariantUpdateRow, 'options'>): string | undefined => {
       const idx = columnIndices[field]
       return idx !== undefined ? values[idx]?.trim() : undefined
     }
 
-    const getNumber = (field: keyof VariantUpdateRow): number | undefined => {
+    const getNumber = (field: keyof Omit<VariantUpdateRow, 'options'>): number | undefined => {
       const val = getValue(field)
       if (!val) return undefined
       const num = parseFloat(val)
@@ -386,6 +417,15 @@ export function parseVariantUpdateCSV(csvContent: string): VariantUpdateRow[] {
 
     const sku = getValue('sku')
     if (!sku) continue
+
+    // Parse option columns
+    const options: Record<string, string> = {}
+    optionColumnIndices.forEach(({ index, name }) => {
+      const value = values[index]?.trim()
+      if (value) {
+        options[name] = value
+      }
+    })
 
     const row: VariantUpdateRow = {
       sku,
@@ -397,11 +437,12 @@ export function parseVariantUpdateCSV(csvContent: string): VariantUpdateRow[] {
       minQty: getNumber('minQty'),
       maxQty: getNumber('maxQty'),
       lowStockAlert: getValue('lowStockAlert'),
+      options: Object.keys(options).length > 0 ? options : undefined,
     }
 
     rows.push(row)
   }
 
-  return rows
+  return { rows, optionColumns }
 }
 

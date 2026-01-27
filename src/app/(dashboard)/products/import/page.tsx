@@ -19,7 +19,7 @@ import {
 import { Upload, ArrowLeft, FileSpreadsheet, Loader2, Check, X, Download, Package, Warehouse, AlertTriangle, RefreshCw } from 'lucide-react'
 import { importProducts, importStock, validateProductImport, validateStockImport, importProductsWithVariants, type StockImportRow } from '@/actions/import'
 import { updateVariantsFromCSV } from '@/actions/variants/import'
-import { parseCSV, parseCSVWithVariants, groupVariantRows, detectHasVariantColumns, parseVariantUpdateCSV, type ProductImportRow, type GroupedProductImport, type VariantUpdateRow } from '@/lib/csv-parser'
+import { parseCSV, parseCSVWithVariants, groupVariantRows, detectHasVariantColumns, parseVariantUpdateCSV, type ProductImportRow, type GroupedProductImport, type VariantUpdateRow, type VariantUpdateParseResult } from '@/lib/csv-parser'
 import { toast } from 'sonner'
 
 interface ValidationError {
@@ -62,9 +62,11 @@ export default function ImportPage() {
   // Variant update state
   const [variantCsvContent, setVariantCsvContent] = useState('')
   const [variantPreviewRows, setVariantPreviewRows] = useState<VariantUpdateRow[]>([])
+  const [variantOptionColumns, setVariantOptionColumns] = useState<string[]>([])
   const [isUpdatingVariants, setIsUpdatingVariants] = useState(false)
   const [variantUpdateResult, setVariantUpdateResult] = useState<{
     updated: number
+    optionsUpdated: number
     skipped: number
     errors: string[]
   } | null>(null)
@@ -299,13 +301,14 @@ FABRIC-001,WH01/B01,500,85`
   }
 
   function handleVariantPreview(content: string = variantCsvContent) {
-    const rows = parseVariantUpdateCSV(content)
+    const { rows, optionColumns } = parseVariantUpdateCSV(content)
     setVariantPreviewRows(rows.slice(0, 10))
+    setVariantOptionColumns(optionColumns)
     setVariantUpdateResult(null)
   }
 
   async function handleVariantUpdate() {
-    const rows = parseVariantUpdateCSV(variantCsvContent)
+    const { rows } = parseVariantUpdateCSV(variantCsvContent)
     if (rows.length === 0) {
       toast.error('ไม่พบข้อมูลที่จะอัปเดต')
       return
@@ -317,7 +320,8 @@ FABRIC-001,WH01/B01,500,85`
 
     if (result.success) {
       setVariantUpdateResult(result.data)
-      toast.success(`อัปเดตสำเร็จ: ${result.data.updated} รายการ`)
+      const totalUpdated = result.data.updated + result.data.optionsUpdated
+      toast.success(`อัปเดตสำเร็จ: ${totalUpdated} รายการ`)
       if (result.data.errors.length === 0) {
         setTimeout(() => router.push('/products'), 2000)
       }
@@ -905,6 +909,12 @@ SHIRT-001-BK-S,,MTO,140,70,0,0,0,N`
                     <li>• <code className="text-[var(--status-info)]">แจ้งเตือน</code> - Y/N</li>
                   </div>
                 </div>
+                <div className="mt-3 p-2 bg-[var(--accent-primary)]/10 rounded-lg">
+                  <p className="text-[var(--accent-primary)] font-medium text-xs mb-1">✨ รองรับคอลัมน์ตัวเลือก (สี, ไซส์, ฯลฯ)</p>
+                  <p className="text-[var(--text-muted)] text-xs">
+                    ระบบจะ Export แยกคอลัมน์ตัวเลือกอัตโนมัติ สามารถแก้ไขค่าตัวเลือกใน Excel แล้ว Import กลับได้
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -944,7 +954,14 @@ SHIRT-001-BK-S,,MTO,140,70,0,0,0,N`
             <Card className="bg-[var(--bg-elevated)] border-[var(--border-default)]">
               <CardHeader>
                 <CardTitle className="text-lg text-[var(--text-primary)] flex items-center justify-between">
-                  <span>ตัวอย่างข้อมูล (แสดง 10 รายการแรก จากทั้งหมด {parseVariantUpdateCSV(variantCsvContent).length})</span>
+                  <div className="flex flex-col gap-1">
+                    <span>ตัวอย่างข้อมูล (แสดง 10 รายการแรก จากทั้งหมด {parseVariantUpdateCSV(variantCsvContent).rows.length})</span>
+                    {variantOptionColumns.length > 0 && (
+                      <span className="text-sm text-[var(--text-muted)] font-normal">
+                        พบคอลัมน์ตัวเลือก: {variantOptionColumns.join(', ')}
+                      </span>
+                    )}
+                  </div>
                   <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)]">พร้อมอัปเดต</Badge>
                 </CardTitle>
               </CardHeader>
@@ -993,10 +1010,14 @@ SHIRT-001-BK-S,,MTO,140,70,0,0,0,N`
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center p-4 bg-[var(--status-success-light)] rounded-lg border border-[var(--status-success)]/20">
                     <p className="text-2xl font-bold text-[var(--status-success)]">{variantUpdateResult.updated}</p>
-                    <p className="text-sm text-[var(--text-muted)]">อัปเดตแล้ว</p>
+                    <p className="text-sm text-[var(--text-muted)]">อัปเดตข้อมูล</p>
+                  </div>
+                  <div className="text-center p-4 bg-[var(--accent-primary)]/10 rounded-lg border border-[var(--accent-primary)]/20">
+                    <p className="text-2xl font-bold text-[var(--accent-primary)]">{variantUpdateResult.optionsUpdated || 0}</p>
+                    <p className="text-sm text-[var(--text-muted)]">อัปเดตตัวเลือก</p>
                   </div>
                   <div className="text-center p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-default)]">
                     <p className="text-2xl font-bold text-[var(--text-muted)]">{variantUpdateResult.skipped}</p>
@@ -1041,7 +1062,7 @@ SHIRT-001-BK-S,,MTO,140,70,0,0,0,N`
               ) : (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  อัปเดต ({parseVariantUpdateCSV(variantCsvContent).length} รายการ)
+                  อัปเดต ({parseVariantUpdateCSV(variantCsvContent).rows.length} รายการ)
                 </>
               )}
             </Button>
