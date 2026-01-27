@@ -77,6 +77,14 @@ import {
   type NotificationDeliveryLogItem,
   type NotificationChannels,
 } from '@/actions/user-notification-preferences'
+import {
+  getCronSettings,
+  updateCronSettings,
+  runCronJobManually,
+  type CronSettings,
+  type CronJobConfig,
+} from '@/actions/cron-settings'
+import { utcToThaiHour, thaiToUtcHour, formatDays } from '@/lib/cron-utils'
 import { formatDateTime } from '@/lib/date'
 
 interface EmailStatus {
@@ -104,6 +112,10 @@ export default function NotificationSettingsPage() {
   const [deliveryLogs, setDeliveryLogs] = useState<NotificationDeliveryLogItem[]>([])
   const [deliveryStats, setDeliveryStats] = useState<DeliveryStats | null>(null)
   
+  // Cron settings
+  const [cronSettings, setCronSettings] = useState<CronSettings | null>(null)
+  const [runningJob, setRunningJob] = useState<string | null>(null)
+  
   // UI state
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -122,12 +134,13 @@ export default function NotificationSettingsPage() {
   async function loadAllSettings() {
     setIsLoading(true)
     
-    const [lineResult, emailResult, prefsResult, logsResult, statsResult] = await Promise.all([
+    const [lineResult, emailResult, prefsResult, logsResult, statsResult, cronResult] = await Promise.all([
       getLineSettings(),
       getEmailStatus(),
       getUserNotificationPreferences(),
       getNotificationDeliveryLogs(50),
       getNotificationDeliveryStats(),
+      getCronSettings(),
     ])
     
     if (lineResult.success && lineResult.data) {
@@ -151,6 +164,10 @@ export default function NotificationSettingsPage() {
     
     if (statsResult.success && statsResult.data) {
       setDeliveryStats(statsResult.data)
+    }
+    
+    if (cronResult.success && cronResult.data) {
+      setCronSettings(cronResult.data)
     }
     
     setIsLoading(false)
@@ -384,7 +401,7 @@ export default function NotificationSettingsPage() {
 
       {/* Main Settings Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
           <TabsTrigger value="channels" className="gap-2">
             <Settings className="w-4 h-4" />
             <span className="hidden sm:inline">ช่องทาง</span>
@@ -396,6 +413,10 @@ export default function NotificationSettingsPage() {
           <TabsTrigger value="recipients" className="gap-2">
             <User className="w-4 h-4" />
             <span className="hidden sm:inline">ผู้รับ</span>
+          </TabsTrigger>
+          <TabsTrigger value="schedule" className="gap-2">
+            <Clock className="w-4 h-4" />
+            <span className="hidden sm:inline">ตั้งเวลา</span>
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-2">
             <History className="w-4 h-4" />
@@ -817,7 +838,109 @@ export default function NotificationSettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab 4: Delivery History */}
+        {/* Tab 4: Schedule Configuration */}
+        <TabsContent value="schedule" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                ตั้งเวลาแจ้งเตือนอัตโนมัติ
+              </CardTitle>
+              <CardDescription>
+                ระบบจะส่งแจ้งเตือนตามเวลาที่ตั้งไว้ (เวลาประเทศไทย)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {cronSettings && (
+                <>
+                  {/* Pending Actions Alert */}
+                  <CronJobCard
+                    config={cronSettings.pendingActionsAlert}
+                    onUpdate={(config) => setCronSettings({ ...cronSettings, pendingActionsAlert: config })}
+                    onRun={async () => {
+                      setRunningJob('pending-actions')
+                      const result = await runCronJobManually('pending-actions')
+                      setRunningJob(null)
+                      if (result.success) {
+                        toast.success('ส่งแจ้งเตือนงานค้างเรียบร้อย')
+                        loadAllSettings()
+                      } else {
+                        toast.error(result.error)
+                      }
+                    }}
+                    isRunning={runningJob === 'pending-actions'}
+                  />
+
+                  {/* Low Stock Alert */}
+                  <CronJobCard
+                    config={cronSettings.lowStockAlert}
+                    onUpdate={(config) => setCronSettings({ ...cronSettings, lowStockAlert: config })}
+                    onRun={async () => {
+                      setRunningJob('low-stock')
+                      const result = await runCronJobManually('low-stock')
+                      setRunningJob(null)
+                      if (result.success) {
+                        toast.success('ส่งแจ้งเตือนสินค้าใกล้หมดเรียบร้อย')
+                        loadAllSettings()
+                      } else {
+                        toast.error(result.error)
+                      }
+                    }}
+                    isRunning={runningJob === 'low-stock'}
+                  />
+
+                  {/* Expiring Stock Alert */}
+                  <CronJobCard
+                    config={cronSettings.expiringStockAlert}
+                    onUpdate={(config) => setCronSettings({ ...cronSettings, expiringStockAlert: config })}
+                    onRun={async () => {
+                      setRunningJob('expiring-stock')
+                      const result = await runCronJobManually('expiring-stock')
+                      setRunningJob(null)
+                      if (result.success) {
+                        toast.success('ส่งแจ้งเตือนสินค้าใกล้หมดอายุเรียบร้อย')
+                        loadAllSettings()
+                      } else {
+                        toast.error(result.error)
+                      }
+                    }}
+                    isRunning={runningJob === 'expiring-stock'}
+                  />
+
+                  <div className="flex justify-end pt-4 border-t">
+                    <Button
+                      onClick={async () => {
+                        setIsSaving(true)
+                        const result = await updateCronSettings(cronSettings)
+                        setIsSaving(false)
+                        if (result.success) {
+                          toast.success('บันทึกการตั้งค่าเรียบร้อย')
+                        } else {
+                          toast.error(result.error)
+                        }
+                      }}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                      บันทึกการตั้งค่า
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              <div className="flex items-start gap-2 p-3 bg-[var(--accent-primary)]/5 rounded-lg text-sm">
+                <Info className="w-4 h-4 text-[var(--accent-primary)] mt-0.5 shrink-0" />
+                <div className="text-[var(--text-muted)]">
+                  <p className="font-medium text-[var(--text-primary)]">หมายเหตุ</p>
+                  <p>การตั้งเวลาจะมีผลเมื่อตั้งค่า Vercel Cron Jobs แล้ว ระบบจะส่งแจ้งเตือนอัตโนมัติตามเวลาที่กำหนด</p>
+                  <p className="mt-1">สามารถกดปุ่ม "รันทันที" เพื่อทดสอบการส่งแจ้งเตือนได้</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 5: Delivery History */}
         <TabsContent value="history" className="space-y-4 mt-4">
           {/* Stats */}
           {deliveryStats && (
@@ -1065,6 +1188,134 @@ function NotificationSection({ title, icon, items, userPrefs, onUpdate }: Notifi
             })}
           </TableBody>
         </Table>
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// Cron Job Card Component
+// ============================================
+
+interface CronJobCardProps {
+  config: CronJobConfig
+  onUpdate: (config: CronJobConfig) => void
+  onRun: () => void
+  isRunning: boolean
+}
+
+const DAYS_OF_WEEK = [
+  { value: 1, label: 'จ.' },
+  { value: 2, label: 'อ.' },
+  { value: 3, label: 'พ.' },
+  { value: 4, label: 'พฤ.' },
+  { value: 5, label: 'ศ.' },
+  { value: 6, label: 'ส.' },
+  { value: 0, label: 'อา.' },
+]
+
+function CronJobCard({ config, onUpdate, onRun, isRunning }: CronJobCardProps) {
+  const thaiHour = utcToThaiHour(config.hour)
+  
+  const toggleDay = (day: number) => {
+    const newDays = config.days.includes(day)
+      ? config.days.filter(d => d !== day)
+      : [...config.days, day].sort()
+    onUpdate({ ...config, days: newDays })
+  }
+
+  return (
+    <div className={`p-4 rounded-lg border ${config.enabled ? 'border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/5' : 'border-[var(--border-default)] bg-[var(--bg-secondary)]'}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={config.enabled}
+              onCheckedChange={(enabled) => onUpdate({ ...config, enabled })}
+            />
+            <div>
+              <h4 className="font-medium text-[var(--text-primary)]">{config.name}</h4>
+              <p className="text-xs text-[var(--text-muted)]">{config.description}</p>
+            </div>
+          </div>
+
+          {config.enabled && (
+            <div className="mt-4 space-y-3">
+              {/* Time Setting */}
+              <div className="flex items-center gap-4">
+                <Label className="text-sm w-16">เวลา</Label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={thaiHour}
+                    onChange={(e) => onUpdate({ ...config, hour: thaiToUtcHour(Number(e.target.value)) })}
+                    className="w-20 h-9 rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 text-sm"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>{i.toString().padStart(2, '0')}:00</option>
+                    ))}
+                  </select>
+                  <span className="text-sm text-[var(--text-muted)]">น.</span>
+                </div>
+              </div>
+
+              {/* Days Setting */}
+              <div className="flex items-center gap-4">
+                <Label className="text-sm w-16">วัน</Label>
+                <div className="flex flex-wrap gap-1">
+                  {DAYS_OF_WEEK.map(day => (
+                    <button
+                      key={day.value}
+                      type="button"
+                      onClick={() => toggleDay(day.value)}
+                      className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                        config.days.includes(day.value)
+                          ? 'bg-[var(--accent-primary)] text-white'
+                          : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+                      }`}
+                    >
+                      {day.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Last Run Info */}
+              {config.lastRun && (
+                <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                  <span>รันล่าสุด: {formatDateTime(new Date(config.lastRun))}</span>
+                  {config.lastStatus === 'success' && (
+                    <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)] text-[10px]">
+                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      สำเร็จ
+                    </Badge>
+                  )}
+                  {config.lastStatus === 'error' && (
+                    <Badge className="bg-[var(--status-error-light)] text-[var(--status-error)] text-[10px]">
+                      <XCircle className="w-3 h-3 mr-1" />
+                      ผิดพลาด
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRun}
+          disabled={isRunning || !config.enabled}
+        >
+          {isRunning ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <>
+              <RefreshCw className="w-4 h-4 mr-1" />
+              รันทันที
+            </>
+          )}
+        </Button>
       </div>
     </div>
   )
