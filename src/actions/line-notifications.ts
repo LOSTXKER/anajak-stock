@@ -969,3 +969,78 @@ export async function sendLineNotificationToUser(
     return { success: false, error: 'ไม่สามารถส่งแจ้งเตือนได้' }
   }
 }
+
+// ============================================
+// Pending Actions Alert
+// ============================================
+
+/**
+ * Send pending actions alert via LINE
+ */
+export async function sendLinePendingActionsAlert(): Promise<ActionResult<{ sent: boolean; count: number }>> {
+  try {
+    // Dynamic import to avoid circular dependency
+    const { getPendingActionsForCron } = await import('./pending-actions')
+    
+    const settingsResult = await getLineSettingsForWebhook()
+    if (!settingsResult.success || !settingsResult.data) {
+      return { success: false, error: 'ไม่สามารถโหลดการตั้งค่า LINE ได้' }
+    }
+
+    const settings = settingsResult.data
+    if (!settings.enabled || settings.recipientUserIds.length === 0) {
+      return { success: true, data: { sent: false, count: 0 } }
+    }
+
+    // Get pending actions
+    const pendingResult = await getPendingActionsForCron()
+    if (!pendingResult.success || !pendingResult.data) {
+      return { success: false, error: 'ไม่สามารถโหลดงานค้างได้' }
+    }
+
+    const pending = pendingResult.data
+    if (pending.total === 0) {
+      return { success: true, data: { sent: false, count: 0 } }
+    }
+
+    // Build message
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const client = createLineClient({
+      channelAccessToken: settings.channelAccessToken,
+      channelSecret: settings.channelSecret,
+    })
+
+    // Build summary text
+    const summaryLines: string[] = []
+    if (pending.grnDraft > 0) summaryLines.push(`📥 GRN รอบันทึก: ${pending.grnDraft}`)
+    if (pending.poApproved > 0) summaryLines.push(`📦 PO รอส่ง Supplier: ${pending.poApproved}`)
+    if (pending.poSent > 0) summaryLines.push(`🚚 PO เลย ETA: ${pending.poSent}`)
+    if (pending.prSubmitted > 0) summaryLines.push(`📝 PR รออนุมัติ: ${pending.prSubmitted}`)
+    if (pending.movementApproved > 0) summaryLines.push(`📋 Movement รอบันทึก: ${pending.movementApproved}`)
+    if (pending.stockTakeCompleted > 0) summaryLines.push(`📊 ตรวจนับรออนุมัติ: ${pending.stockTakeCompleted}`)
+
+    // Use custom card template
+    const flexMessage = FlexTemplates.customCard(
+      `⚡ งานค้าง ${pending.total} รายการ`,
+      summaryLines.join('\n'),
+      'ดูรายละเอียด',
+      `${appUrl}/dashboard`
+    )
+
+    const result = await client.sendFlex(
+      settings.recipientUserIds,
+      `⚡ งานค้าง ${pending.total} รายการ`,
+      flexMessage
+    )
+
+    if (!result.success) {
+      console.error('LINE pending actions alert error:', result.error)
+      return { success: false, error: result.error || 'ส่งแจ้งเตือนไม่สำเร็จ' }
+    }
+
+    return { success: true, data: { sent: true, count: pending.total } }
+  } catch (error) {
+    console.error('LINE pending actions alert error:', error)
+    return { success: false, error: 'เกิดข้อผิดพลาดในการส่งแจ้งเตือน' }
+  }
+}

@@ -14,6 +14,11 @@ import {
   Plus,
   Package,
   TrendingUp,
+  Zap,
+  FileText,
+  ClipboardList,
+  Truck,
+  Clock,
 } from 'lucide-react'
 import { StockValueChart } from '@/components/charts/stock-value-chart'
 import { TopProductsChart } from '@/components/charts/top-products-chart'
@@ -306,6 +311,243 @@ async function StatsSection() {
   return <DashboardStats stats={stats} />
 }
 
+// Get pending actions that need attention
+async function getPendingActionsData() {
+  const [grnDrafts, poApproved, poSent, prSubmitted, movementApproved, stockTakeCompleted] = await Promise.all([
+    prisma.gRN.findMany({
+      where: { status: 'DRAFT' },
+      include: { po: { include: { supplier: true } } },
+      take: 5,
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.pO.findMany({
+      where: { status: 'APPROVED' },
+      include: { supplier: true },
+      take: 5,
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.pO.findMany({
+      where: { 
+        status: 'SENT',
+        eta: { lt: new Date() }, // Overdue
+      },
+      include: { supplier: true },
+      take: 5,
+      orderBy: { eta: 'asc' },
+    }),
+    prisma.pR.findMany({
+      where: { status: 'SUBMITTED' },
+      include: { requester: true },
+      take: 5,
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.stockMovement.findMany({
+      where: { status: 'APPROVED' },
+      take: 5,
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.stockTake.findMany({
+      where: { status: 'COMPLETED' },
+      include: { warehouse: true },
+      take: 5,
+      orderBy: { createdAt: 'asc' },
+    }),
+  ])
+
+  return {
+    grnDrafts,
+    poApproved,
+    poSent,
+    prSubmitted,
+    movementApproved,
+    stockTakeCompleted,
+    total: grnDrafts.length + poApproved.length + poSent.length + prSubmitted.length + movementApproved.length + stockTakeCompleted.length,
+  }
+}
+
+// Async component for pending actions
+async function PendingActionsSection() {
+  const pending = await getPendingActionsData()
+
+  if (pending.total === 0) {
+    return null // Don't show if no pending actions
+  }
+
+  const now = new Date()
+  const getDaysOld = (date: Date) => Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+
+  return (
+    <Card className="border-[var(--status-warning)]/30 bg-[var(--status-warning)]/5">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Zap className="w-5 h-5 text-[var(--status-warning)]" />
+          งานค้างที่ต้องดำเนินการ
+        </CardTitle>
+        <Badge className="bg-[var(--status-warning-light)] text-[var(--status-warning)]">
+          {pending.total} รายการ
+        </Badge>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* GRN Drafts */}
+        {pending.grnDrafts.map((grn) => (
+          <Link
+            key={grn.id}
+            href={`/grn/${grn.id}`}
+            className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-default)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--status-warning-light)] flex items-center justify-center">
+                <ClipboardList className="w-4 h-4 text-[var(--status-warning)]" />
+              </div>
+              <div>
+                <p className="font-medium text-[var(--text-primary)] text-sm">
+                  GRN {grn.grnNumber} รอบันทึกสต๊อค
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {grn.po.supplier.name}
+                </p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[var(--status-warning)] border-[var(--status-warning)]">
+              {getDaysOld(grn.createdAt)} วัน
+            </Badge>
+          </Link>
+        ))}
+
+        {/* PO Approved - waiting to send */}
+        {pending.poApproved.map((po) => (
+          <Link
+            key={po.id}
+            href={`/po/${po.id}`}
+            className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-default)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--status-warning-light)] flex items-center justify-center">
+                <FileText className="w-4 h-4 text-[var(--status-warning)]" />
+              </div>
+              <div>
+                <p className="font-medium text-[var(--text-primary)] text-sm">
+                  PO {po.poNumber} รอส่งให้ Supplier
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {po.supplier.name}
+                </p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[var(--status-warning)] border-[var(--status-warning)]">
+              {getDaysOld(po.createdAt)} วัน
+            </Badge>
+          </Link>
+        ))}
+
+        {/* PO Sent - overdue */}
+        {pending.poSent.map((po) => (
+          <Link
+            key={po.id}
+            href={`/po/${po.id}`}
+            className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--status-error)]/30 hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--status-error-light)] flex items-center justify-center">
+                <Truck className="w-4 h-4 text-[var(--status-error)]" />
+              </div>
+              <div>
+                <p className="font-medium text-[var(--text-primary)] text-sm">
+                  PO {po.poNumber} เลย ETA
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {po.supplier.name}
+                </p>
+              </div>
+            </div>
+            <Badge className="bg-[var(--status-error-light)] text-[var(--status-error)]">
+              เลย {po.eta ? getDaysOld(po.eta) : 0} วัน
+            </Badge>
+          </Link>
+        ))}
+
+        {/* PR Submitted - waiting approval */}
+        {pending.prSubmitted.map((pr) => (
+          <Link
+            key={pr.id}
+            href={`/pr/${pr.id}`}
+            className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-default)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--status-info-light)] flex items-center justify-center">
+                <Clock className="w-4 h-4 text-[var(--status-info)]" />
+              </div>
+              <div>
+                <p className="font-medium text-[var(--text-primary)] text-sm">
+                  PR {pr.prNumber} รออนุมัติ
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  จาก {pr.requester.name}
+                </p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[var(--status-info)] border-[var(--status-info)]">
+              {getDaysOld(pr.createdAt)} วัน
+            </Badge>
+          </Link>
+        ))}
+
+        {/* Movement Approved - waiting post */}
+        {pending.movementApproved.map((mov) => (
+          <Link
+            key={mov.id}
+            href={`/movements/${mov.id}`}
+            className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-default)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--status-warning-light)] flex items-center justify-center">
+                <Package className="w-4 h-4 text-[var(--status-warning)]" />
+              </div>
+              <div>
+                <p className="font-medium text-[var(--text-primary)] text-sm">
+                  {mov.docNumber} รอบันทึก
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {mov.type}
+                </p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[var(--status-warning)] border-[var(--status-warning)]">
+              {getDaysOld(mov.createdAt)} วัน
+            </Badge>
+          </Link>
+        ))}
+
+        {/* Stock Take Completed - waiting approval */}
+        {pending.stockTakeCompleted.map((st) => (
+          <Link
+            key={st.id}
+            href={`/stock-take/${st.id}`}
+            className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-default)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--status-info-light)] flex items-center justify-center">
+                <ClipboardList className="w-4 h-4 text-[var(--status-info)]" />
+              </div>
+              <div>
+                <p className="font-medium text-[var(--text-primary)] text-sm">
+                  ตรวจนับ {st.code} รออนุมัติ
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {st.warehouse.name}
+                </p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[var(--status-info)] border-[var(--status-info)]">
+              {getDaysOld(st.completedAt || st.createdAt)} วัน
+            </Badge>
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
 // Async component for low stock items
 async function LowStockSection() {
   const lowStockItems = await getLowStockItems()
@@ -567,6 +809,11 @@ export default async function DashboardPage() {
       {/* Stats Grid - Suspense boundary */}
       <Suspense fallback={<StatCardsSkeleton count={6} />}>
         <StatsSection />
+      </Suspense>
+
+      {/* Pending Actions - Show first if there are any */}
+      <Suspense fallback={null}>
+        <PendingActionsSection />
       </Suspense>
 
       {/* Content Grid - Each with own Suspense boundary */}
