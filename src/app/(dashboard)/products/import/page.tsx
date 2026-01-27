@@ -19,7 +19,17 @@ import {
 import { Upload, ArrowLeft, FileSpreadsheet, Loader2, Check, X, Download, Package, Warehouse, AlertTriangle, RefreshCw } from 'lucide-react'
 import { importProducts, importStock, validateProductImport, validateStockImport, importProductsWithVariants, type StockImportRow } from '@/actions/import'
 import { updateVariantsFromCSV } from '@/actions/variants/import'
-import { parseCSV, parseCSVWithVariants, groupVariantRows, detectHasVariantColumns, parseVariantUpdateCSV, type ProductImportRow, type GroupedProductImport, type VariantUpdateRow, type VariantUpdateParseResult } from '@/lib/csv-parser'
+import { parseCSV, parseCSVWithVariants, groupVariantRows, detectHasVariantColumns, parseVariantUpdateCSV, type ProductImportRow, type GroupedProductImport, type VariantUpdateRow } from '@/lib/csv-parser'
+import { 
+  readXLSXFile, 
+  parseXLSXProducts, 
+  parseXLSXWithVariants, 
+  detectXLSXHasVariantColumns, 
+  parseXLSXVariantUpdate, 
+  parseXLSXStock,
+  isXLSXFile,
+  isCSVFile,
+} from '@/lib/xlsx-parser'
 import { toast } from 'sonner'
 
 interface ValidationError {
@@ -72,17 +82,65 @@ export default function ImportPage() {
   } | null>(null)
 
   // ============ PRODUCT HANDLERS (Unified) ============
-  function handleProductFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleProductFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const content = event.target?.result as string
-      setProductCsvContent(content)
-      handleProductPreview(content)
+    try {
+      if (isXLSXFile(file)) {
+        // Parse XLSX file
+        const rows = await readXLSXFile(file)
+        const hasVariants = detectXLSXHasVariantColumns(rows)
+        setHasVariantColumns(hasVariants)
+
+        if (hasVariants) {
+          const parsedRows = parseXLSXWithVariants(rows)
+          const grouped = groupVariantRows(parsedRows)
+          setProductPreviewVariants(grouped)
+          setProductPreviewRows([])
+          setProductValidationErrors([])
+          // Store CSV-like content for import (convert back to use existing import logic)
+          const csvContent = convertToCSVContent(rows)
+          setProductCsvContent(csvContent)
+        } else {
+          const parsedRows = parseXLSXProducts(rows)
+          const { errors } = await validateProductImport(parsedRows)
+          setProductPreviewRows(parsedRows.slice(0, 10))
+          setProductPreviewVariants([])
+          setProductValidationErrors(errors)
+          const csvContent = convertToCSVContent(rows)
+          setProductCsvContent(csvContent)
+        }
+        setProductImportResult(null)
+        toast.success('อ่านไฟล์ Excel สำเร็จ')
+      } else if (isCSVFile(file)) {
+        // Parse CSV file
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const content = event.target?.result as string
+          setProductCsvContent(content)
+          handleProductPreview(content)
+        }
+        reader.readAsText(file, 'UTF-8')
+      } else {
+        toast.error('รองรับเฉพาะไฟล์ CSV หรือ Excel (.xlsx)')
+      }
+    } catch (error) {
+      console.error('Error reading file:', error)
+      toast.error('ไม่สามารถอ่านไฟล์ได้')
     }
-    reader.readAsText(file, 'UTF-8')
+  }
+
+  // Helper to convert 2D array to CSV content
+  function convertToCSVContent(rows: string[][]): string {
+    return rows.map(row => row.map(cell => {
+      const str = String(cell ?? '')
+      // Escape quotes and wrap in quotes if contains comma or quote
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }).join(',')).join('\n')
   }
 
   async function handleProductPreview(content: string = productCsvContent) {
@@ -200,17 +258,38 @@ SHIRT-001,เสื้อยืดคอกลม Basic,เสื้อ,PCS,120,
   }
 
   // ============ STOCK HANDLERS ============
-  function handleStockFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleStockFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const content = event.target?.result as string
-      setStockCsvContent(content)
-      handleStockPreview(content)
+    try {
+      if (isXLSXFile(file)) {
+        // Parse XLSX file
+        const rows = await readXLSXFile(file)
+        const parsedRows = parseXLSXStock(rows)
+        const { errors } = await validateStockImport(parsedRows)
+        setStockPreviewRows(parsedRows.slice(0, 10))
+        setStockValidationErrors(errors)
+        setStockImportResult(null)
+        // Convert to CSV for existing import logic
+        const csvContent = convertToCSVContent(rows)
+        setStockCsvContent(csvContent)
+        toast.success('อ่านไฟล์ Excel สำเร็จ')
+      } else if (isCSVFile(file)) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const content = event.target?.result as string
+          setStockCsvContent(content)
+          handleStockPreview(content)
+        }
+        reader.readAsText(file, 'UTF-8')
+      } else {
+        toast.error('รองรับเฉพาะไฟล์ CSV หรือ Excel (.xlsx)')
+      }
+    } catch (error) {
+      console.error('Error reading file:', error)
+      toast.error('ไม่สามารถอ่านไฟล์ได้')
     }
-    reader.readAsText(file, 'UTF-8')
   }
 
   async function handleStockPreview(content: string = stockCsvContent) {
@@ -287,17 +366,37 @@ FABRIC-001,WH01/B01,500,85`
   }
 
   // ============ VARIANT UPDATE HANDLERS ============
-  function handleVariantFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleVariantFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const content = event.target?.result as string
-      setVariantCsvContent(content)
-      handleVariantPreview(content)
+    try {
+      if (isXLSXFile(file)) {
+        // Parse XLSX file
+        const rows = await readXLSXFile(file)
+        const { rows: parsedRows, optionColumns } = parseXLSXVariantUpdate(rows)
+        setVariantPreviewRows(parsedRows.slice(0, 10))
+        setVariantOptionColumns(optionColumns)
+        setVariantUpdateResult(null)
+        // Convert to CSV for existing import logic
+        const csvContent = convertToCSVContent(rows)
+        setVariantCsvContent(csvContent)
+        toast.success('อ่านไฟล์ Excel สำเร็จ')
+      } else if (isCSVFile(file)) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const content = event.target?.result as string
+          setVariantCsvContent(content)
+          handleVariantPreview(content)
+        }
+        reader.readAsText(file, 'UTF-8')
+      } else {
+        toast.error('รองรับเฉพาะไฟล์ CSV หรือ Excel (.xlsx)')
+      }
+    } catch (error) {
+      console.error('Error reading file:', error)
+      toast.error('ไม่สามารถอ่านไฟล์ได้')
     }
-    reader.readAsText(file, 'UTF-8')
   }
 
   function handleVariantPreview(content: string = variantCsvContent) {
@@ -442,7 +541,7 @@ SHIRT-001-BK-S,,MTO,140,70,0,0,0,N`
                 <FileSpreadsheet className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx,.xls"
                   onChange={handleProductFileUpload}
                   className="hidden"
                   id="product-csv-upload"
@@ -451,9 +550,9 @@ SHIRT-001-BK-S,,MTO,140,70,0,0,0,N`
                   htmlFor="product-csv-upload"
                   className="cursor-pointer text-[var(--accent-primary)] hover:text-[var(--accent-primary-hover)] font-medium"
                 >
-                  เลือกไฟล์ CSV
+                  เลือกไฟล์ CSV / Excel
                 </label>
-                <p className="text-[var(--text-muted)] text-sm mt-2">หรือวางเนื้อหา CSV ด้านล่าง</p>
+                <p className="text-[var(--text-muted)] text-sm mt-2">หรือวางเนื้อหา CSV ด้านล่าง (Excel จะแปลงอัตโนมัติ)</p>
               </div>
 
               <div className="space-y-2">
@@ -718,9 +817,9 @@ SHIRT-001-BK-S,,MTO,140,70,0,0,0,N`
             <CardContent className="space-y-4">
               <div className="border-2 border-dashed border-[var(--border-default)] rounded-lg p-8 text-center hover:border-[var(--status-success)]/50 transition-colors">
                 <FileSpreadsheet className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
-                <input type="file" accept=".csv" onChange={handleStockFileUpload} className="hidden" id="stock-csv-upload" />
+                <input type="file" accept=".csv,.xlsx,.xls" onChange={handleStockFileUpload} className="hidden" id="stock-csv-upload" />
                 <label htmlFor="stock-csv-upload" className="cursor-pointer text-[var(--status-success)] hover:opacity-80 font-medium">
-                  เลือกไฟล์ CSV
+                  เลือกไฟล์ CSV / Excel
                 </label>
                 <p className="text-[var(--text-muted)] text-sm mt-2">หรือวางเนื้อหา CSV ด้านล่าง</p>
               </div>
@@ -927,9 +1026,9 @@ SHIRT-001-BK-S,,MTO,140,70,0,0,0,N`
             <CardContent className="space-y-4">
               <div className="border-2 border-dashed border-[var(--border-default)] rounded-lg p-8 text-center hover:border-[var(--status-info)]/50 transition-colors">
                 <FileSpreadsheet className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
-                <input type="file" accept=".csv" onChange={handleVariantFileUpload} className="hidden" id="variant-csv-upload" />
+                <input type="file" accept=".csv,.xlsx,.xls" onChange={handleVariantFileUpload} className="hidden" id="variant-csv-upload" />
                 <label htmlFor="variant-csv-upload" className="cursor-pointer text-[var(--status-info)] hover:opacity-80 font-medium">
-                  เลือกไฟล์ CSV
+                  เลือกไฟล์ CSV / Excel
                 </label>
                 <p className="text-[var(--text-muted)] text-sm mt-2">หรือวางเนื้อหา CSV ด้านล่าง</p>
               </div>
