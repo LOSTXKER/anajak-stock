@@ -15,12 +15,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeft, ArrowLeftRight, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, CheckCircle2, XCircle, Send, FileText, FolderOpen } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, FolderOpen, AlertCircle } from 'lucide-react'
 import { MovementStats } from './movement-stats'
 import { MovementActions } from './movement-actions'
 import { MovementAttachments } from './movement-attachments'
 import { LinkedMovements } from './linked-movements'
 import { EmptyState } from '@/components/common'
+import { movementStatusConfig } from '@/lib/status-config'
+import { DocStatus } from '@/generated/prisma'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -51,39 +53,6 @@ const typeConfig: Record<string, { color: string; icon: React.ReactNode; label: 
     color: 'bg-[var(--accent-light)] text-[var(--accent-primary)]',
     icon: <CornerDownRight className="w-3.5 h-3.5" />,
     label: 'คืน'
-  },
-}
-
-const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-  DRAFT: { 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <FileText className="w-3.5 h-3.5" />,
-    label: 'แบบร่าง'
-  },
-  SUBMITTED: { 
-    color: 'bg-[var(--status-info-light)] text-[var(--status-info)]',
-    icon: <Send className="w-3.5 h-3.5" />,
-    label: 'รออนุมัติ'
-  },
-  APPROVED: { 
-    color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    label: 'อนุมัติแล้ว'
-  },
-  REJECTED: { 
-    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    label: 'ปฏิเสธ'
-  },
-  POSTED: { 
-    color: 'bg-[var(--accent-light)] text-[var(--accent-primary)]',
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    label: 'บันทึกแล้ว'
-  },
-  CANCELLED: { 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    label: 'ยกเลิก'
   },
 }
 
@@ -146,7 +115,7 @@ async function MovementDetail({ id }: { id: string }) {
 
   const totalQty = movement.lines.reduce((sum, line) => sum + Number(line.qty), 0)
   const typeInfo = typeConfig[movement.type] || typeConfig.ISSUE
-  const statusInfo = statusConfig[movement.status] || statusConfig.DRAFT
+  const statusInfo = movementStatusConfig[movement.status as DocStatus] || movementStatusConfig.DRAFT
 
   // Check permissions
   const userRole = session?.role || 'VIEWER'
@@ -155,6 +124,17 @@ async function MovementDetail({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Action Required Banner */}
+      {statusInfo.type === 'action_required' && statusInfo.actionHint && (
+        <div className="bg-[var(--status-warning-light)] border border-[var(--status-warning)]/30 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[var(--status-warning)] flex-shrink-0" />
+          <div>
+            <p className="font-medium text-[var(--status-warning)]">ต้องดำเนินการ</p>
+            <p className="text-sm text-[var(--text-secondary)]">{statusInfo.actionHint}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -170,7 +150,7 @@ async function MovementDetail({ id }: { id: string }) {
                 {typeInfo.icon}
                 <span className="ml-1">{typeInfo.label}</span>
               </Badge>
-              <Badge className={statusInfo.color}>
+              <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
                 {statusInfo.icon}
                 <span className="ml-1">{statusInfo.label}</span>
               </Badge>

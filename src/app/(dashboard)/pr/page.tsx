@@ -17,6 +17,7 @@ import { PRStatus } from '@/generated/prisma'
 import { formatDate, formatDateTime } from '@/lib/date'
 import { PageHeader, EmptyState } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
+import { prStatusConfig } from '@/lib/status-config'
 
 interface PageProps {
   searchParams: Promise<{
@@ -24,15 +25,6 @@ interface PageProps {
     status?: PRStatus
     search?: string
   }>
-}
-
-const statusConfig: Record<PRStatus, { label: string; color: string }> = {
-  DRAFT: { label: 'ร่าง', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-  SUBMITTED: { label: 'รออนุมัติ', color: 'bg-[var(--status-info-light)] text-[var(--status-info)]' },
-  APPROVED: { label: 'อนุมัติแล้ว', color: 'bg-[var(--status-success-light)] text-[var(--status-success)]' },
-  REJECTED: { label: 'ปฏิเสธ', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
-  CONVERTED: { label: 'แปลงเป็น PO', color: 'bg-[var(--accent-light)] text-[var(--accent-primary)]' },
-  CANCELLED: { label: 'ยกเลิก', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
 }
 
 async function PRContent({ searchParams }: PageProps) {
@@ -84,14 +76,14 @@ async function PRContent({ searchParams }: PageProps) {
             >
               <Link href="/pr">ทั้งหมด</Link>
             </Button>
-            {Object.entries(statusConfig).map(([key, config]) => (
+            {Object.entries(prStatusConfig).map(([key, config]) => (
               <Button
                 key={key}
                 variant={status === key ? 'default' : 'outline'}
                 size="sm"
                 asChild
               >
-                <Link href={`/pr?status=${key}`}>{config.label}</Link>
+                <Link href={`/pr?status=${key}`}>{config.shortLabel || config.label}</Link>
               </Button>
             ))}
           </div>
@@ -130,7 +122,7 @@ async function PRContent({ searchParams }: PageProps) {
               </TableHeader>
               <TableBody>
                 {prs.map((pr) => {
-                  const statusInfo = statusConfig[pr.status]
+                  const statusInfo = prStatusConfig[pr.status]
 
                   return (
                     <TableRow key={pr.id}>
@@ -143,8 +135,9 @@ async function PRContent({ searchParams }: PageProps) {
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={statusInfo.color}>
-                          {statusInfo.label}
+                        <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                          {statusInfo.icon}
+                          <span className="ml-1">{statusInfo.shortLabel || statusInfo.label}</span>
                         </Badge>
                       </TableCell>
                       <TableCell className="text-[var(--text-secondary)]">

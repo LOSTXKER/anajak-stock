@@ -17,6 +17,7 @@ import { POStatus } from '@/generated/prisma'
 import { formatDate } from '@/lib/date'
 import { PageHeader, EmptyState } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
+import { poStatusConfig } from '@/lib/status-config'
 
 interface PageProps {
   searchParams: Promise<{
@@ -24,19 +25,6 @@ interface PageProps {
     status?: POStatus
     search?: string
   }>
-}
-
-const statusConfig: Record<POStatus, { label: string; color: string }> = {
-  DRAFT: { label: 'ร่าง', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-  SUBMITTED: { label: 'รออนุมัติ', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
-  APPROVED: { label: 'อนุมัติแล้ว', color: 'bg-[var(--accent-light)] text-[var(--accent-primary)]' },
-  REJECTED: { label: 'ไม่อนุมัติ', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
-  SENT: { label: 'ส่งแล้ว', color: 'bg-[var(--status-info-light)] text-[var(--status-info)]' },
-  IN_PROGRESS: { label: 'กำลังดำเนินการ', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
-  PARTIALLY_RECEIVED: { label: 'รับบางส่วน', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
-  FULLY_RECEIVED: { label: 'รับครบ', color: 'bg-[var(--status-success-light)] text-[var(--status-success)]' },
-  CLOSED: { label: 'ปิดแล้ว', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-  CANCELLED: { label: 'ยกเลิก', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
 }
 
 async function POContent({ searchParams }: PageProps) {
@@ -88,14 +76,14 @@ async function POContent({ searchParams }: PageProps) {
             >
               <Link href="/po">ทั้งหมด</Link>
             </Button>
-            {Object.entries(statusConfig).slice(0, 6).map(([key, config]) => (
+            {Object.entries(poStatusConfig).slice(0, 6).map(([key, config]) => (
               <Button
                 key={key}
                 variant={status === key ? 'default' : 'outline'}
                 size="sm"
                 asChild
               >
-                <Link href={`/po?status=${key}`}>{config.label}</Link>
+                <Link href={`/po?status=${key}`}>{config.shortLabel || config.label}</Link>
               </Button>
             ))}
           </div>
@@ -135,7 +123,7 @@ async function POContent({ searchParams }: PageProps) {
               </TableHeader>
               <TableBody>
                 {pos.map((po) => {
-                  const statusInfo = statusConfig[po.status]
+                  const statusInfo = poStatusConfig[po.status]
 
                   return (
                     <TableRow key={po.id}>
@@ -148,8 +136,9 @@ async function POContent({ searchParams }: PageProps) {
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={statusInfo.color}>
-                          {statusInfo.label}
+                        <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                          {statusInfo.icon}
+                          <span className="ml-1">{statusInfo.shortLabel || statusInfo.label}</span>
                         </Badge>
                       </TableCell>
                       <TableCell className="text-[var(--text-secondary)]">

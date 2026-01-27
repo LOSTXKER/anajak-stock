@@ -15,66 +15,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeft, ShoppingCart, Truck, Clock, CheckCircle2, XCircle, Package, Send, Building2, FileText, Link2 } from 'lucide-react'
+import { ArrowLeft, ShoppingCart, Truck, Building2, Link2, AlertCircle, FileText, ClipboardList, Clock } from 'lucide-react'
 import { POStats } from './po-stats'
 import { POActions } from './po-actions'
 import { CopyOrderText } from '@/components/copy-order-text'
+import { poStatusConfig, prStatusConfig, grnStatusConfig } from '@/lib/status-config'
+import { POStatus, PRStatus, GRNStatus } from '@/generated/prisma'
 
 interface PageProps {
   params: Promise<{ id: string }>
-}
-
-const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-  DRAFT: { 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <Clock className="w-3.5 h-3.5" />,
-    label: 'แบบร่าง'
-  },
-  SUBMITTED: { 
-    color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]',
-    icon: <Clock className="w-3.5 h-3.5" />,
-    label: 'รออนุมัติ'
-  },
-  APPROVED: { 
-    color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    label: 'อนุมัติแล้ว'
-  },
-  REJECTED: { 
-    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    label: 'ไม่อนุมัติ'
-  },
-  SENT: { 
-    color: 'bg-[var(--status-info-light)] text-[var(--status-info)]',
-    icon: <Send className="w-3.5 h-3.5" />,
-    label: 'ส่งแล้ว'
-  },
-  IN_PROGRESS: { 
-    color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]',
-    icon: <Clock className="w-3.5 h-3.5" />,
-    label: 'กำลังดำเนินการ'
-  },
-  PARTIALLY_RECEIVED: { 
-    color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]',
-    icon: <Package className="w-3.5 h-3.5" />,
-    label: 'รับบางส่วน'
-  },
-  FULLY_RECEIVED: { 
-    color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    label: 'รับครบแล้ว'
-  },
-  CLOSED: { 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    label: 'ปิดแล้ว'
-  },
-  CANCELLED: { 
-    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    label: 'ยกเลิก'
-  },
 }
 
 async function getPO(id: string) {
@@ -146,7 +95,7 @@ async function PODetail({ id }: { id: string }) {
   const totalOrdered = po.lines.reduce((sum, line) => sum + Number(line.qty), 0)
   const receivePercentage = totalOrdered > 0 ? (totalReceived / totalOrdered) * 100 : 0
 
-  const status = statusConfig[po.status] || statusConfig.DRAFT
+  const statusInfo = poStatusConfig[po.status as POStatus] || poStatusConfig.DRAFT
   
   const canApprove =
     session &&
@@ -160,6 +109,17 @@ async function PODetail({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Action Required Banner */}
+      {statusInfo.type === 'action_required' && statusInfo.actionHint && (
+        <div className="bg-[var(--status-warning-light)] border border-[var(--status-warning)]/30 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[var(--status-warning)] flex-shrink-0" />
+          <div>
+            <p className="font-medium text-[var(--status-warning)]">ต้องดำเนินการ</p>
+            <p className="text-sm text-[var(--text-secondary)]">{statusInfo.actionHint}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -171,9 +131,9 @@ async function PODetail({ id }: { id: string }) {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">{po.poNumber}</h1>
-              <Badge className={status.color}>
-                {status.icon}
-                <span className="ml-1">{status.label}</span>
+              <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                {statusInfo.icon}
+                <span className="ml-1">{statusInfo.label}</span>
               </Badge>
             </div>
             <p className="text-[var(--text-muted)] mt-1">
@@ -267,7 +227,10 @@ async function PODetail({ id }: { id: string }) {
                       <p className="text-sm text-[var(--text-muted)]">ใบขอซื้อ (PR)</p>
                     </div>
                   </div>
-                  <Badge variant="secondary">{po.pr.status}</Badge>
+                  <Badge className={`${prStatusConfig[po.pr.status as PRStatus].bgColor} ${prStatusConfig[po.pr.status as PRStatus].color}`}>
+                    {prStatusConfig[po.pr.status as PRStatus].icon}
+                    <span className="ml-1">{prStatusConfig[po.pr.status as PRStatus].shortLabel || prStatusConfig[po.pr.status as PRStatus].label}</span>
+                  </Badge>
                 </Link>
               )}
 
@@ -287,7 +250,10 @@ async function PODetail({ id }: { id: string }) {
                       </p>
                     </div>
                   </div>
-                  <Badge variant="secondary">{grn.status}</Badge>
+                  <Badge className={`${grnStatusConfig[grn.status as GRNStatus].bgColor} ${grnStatusConfig[grn.status as GRNStatus].color}`}>
+                    {grnStatusConfig[grn.status as GRNStatus].icon}
+                    <span className="ml-1">{grnStatusConfig[grn.status as GRNStatus].shortLabel || grnStatusConfig[grn.status as GRNStatus].label}</span>
+                  </Badge>
                 </Link>
               ))}
             </div>

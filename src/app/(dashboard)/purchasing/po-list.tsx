@@ -18,19 +18,7 @@ import { POStatus } from '@/generated/prisma'
 import { EmptyState } from '@/components/common'
 import { formatDate } from '@/lib/date'
 import { getPOs } from '@/actions/po'
-
-const statusConfig: Record<POStatus, { label: string; color: string }> = {
-  DRAFT: { label: 'ร่าง', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-  SUBMITTED: { label: 'รออนุมัติ', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
-  APPROVED: { label: 'อนุมัติแล้ว', color: 'bg-[var(--accent-light)] text-[var(--accent-primary)]' },
-  REJECTED: { label: 'ไม่อนุมัติ', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
-  SENT: { label: 'ส่งแล้ว', color: 'bg-[var(--status-info-light)] text-[var(--status-info)]' },
-  IN_PROGRESS: { label: 'กำลังดำเนินการ', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
-  PARTIALLY_RECEIVED: { label: 'รับบางส่วน', color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]' },
-  FULLY_RECEIVED: { label: 'รับครบ', color: 'bg-[var(--status-success-light)] text-[var(--status-success)]' },
-  CLOSED: { label: 'ปิดแล้ว', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-  CANCELLED: { label: 'ยกเลิก', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
-}
+import { poStatusConfig } from '@/lib/status-config'
 
 interface PO {
   id: string
@@ -90,14 +78,14 @@ export function POList() {
             >
               ทั้งหมด
             </Button>
-            {Object.entries(statusConfig).slice(0, 5).map(([key, config]) => (
+            {Object.entries(poStatusConfig).slice(0, 5).map(([key, config]) => (
               <Button
                 key={key}
                 variant={statusFilter === key ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => { setStatusFilter(key as POStatus); setPage(1) }}
               >
-                {config.label}
+                {config.shortLabel || config.label}
               </Button>
             ))}
           </div>
@@ -145,8 +133,9 @@ export function POList() {
                       ฿{Number(po.total || 0).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge className={statusConfig[po.status].color}>
-                        {statusConfig[po.status].label}
+                      <Badge className={`${poStatusConfig[po.status].bgColor} ${poStatusConfig[po.status].color}`}>
+                        {poStatusConfig[po.status].icon}
+                        <span className="ml-1">{poStatusConfig[po.status].shortLabel || poStatusConfig[po.status].label}</span>
                       </Badge>
                     </TableCell>
                     <TableCell className="text-[var(--text-muted)] text-sm">

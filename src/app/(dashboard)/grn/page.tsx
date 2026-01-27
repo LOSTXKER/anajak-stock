@@ -12,35 +12,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ClipboardList, CheckCircle2, XCircle, FileText } from 'lucide-react'
+import { ClipboardList } from 'lucide-react'
 import { GRNStatus } from '@/generated/prisma'
 import { formatDateTime } from '@/lib/date'
 import { PageHeader, EmptyState } from '@/components/common'
 import { TableSkeleton } from '@/components/ui/skeleton'
+import { grnStatusConfig } from '@/lib/status-config'
 
 interface PageProps {
   searchParams: Promise<{
     page?: string
     status?: GRNStatus
   }>
-}
-
-const statusConfig: Record<GRNStatus, { label: string; color: string; icon: React.ReactNode }> = {
-  DRAFT: { 
-    label: 'ร่าง', 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <FileText className="w-3.5 h-3.5" />
-  },
-  POSTED: { 
-    label: 'บันทึกแล้ว', 
-    color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />
-  },
-  CANCELLED: { 
-    label: 'ยกเลิก', 
-    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
-    icon: <XCircle className="w-3.5 h-3.5" />
-  },
 }
 
 async function getGRNs(params: { page: number; limit: number; status?: GRNStatus }) {
@@ -113,14 +96,14 @@ async function GRNContent({ searchParams }: PageProps) {
             ทั้งหมด
           </Button>
         </Link>
-        {Object.entries(statusConfig).map(([key, config]) => (
+        {Object.entries(grnStatusConfig).map(([key, config]) => (
           <Link key={key} href={`/grn?status=${key}`}>
             <Button
               variant={status === key ? 'default' : 'outline'}
               size="sm"
             >
               {config.icon}
-              <span className="ml-1">{config.label}</span>
+              <span className="ml-1">{config.shortLabel || config.label}</span>
             </Button>
           </Link>
         ))}
@@ -154,7 +137,7 @@ async function GRNContent({ searchParams }: PageProps) {
                 </TableRow>
               ) : (
                 grns.map((grn) => {
-                  const statusInfo = statusConfig[grn.status]
+                  const statusInfo = grnStatusConfig[grn.status]
 
                   return (
                     <TableRow key={grn.id}>
@@ -178,7 +161,7 @@ async function GRNContent({ searchParams }: PageProps) {
                         {grn.po.supplier.name}
                       </TableCell>
                       <TableCell>
-                        <Badge className={statusInfo.color}>
+                        <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
                           {statusInfo.icon}
                           <span className="ml-1">{statusInfo.label}</span>
                         </Badge>

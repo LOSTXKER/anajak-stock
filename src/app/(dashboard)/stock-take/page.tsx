@@ -16,33 +16,8 @@ import { ClipboardCheck, Plus, Eye, Warehouse, Clock, CheckCircle2, XCircle, Pla
 import { PageHeader, EmptyState } from '@/components/common'
 import { TableSkeleton } from '@/components/ui/skeleton'
 
-const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-  DRAFT: { 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <ClipboardCheck className="w-3.5 h-3.5" />,
-    label: 'แบบร่าง'
-  },
-  IN_PROGRESS: { 
-    color: 'bg-[var(--status-info-light)] text-[var(--status-info)]',
-    icon: <Play className="w-3.5 h-3.5" />,
-    label: 'กำลังนับ'
-  },
-  COMPLETED: { 
-    color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]',
-    icon: <Clock className="w-3.5 h-3.5" />,
-    label: 'รอนุมัติ'
-  },
-  APPROVED: { 
-    color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    label: 'อนุมัติแล้ว'
-  },
-  CANCELLED: { 
-    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    label: 'ยกเลิก'
-  },
-}
+import { stockTakeStatusConfig } from '@/lib/status-config'
+import { StockTakeStatus } from '@/generated/prisma'
 
 async function StockTakeList() {
   const result = await getStockTakes()
@@ -107,7 +82,7 @@ async function StockTakeList() {
           </TableHeader>
           <TableBody>
             {stockTakes.map((st) => {
-              const status = statusConfig[st.status] || statusConfig.DRAFT
+              const statusInfo = stockTakeStatusConfig[st.status as StockTakeStatus] || stockTakeStatusConfig.DRAFT
 
               return (
                 <TableRow key={st.id}>
@@ -122,9 +97,9 @@ async function StockTakeList() {
                     {st._count.lines.toLocaleString()}
                   </TableCell>
                   <TableCell>
-                    <Badge className={status.color}>
-                      {status.icon}
-                      <span className="ml-1">{status.label}</span>
+                    <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                      {statusInfo.icon}
+                      <span className="ml-1">{statusInfo.label}</span>
                     </Badge>
                   </TableCell>
                   <TableCell className="text-[var(--text-muted)]">

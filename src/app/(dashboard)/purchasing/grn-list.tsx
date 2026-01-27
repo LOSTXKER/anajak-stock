@@ -17,12 +17,7 @@ import { ChevronLeft, ChevronRight, Eye, ClipboardList, Loader2 } from 'lucide-r
 import { GRNStatus } from '@/generated/prisma'
 import { EmptyState } from '@/components/common'
 import { formatDate } from '@/lib/date'
-
-const statusConfig: Record<GRNStatus, { label: string; color: string }> = {
-  DRAFT: { label: 'ร่าง', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-  POSTED: { label: 'บันทึกแล้ว', color: 'bg-[var(--status-success-light)] text-[var(--status-success)]' },
-  CANCELLED: { label: 'ยกเลิก', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
-}
+import { grnStatusConfig } from '@/lib/status-config'
 
 interface GRN {
   id: string
@@ -88,14 +83,14 @@ export function GRNList() {
             >
               ทั้งหมด
             </Button>
-            {Object.entries(statusConfig).map(([key, config]) => (
+            {Object.entries(grnStatusConfig).map(([key, config]) => (
               <Button
                 key={key}
                 variant={statusFilter === key ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => { setStatusFilter(key as GRNStatus); setPage(1) }}
               >
-                {config.label}
+                {config.shortLabel || config.label}
               </Button>
             ))}
           </div>
@@ -149,8 +144,9 @@ export function GRNList() {
                         <Badge variant="secondary">{totalQty}</Badge>
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge className={statusConfig[grn.status].color}>
-                          {statusConfig[grn.status].label}
+                        <Badge className={`${grnStatusConfig[grn.status].bgColor} ${grnStatusConfig[grn.status].color}`}>
+                          {grnStatusConfig[grn.status].icon}
+                          <span className="ml-1">{grnStatusConfig[grn.status].label}</span>
                         </Badge>
                       </TableCell>
                       <TableCell className="text-[var(--text-muted)] text-sm">

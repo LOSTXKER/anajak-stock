@@ -16,7 +16,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
-  ClipboardCheck,
   ArrowLeft,
   Play,
   CheckCircle,
@@ -24,12 +23,13 @@ import {
   Save,
   AlertTriangle,
   Loader2,
-  Clock,
   Warehouse,
   Package,
   TrendingUp,
   TrendingDown,
   Scan,
+  AlertCircle,
+  Clock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -42,34 +42,8 @@ import {
 } from '@/actions/stock-take'
 import { StatCard } from '@/components/common'
 import { BarcodeInput, useBarcodeScanner } from '@/components/barcode-scanner'
-
-const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-  DRAFT: { 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <ClipboardCheck className="w-3.5 h-3.5" />,
-    label: 'แบบร่าง'
-  },
-  IN_PROGRESS: { 
-    color: 'bg-[var(--status-info-light)] text-[var(--status-info)]',
-    icon: <Play className="w-3.5 h-3.5" />,
-    label: 'กำลังนับ'
-  },
-  COMPLETED: { 
-    color: 'bg-[var(--status-warning-light)] text-[var(--status-warning)]',
-    icon: <Clock className="w-3.5 h-3.5" />,
-    label: 'รอนุมัติ'
-  },
-  APPROVED: { 
-    color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
-    icon: <CheckCircle className="w-3.5 h-3.5" />,
-    label: 'อนุมัติแล้ว'
-  },
-  CANCELLED: { 
-    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    label: 'ยกเลิก'
-  },
-}
+import { stockTakeStatusConfig } from '@/lib/status-config'
+import { StockTakeStatus } from '@/generated/prisma'
 
 interface StockTakeData {
   id: string
@@ -286,10 +260,21 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
   const totalLines = stockTake.lines.length
   const countedLines = stockTake.lines.filter(l => l.countedQty !== null).length
   const linesWithVariance = stockTake.lines.filter(l => l.variance !== null && l.variance !== 0)
-  const status = statusConfig[stockTake.status] || statusConfig.DRAFT
+  const statusInfo = stockTakeStatusConfig[stockTake.status as StockTakeStatus] || stockTakeStatusConfig.DRAFT
 
   return (
     <div className="space-y-6">
+      {/* Action Required Banner */}
+      {statusInfo.type === 'action_required' && statusInfo.actionHint && (
+        <div className="bg-[var(--status-warning-light)] border border-[var(--status-warning)]/30 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[var(--status-warning)] flex-shrink-0" />
+          <div>
+            <p className="font-medium text-[var(--status-warning)]">ต้องดำเนินการ</p>
+            <p className="text-sm text-[var(--text-secondary)]">{statusInfo.actionHint}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -301,9 +286,9 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">ใบตรวจนับ {stockTake.code}</h1>
-              <Badge className={status.color}>
-                {status.icon}
-                <span className="ml-1">{status.label}</span>
+              <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                {statusInfo.icon}
+                <span className="ml-1">{statusInfo.label}</span>
               </Badge>
             </div>
             <div className="flex items-center gap-2 text-[var(--text-muted)] mt-1">

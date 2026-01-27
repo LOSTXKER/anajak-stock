@@ -18,15 +18,7 @@ import { PRStatus } from '@/generated/prisma'
 import { EmptyState } from '@/components/common'
 import { formatDate } from '@/lib/date'
 import { getPRs } from '@/actions/pr'
-
-const statusConfig: Record<PRStatus, { label: string; color: string }> = {
-  DRAFT: { label: 'ร่าง', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-  SUBMITTED: { label: 'รออนุมัติ', color: 'bg-[var(--status-info-light)] text-[var(--status-info)]' },
-  APPROVED: { label: 'อนุมัติแล้ว', color: 'bg-[var(--status-success-light)] text-[var(--status-success)]' },
-  REJECTED: { label: 'ปฏิเสธ', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
-  CONVERTED: { label: 'แปลงเป็น PO', color: 'bg-[var(--accent-light)] text-[var(--accent-primary)]' },
-  CANCELLED: { label: 'ยกเลิก', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-}
+import { prStatusConfig } from '@/lib/status-config'
 
 interface PRLine {
   qty: number
@@ -92,14 +84,14 @@ export function PRList() {
             >
               ทั้งหมด
             </Button>
-            {Object.entries(statusConfig).map(([key, config]) => (
+            {Object.entries(prStatusConfig).map(([key, config]) => (
               <Button
                 key={key}
                 variant={statusFilter === key ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => { setStatusFilter(key as PRStatus); setPage(1) }}
               >
-                {config.label}
+                {config.shortLabel || config.label}
               </Button>
             ))}
           </div>
@@ -150,8 +142,9 @@ export function PRList() {
                       ฿{pr.lines?.reduce((sum, line) => sum + Number(line.qty) * Number(line.product?.standardCost || 0), 0).toLocaleString() || '0'}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge className={statusConfig[pr.status].color}>
-                        {statusConfig[pr.status].label}
+                      <Badge className={`${prStatusConfig[pr.status].bgColor} ${prStatusConfig[pr.status].color}`}>
+                        {prStatusConfig[pr.status].icon}
+                        <span className="ml-1">{prStatusConfig[pr.status].shortLabel || prStatusConfig[pr.status].label}</span>
                       </Badge>
                     </TableCell>
                     <TableCell className="text-[var(--text-muted)] text-sm">

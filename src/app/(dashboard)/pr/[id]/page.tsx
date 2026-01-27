@@ -15,45 +15,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeft, FileText, User, AlertCircle, CheckCircle2, XCircle, Clock, ArrowRightCircle, ShoppingCart, Link2 } from 'lucide-react'
+import { ArrowLeft, FileText, User, AlertCircle, ShoppingCart, Link2, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { PRActions } from './pr-actions'
 import { CopyOrderText } from '@/components/copy-order-text'
+import { prStatusConfig, poStatusConfig } from '@/lib/status-config'
+import { PRStatus, POStatus } from '@/generated/prisma'
 
 interface PageProps {
   params: Promise<{ id: string }>
-}
-
-const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-  DRAFT: { 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <FileText className="w-3.5 h-3.5" />,
-    label: 'แบบร่าง'
-  },
-  SUBMITTED: { 
-    color: 'bg-[var(--status-info-light)] text-[var(--status-info)]',
-    icon: <Clock className="w-3.5 h-3.5" />,
-    label: 'รออนุมัติ'
-  },
-  APPROVED: { 
-    color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    label: 'อนุมัติแล้ว'
-  },
-  REJECTED: { 
-    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    label: 'ปฏิเสธ'
-  },
-  CONVERTED: { 
-    color: 'bg-[var(--accent-light)] text-[var(--accent-primary)]',
-    icon: <ArrowRightCircle className="w-3.5 h-3.5" />,
-    label: 'แปลงเป็น PO แล้ว'
-  },
-  CANCELLED: { 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    label: 'ยกเลิก'
-  },
 }
 
 const priorityConfig: Record<string, { color: string; label: string }> = {
@@ -143,11 +112,22 @@ async function PRDetail({ id }: { id: string }) {
     (session.role === 'ADMIN' || session.id === pr.requesterId) &&
     pr.status === 'DRAFT'
 
-  const status = statusConfig[pr.status] || statusConfig.DRAFT
+  const statusInfo = prStatusConfig[pr.status as PRStatus] || prStatusConfig.DRAFT
   const priority = priorityConfig[pr.priority || 'NORMAL'] || priorityConfig.NORMAL
 
   return (
     <div className="space-y-6">
+      {/* Action Required Banner */}
+      {statusInfo.type === 'action_required' && statusInfo.actionHint && (
+        <div className="bg-[var(--status-warning-light)] border border-[var(--status-warning)]/30 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[var(--status-warning)] flex-shrink-0" />
+          <div>
+            <p className="font-medium text-[var(--status-warning)]">ต้องดำเนินการ</p>
+            <p className="text-sm text-[var(--text-secondary)]">{statusInfo.actionHint}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -159,9 +139,9 @@ async function PRDetail({ id }: { id: string }) {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">{pr.prNumber}</h1>
-              <Badge className={status.color}>
-                {status.icon}
-                <span className="ml-1">{status.label}</span>
+              <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                {statusInfo.icon}
+                <span className="ml-1">{statusInfo.label}</span>
               </Badge>
             </div>
             <p className="text-[var(--text-muted)] mt-1">
@@ -293,8 +273,9 @@ async function PRDetail({ id }: { id: string }) {
                   </div>
                   <div className="text-right">
                     <p className="font-medium">฿{Number(po.total).toLocaleString()}</p>
-                    <Badge variant="secondary" className="text-xs">
-                      {po.status}
+                    <Badge className={`text-xs ${poStatusConfig[po.status as POStatus].bgColor} ${poStatusConfig[po.status as POStatus].color}`}>
+                      {poStatusConfig[po.status as POStatus].icon}
+                      <span className="ml-1">{poStatusConfig[po.status as POStatus].shortLabel || poStatusConfig[po.status as POStatus].label}</span>
                     </Badge>
                   </div>
                 </Link>

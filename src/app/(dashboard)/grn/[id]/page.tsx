@@ -14,30 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeft, ClipboardCheck, User, Calendar, Package, FileText, CheckCircle2, XCircle, Link2, ShoppingCart } from 'lucide-react'
+import { ArrowLeft, ClipboardCheck, User, Calendar, Package, Link2, ShoppingCart, AlertCircle } from 'lucide-react'
 import { GRNActions } from './grn-actions'
 import { formatDateTime, formatDate, formatTime } from '@/lib/date'
+import { grnStatusConfig } from '@/lib/status-config'
+import { GRNStatus } from '@/generated/prisma'
 
 interface PageProps {
   params: Promise<{ id: string }>
-}
-
-const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-  DRAFT: { 
-    color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-    icon: <FileText className="w-3.5 h-3.5" />,
-    label: 'ร่าง'
-  },
-  POSTED: { 
-    color: 'bg-[var(--status-success-light)] text-[var(--status-success)]',
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    label: 'บันทึกแล้ว'
-  },
-  CANCELLED: { 
-    color: 'bg-[var(--status-error-light)] text-[var(--status-error)]',
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    label: 'ยกเลิก'
-  },
 }
 
 async function getGRN(id: string) {
@@ -93,7 +77,7 @@ async function GRNDetail({ id }: { id: string }) {
     notFound()
   }
 
-  const statusInfo = statusConfig[grn.status] || statusConfig.DRAFT
+  const statusInfo = grnStatusConfig[grn.status as GRNStatus] || grnStatusConfig.DRAFT
 
   // Check permissions
   const userRole = session?.role || 'VIEWER'
@@ -103,6 +87,17 @@ async function GRNDetail({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Action Required Banner */}
+      {statusInfo.type === 'action_required' && statusInfo.actionHint && (
+        <div className="bg-[var(--status-warning-light)] border border-[var(--status-warning)]/30 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[var(--status-warning)] flex-shrink-0" />
+          <div>
+            <p className="font-medium text-[var(--status-warning)]">ต้องดำเนินการ</p>
+            <p className="text-sm text-[var(--text-secondary)]">{statusInfo.actionHint}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -114,7 +109,7 @@ async function GRNDetail({ id }: { id: string }) {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">{grn.grnNumber}</h1>
-              <Badge className={statusInfo.color}>
+              <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
                 {statusInfo.icon}
                 <span className="ml-1">{statusInfo.label}</span>
               </Badge>

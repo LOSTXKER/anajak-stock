@@ -64,15 +64,7 @@ const typeConfig: Record<MovementType, { label: string; icon: React.ElementType;
   },
 }
 
-const statusConfig: Record<DocStatus, { label: string; color: string }> = {
-  DRAFT: { label: 'ร่าง', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-  SUBMITTED: { label: 'รอดำเนินการ', color: 'bg-[var(--status-info-light)] text-[var(--status-info)]' },
-  APPROVED: { label: 'อนุมัติแล้ว', color: 'bg-[var(--accent-light)] text-[var(--accent-primary)]' },
-  REJECTED: { label: 'ปฏิเสธ', color: 'bg-[var(--status-error-light)] text-[var(--status-error)]' },
-  POSTED: { label: 'บันทึกแล้ว', color: 'bg-[var(--status-success-light)] text-[var(--status-success)]' },
-  CANCELLED: { label: 'ยกเลิก', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-  CLOSED: { label: 'ปิดแล้ว', color: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' },
-}
+import { movementStatusConfig } from '@/lib/status-config'
 
 async function MovementsContent({ searchParams }: PageProps) {
   const params = await searchParams
@@ -211,7 +203,7 @@ async function MovementsContent({ searchParams }: PageProps) {
               <TableBody>
                 {movements.map((movement) => {
                   const typeInfo = typeConfig[movement.type]
-                  const statusInfo = statusConfig[movement.status]
+                  const statusInfo = movementStatusConfig[movement.status]
                   const TypeIcon = typeInfo.icon
 
                   return (
@@ -231,8 +223,9 @@ async function MovementsContent({ searchParams }: PageProps) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={statusInfo.color}>
-                          {statusInfo.label}
+                        <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                          {statusInfo.icon}
+                          <span className="ml-1">{statusInfo.shortLabel || statusInfo.label}</span>
                         </Badge>
                       </TableCell>
                       <TableCell className="text-[var(--text-secondary)]">
