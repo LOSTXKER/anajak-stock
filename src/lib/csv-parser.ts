@@ -29,6 +29,7 @@ export interface ProductVariantImportRow {
   size?: string
   variantBarcode?: string
   variantCost?: number
+  variantSellingPrice?: number
 }
 
 export function parseCSV(csvContent: string): ProductImportRow[] {
@@ -178,6 +179,12 @@ export function parseCSVWithVariants(csvContent: string): ProductVariantImportRo
     variantbarcode: 'variantBarcode',
     'ต้นทุน variant': 'variantCost',
     variantcost: 'variantCost',
+    // Selling price
+    'ราคาขาย': 'variantSellingPrice',
+    'ราคาขาย variant': 'variantSellingPrice',
+    sellingprice: 'variantSellingPrice',
+    'selling price': 'variantSellingPrice',
+    variantsellingprice: 'variantSellingPrice',
   }
 
   const columnIndices: Partial<Record<keyof ProductVariantImportRow, number>> = {}
@@ -221,6 +228,7 @@ export function parseCSVWithVariants(csvContent: string): ProductVariantImportRo
       size: getValue('size'),
       variantBarcode: getValue('variantBarcode'),
       variantCost: getNumber('variantCost'),
+      variantSellingPrice: getNumber('variantSellingPrice'),
     }
 
     // Must have SKU and name
@@ -249,6 +257,7 @@ export interface GroupedProductImport {
     size?: string
     barcode?: string
     cost?: number
+    sellingPrice?: number
   }>
 }
 
@@ -279,6 +288,7 @@ export function groupVariantRows(rows: ProductVariantImportRow[]): GroupedProduc
         size: row.size,
         barcode: row.variantBarcode,
         cost: row.variantCost ?? row.standardCost,
+        sellingPrice: row.variantSellingPrice,
       })
     }
   }

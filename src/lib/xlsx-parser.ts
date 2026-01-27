@@ -155,6 +155,12 @@ export function parseXLSXWithVariants(rows: string[][]): ProductVariantImportRow
     variantbarcode: 'variantBarcode',
     'ต้นทุน variant': 'variantCost',
     variantcost: 'variantCost',
+    // Selling price
+    'ราคาขาย': 'variantSellingPrice',
+    'ราคาขาย variant': 'variantSellingPrice',
+    sellingprice: 'variantSellingPrice',
+    'selling price': 'variantSellingPrice',
+    variantsellingprice: 'variantSellingPrice',
   }
 
   const columnIndices: Partial<Record<keyof ProductVariantImportRow, number>> = {}
@@ -196,6 +202,7 @@ export function parseXLSXWithVariants(rows: string[][]): ProductVariantImportRow
       size: getValue('size'),
       variantBarcode: getValue('variantBarcode'),
       variantCost: getNumber('variantCost'),
+      variantSellingPrice: getNumber('variantSellingPrice'),
     }
 
     if (row.sku && row.name) {

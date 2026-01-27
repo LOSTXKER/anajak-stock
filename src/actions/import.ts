@@ -257,6 +257,7 @@ export async function importProductsWithVariants(
         sku: string
         barcode: string | null
         costPrice: number
+        sellingPrice: number
         active: boolean
         color?: string
         size?: string
@@ -266,6 +267,7 @@ export async function importProductsWithVariants(
         id: string
         barcode: string | null
         costPrice: number
+        sellingPrice?: number
       }> = []
 
       for (const productData of products) {
@@ -282,6 +284,7 @@ export async function importProductsWithVariants(
               id: existingVariant.id,
               barcode: newBarcode !== null ? newBarcode : existingVariant.barcode,
               costPrice: variantData.cost ?? Number(existingVariant.costPrice),
+              sellingPrice: variantData.sellingPrice,
             })
             result.variantsUpdated++
           } else {
@@ -290,6 +293,7 @@ export async function importProductsWithVariants(
               sku: variantData.variantSku,
               barcode: variantData.barcode?.trim() || null, // Empty string -> null
               costPrice: variantData.cost ?? 0,
+              sellingPrice: variantData.sellingPrice ?? 0,
               active: true,
               color: variantData.color,
               size: variantData.size,
@@ -303,7 +307,11 @@ export async function importProductsWithVariants(
       for (const v of variantsToUpdate) {
         await tx.productVariant.update({
           where: { id: v.id },
-          data: { barcode: v.barcode?.trim() || null, costPrice: v.costPrice },
+          data: { 
+            barcode: v.barcode?.trim() || null, 
+            costPrice: v.costPrice,
+            ...(v.sellingPrice !== undefined && { sellingPrice: v.sellingPrice }),
+          },
         })
       }
 
@@ -315,6 +323,7 @@ export async function importProductsWithVariants(
             sku: v.sku,
             barcode: v.barcode?.trim() || null, // Ensure empty strings become null
             costPrice: v.costPrice,
+            sellingPrice: v.sellingPrice,
             active: v.active,
           },
         })
