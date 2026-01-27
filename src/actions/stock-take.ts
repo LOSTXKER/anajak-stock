@@ -264,18 +264,21 @@ export async function updateStockTakeLines(stockTakeId: string, lines: Array<{ l
       return { success: false as const, error: 'ใบตรวจนับไม่ได้อยู่ในสถานะกำลังนับ' }
     }
 
-    // Update each line
-    for (const line of lines) {
-      const validated = UpdateLineSchema.parse(line)
-      
-      await prisma.stockTakeLine.update({
-        where: { id: validated.lineId },
-        data: {
-          countedQty: validated.countedQty,
-          note: validated.note,
-        },
-      })
-    }
+    // Validate all lines first
+    const validatedLines = lines.map(line => UpdateLineSchema.parse(line))
+
+    // Update all lines in parallel
+    await Promise.all(
+      validatedLines.map(line =>
+        prisma.stockTakeLine.update({
+          where: { id: line.lineId },
+          data: {
+            countedQty: line.countedQty,
+            note: line.note,
+          },
+        })
+      )
+    )
 
     revalidatePath(`/stock-take/${stockTakeId}`)
     return { success: true as const, data: undefined }
@@ -314,15 +317,18 @@ export async function completeStockTake(id: string) {
       return { success: false as const, error: `ยังมีรายการที่ยังไม่ได้นับ ${uncountedLines.length} รายการ` }
     }
 
-    // Calculate variance for each line
+    // Calculate variance for each line in parallel
     await prisma.$transaction(async (tx) => {
-      for (const line of stockTake.lines) {
-        const variance = Number(line.countedQty) - Number(line.systemQty)
-        await tx.stockTakeLine.update({
-          where: { id: line.id },
-          data: { variance },
+      // Update all variances in parallel
+      await Promise.all(
+        stockTake.lines.map(line => {
+          const variance = Number(line.countedQty) - Number(line.systemQty)
+          return tx.stockTakeLine.update({
+            where: { id: line.id },
+            data: { variance },
+          })
         })
-      }
+      )
 
       await tx.stockTake.update({
         where: { id },
@@ -419,21 +425,23 @@ export async function approveStockTake(id: string) {
           },
         })
 
-        // Update stock balances
-        for (const line of linesWithVariance) {
-          await tx.stockBalance.update({
-            where: {
-              productId_variantId_locationId: {
-                productId: line.productId,
-                variantId: line.variantId ?? '',
-                locationId: line.locationId,
+        // Update stock balances in parallel
+        await Promise.all(
+          linesWithVariance.map(line =>
+            tx.stockBalance.update({
+              where: {
+                productId_variantId_locationId: {
+                  productId: line.productId,
+                  variantId: line.variantId ?? '',
+                  locationId: line.locationId,
+                },
               },
-            },
-            data: {
-              qtyOnHand: line.countedQty!,
-            },
-          })
-        }
+              data: {
+                qtyOnHand: line.countedQty!,
+              },
+            })
+          )
+        )
 
         // Update stock take status
         await tx.stockTake.update({

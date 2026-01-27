@@ -62,32 +62,44 @@ export async function createProductWithVariants(
         },
       })
 
-      // Create variants
-      for (const variant of validated.variants) {
-        const createdVariant = await tx.productVariant.create({
-          data: {
-            productId: newProduct.id,
-            sku: variant.sku,
-            barcode: variant.barcode || null,
-            name: variant.name || null,
-            costPrice: variant.costPrice,
-            sellingPrice: variant.sellingPrice,
-            reorderPoint: variant.reorderPoint,
-            minQty: variant.minQty,
-            maxQty: variant.maxQty,
-            lowStockAlert: variant.lowStockAlert,
-          },
-        })
+      // Create all variants in batch
+      await tx.productVariant.createMany({
+        data: validated.variants.map(variant => ({
+          productId: newProduct.id,
+          sku: variant.sku,
+          barcode: variant.barcode || null,
+          name: variant.name || null,
+          costPrice: variant.costPrice,
+          sellingPrice: variant.sellingPrice,
+          reorderPoint: variant.reorderPoint,
+          minQty: variant.minQty,
+          maxQty: variant.maxQty,
+          lowStockAlert: variant.lowStockAlert,
+        })),
+      })
 
-        // Create variant option values
-        if (variant.optionValueIds.length > 0) {
-          await tx.variantOptionValue.createMany({
-            data: variant.optionValueIds.map(optionValueId => ({
-              variantId: createdVariant.id,
-              optionValueId,
-            })),
-          })
+      // Fetch created variants to get their IDs
+      const createdVariants = await tx.productVariant.findMany({
+        where: { productId: newProduct.id },
+        select: { id: true, sku: true },
+      })
+      const variantSkuToId = new Map(createdVariants.map(v => [v.sku, v.id]))
+
+      // Create all variant option values in batch
+      const allOptionValues: Array<{ variantId: string; optionValueId: string }> = []
+      for (const variant of validated.variants) {
+        const variantId = variantSkuToId.get(variant.sku)
+        if (variantId && variant.optionValueIds.length > 0) {
+          for (const optionValueId of variant.optionValueIds) {
+            allOptionValues.push({ variantId, optionValueId })
+          }
         }
+      }
+      
+      if (allOptionValues.length > 0) {
+        await tx.variantOptionValue.createMany({
+          data: allOptionValues,
+        })
       }
 
       return newProduct
@@ -150,50 +162,115 @@ export async function createProductWithInlineVariants(
       return { success: false, error: `SKU variant ซ้ำ: ${existingVariants.map(v => v.sku).join(', ')}` }
     }
 
-    // Create product with variants in a transaction
-    const product = await prisma.$transaction(async (tx) => {
-      // Step 1: Create or get OptionTypes and OptionValues
-      const optionTypeMap: Record<string, string> = {} // name -> id
-      const optionValueMap: Record<string, Record<string, string>> = {} // typeName -> { value -> id }
+    // === PHASE 1: Pre-load and create option types/values before transaction ===
+    const optionTypeMap: Record<string, string> = {} // name -> id
+    const optionValueMap: Record<string, Record<string, string>> = {} // typeName -> { value -> id }
 
-      for (const group of validated.optionGroups) {
-        // Find or create OptionType
-        let optionType = await tx.optionType.findFirst({
-          where: { name: { equals: group.name, mode: 'insensitive' } },
-        })
-        
-        if (!optionType) {
-          optionType = await tx.optionType.create({
-            data: { name: group.name },
-          })
-        }
+    // Collect all option type names and values
+    const optionTypeNames = validated.optionGroups.map(g => g.name)
+    const optionValuesByType = new Map<string, string[]>()
+    for (const group of validated.optionGroups) {
+      optionValuesByType.set(group.name.toLowerCase(), group.values)
+    }
 
-        optionTypeMap[group.name] = optionType.id
-        optionValueMap[group.name] = {}
+    // Batch load existing option types
+    const existingOptionTypes = await prisma.optionType.findMany({
+      where: { name: { in: optionTypeNames, mode: 'insensitive' } },
+    })
+    for (const ot of existingOptionTypes) {
+      optionTypeMap[ot.name] = ot.id
+      // Also map by original name from input (case-insensitive match)
+      const matchingGroup = validated.optionGroups.find(
+        g => g.name.toLowerCase() === ot.name.toLowerCase()
+      )
+      if (matchingGroup) {
+        optionTypeMap[matchingGroup.name] = ot.id
+      }
+    }
 
-        // Find or create OptionValues
-        for (const value of group.values) {
-          let optionValue = await tx.optionValue.findFirst({
-            where: { 
-              optionTypeId: optionType.id,
-              value: { equals: value, mode: 'insensitive' },
-            },
-          })
-
-          if (!optionValue) {
-            optionValue = await tx.optionValue.create({
-              data: {
-                optionTypeId: optionType.id,
-                value: value,
-              },
-            })
-          }
-
-          optionValueMap[group.name][value] = optionValue.id
+    // Create missing option types
+    const existingTypeNamesLower = existingOptionTypes.map(t => t.name.toLowerCase())
+    const missingTypeNames = optionTypeNames.filter(n => !existingTypeNamesLower.includes(n.toLowerCase()))
+    if (missingTypeNames.length > 0) {
+      await prisma.optionType.createMany({
+        data: missingTypeNames.map(name => ({ name })),
+        skipDuplicates: true,
+      })
+      const newTypes = await prisma.optionType.findMany({
+        where: { name: { in: missingTypeNames, mode: 'insensitive' } },
+      })
+      for (const ot of newTypes) {
+        optionTypeMap[ot.name] = ot.id
+        const matchingGroup = validated.optionGroups.find(
+          g => g.name.toLowerCase() === ot.name.toLowerCase()
+        )
+        if (matchingGroup) {
+          optionTypeMap[matchingGroup.name] = ot.id
         }
       }
+    }
 
-      // Step 2: Create parent product
+    // Initialize optionValueMap for all groups
+    for (const group of validated.optionGroups) {
+      optionValueMap[group.name] = {}
+    }
+
+    // Batch load existing option values for all types
+    const allTypeIds = [...new Set(Object.values(optionTypeMap))]
+    const existingOptionValues = await prisma.optionValue.findMany({
+      where: { optionTypeId: { in: allTypeIds } },
+      include: { optionType: true },
+    })
+    for (const ov of existingOptionValues) {
+      const groupName = validated.optionGroups.find(
+        g => optionTypeMap[g.name] === ov.optionTypeId
+      )?.name
+      if (groupName && optionValueMap[groupName]) {
+        optionValueMap[groupName][ov.value] = ov.id
+        // Also store lowercase key for case-insensitive lookup
+        optionValueMap[groupName][ov.value.toLowerCase()] = ov.id
+      }
+    }
+
+    // Create missing option values
+    const missingOptionValues: Array<{ optionTypeId: string; value: string; groupName: string }> = []
+    for (const group of validated.optionGroups) {
+      const typeId = optionTypeMap[group.name]
+      if (!typeId) continue
+      for (const value of group.values) {
+        if (!optionValueMap[group.name][value] && !optionValueMap[group.name][value.toLowerCase()]) {
+          missingOptionValues.push({ optionTypeId: typeId, value, groupName: group.name })
+        }
+      }
+    }
+
+    if (missingOptionValues.length > 0) {
+      await prisma.optionValue.createMany({
+        data: missingOptionValues.map(({ optionTypeId, value }) => ({ optionTypeId, value })),
+        skipDuplicates: true,
+      })
+      const newValues = await prisma.optionValue.findMany({
+        where: {
+          OR: missingOptionValues.map(mv => ({
+            optionTypeId: mv.optionTypeId,
+            value: { equals: mv.value, mode: 'insensitive' as const },
+          })),
+        },
+      })
+      for (const ov of newValues) {
+        const mv = missingOptionValues.find(
+          m => m.optionTypeId === ov.optionTypeId && m.value.toLowerCase() === ov.value.toLowerCase()
+        )
+        if (mv && optionValueMap[mv.groupName]) {
+          optionValueMap[mv.groupName][ov.value] = ov.id
+          optionValueMap[mv.groupName][ov.value.toLowerCase()] = ov.id
+        }
+      }
+    }
+
+    // === PHASE 2: Create product and variants in transaction ===
+    const product = await prisma.$transaction(async (tx) => {
+      // Create parent product
       const newProduct = await tx.product.create({
         data: {
           sku: validated.sku,
@@ -209,51 +286,53 @@ export async function createProductWithInlineVariants(
         },
       })
 
-      // Step 3: Create variants with their option values
+      // Create all variants in batch
+      await tx.productVariant.createMany({
+        data: validated.variants.map(variant => ({
+          productId: newProduct.id,
+          sku: variant.sku,
+          barcode: variant.barcode || null,
+          name: variant.options.map(o => o.value).join(', '),
+          costPrice: variant.costPrice,
+          sellingPrice: variant.sellingPrice,
+          reorderPoint: variant.reorderPoint,
+          minQty: variant.minQty,
+          maxQty: variant.maxQty,
+          lowStockAlert: variant.lowStockAlert,
+        })),
+      })
+
+      // Fetch created variants to get their IDs
+      const createdVariants = await tx.productVariant.findMany({
+        where: { productId: newProduct.id },
+        select: { id: true, sku: true, costPrice: true },
+      })
+      const variantSkuToId = new Map(createdVariants.map(v => [v.sku, v.id]))
+
+      // Create all variant option values in batch
+      const allOptionValueLinks: Array<{ variantId: string; optionValueId: string }> = []
       for (const variant of validated.variants) {
-        // Generate variant name from options
-        const variantName = variant.options.map(o => o.value).join(', ')
-
-        const createdVariant = await tx.productVariant.create({
-          data: {
-            productId: newProduct.id,
-            sku: variant.sku,
-            barcode: variant.barcode || null,
-            name: variantName,
-            costPrice: variant.costPrice,
-            sellingPrice: variant.sellingPrice,
-            reorderPoint: variant.reorderPoint,
-            minQty: variant.minQty,
-            maxQty: variant.maxQty,
-            lowStockAlert: variant.lowStockAlert,
-          },
-        })
-
-        // Create ProductVariantOptionValue entries
+        const variantId = variantSkuToId.get(variant.sku)
+        if (!variantId) continue
+        
         for (const opt of variant.options) {
-          const optionValueId = optionValueMap[opt.groupName]?.[opt.value]
-
+          const optionValueId = optionValueMap[opt.groupName]?.[opt.value] 
+            || optionValueMap[opt.groupName]?.[opt.value.toLowerCase()]
           if (optionValueId) {
-            await tx.variantOptionValue.create({
-              data: {
-                variantId: createdVariant.id,
-                optionValueId: optionValueId,
-              },
-            })
+            allOptionValueLinks.push({ variantId, optionValueId })
           }
         }
       }
 
-      // Step 4: Create initial stock if provided
+      if (allOptionValueLinks.length > 0) {
+        await tx.variantOptionValue.createMany({
+          data: allOptionValueLinks,
+        })
+      }
+
+      // Create initial stock if provided
       if (validated.initialStock && validated.initialStock.items.length > 0) {
         const { locationId, note, items } = validated.initialStock
-
-        // Get created variants to map SKU -> ID
-        const createdVariants = await tx.productVariant.findMany({
-          where: { productId: newProduct.id },
-          select: { id: true, sku: true, costPrice: true },
-        })
-
         const skuToVariant = new Map(createdVariants.map(v => [v.sku, v]))
 
         // Generate movement number
@@ -298,7 +377,9 @@ export async function createProductWithInlineVariants(
             },
           })
 
-          // Update stock balances for each variant
+          // Batch create stock balances
+          // Note: Using sequential upsert here because Prisma doesn't support batch upsert
+          // and we need to handle both create and update cases with increment
           for (const line of movementLines) {
             await tx.stockBalance.upsert({
               where: {

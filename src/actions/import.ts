@@ -37,7 +37,7 @@ interface StockImportResult {
 }
 
 /**
- * Import products with variants (Color/Size)
+ * Import products with variants (Color/Size) - Optimized with batching
  */
 export async function importProductsWithVariants(
   products: GroupedProductImport[]
@@ -57,221 +57,301 @@ export async function importProductsWithVariants(
     errors: [],
   }
 
-  // Get or create categories
-  const categoryMap = new Map<string, string>()
-  const uniqueCategories = [...new Set(products.map((p) => p.categoryName).filter(Boolean))]
-
-  for (const catName of uniqueCategories) {
-    if (!catName) continue
-    let category = await prisma.category.findFirst({
-      where: { name: { equals: catName, mode: 'insensitive' } },
+  try {
+    // === PHASE 1: Batch load all reference data ===
+    
+    // Get all categories at once
+    const uniqueCategories = [...new Set(products.map((p) => p.categoryName).filter(Boolean))] as string[]
+    const existingCategories = await prisma.category.findMany({
+      where: { name: { in: uniqueCategories, mode: 'insensitive' } },
     })
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: catName },
+    const categoryMap = new Map<string, string>()
+    for (const cat of existingCategories) {
+      categoryMap.set(cat.name.toLowerCase(), cat.id)
+    }
+    
+    // Create missing categories in batch
+    const missingCategories = uniqueCategories.filter(c => !categoryMap.has(c.toLowerCase()))
+    if (missingCategories.length > 0) {
+      await prisma.category.createMany({
+        data: missingCategories.map(name => ({ name })),
+        skipDuplicates: true,
       })
-    }
-    categoryMap.set(catName.toLowerCase(), category.id)
-  }
-
-  // Get units
-  const unitMap = new Map<string, string>()
-  const units = await prisma.unitOfMeasure.findMany()
-  for (const unit of units) {
-    unitMap.set(unit.code.toLowerCase(), unit.id)
-    unitMap.set(unit.name.toLowerCase(), unit.id)
-  }
-
-  // Get or create option types for Color and Size
-  let colorOptionType = await prisma.optionType.findFirst({
-    where: { name: { equals: 'สี', mode: 'insensitive' } },
-  })
-  if (!colorOptionType) {
-    colorOptionType = await prisma.optionType.findFirst({
-      where: { name: { equals: 'Color', mode: 'insensitive' } },
-    })
-  }
-  if (!colorOptionType) {
-    colorOptionType = await prisma.optionType.create({
-      data: { name: 'สี', displayOrder: 1 },
-    })
-  }
-
-  let sizeOptionType = await prisma.optionType.findFirst({
-    where: { name: { equals: 'ไซส์', mode: 'insensitive' } },
-  })
-  if (!sizeOptionType) {
-    sizeOptionType = await prisma.optionType.findFirst({
-      where: { name: { equals: 'Size', mode: 'insensitive' } },
-    })
-  }
-  if (!sizeOptionType) {
-    sizeOptionType = await prisma.optionType.create({
-      data: { name: 'ไซส์', displayOrder: 2 },
-    })
-  }
-
-  // Cache for option values
-  const colorValueMap = new Map<string, string>()
-  const sizeValueMap = new Map<string, string>()
-
-  async function getOrCreateOptionValue(
-    optionTypeId: string,
-    value: string,
-    cache: Map<string, string>
-  ): Promise<string> {
-    const key = value.toLowerCase()
-    if (cache.has(key)) {
-      return cache.get(key)!
-    }
-
-    let optionValue = await prisma.optionValue.findFirst({
-      where: {
-        optionTypeId,
-        value: { equals: value, mode: 'insensitive' },
-      },
-    })
-
-    if (!optionValue) {
-      optionValue = await prisma.optionValue.create({
-        data: {
-          optionTypeId,
-          value,
-        },
+      // Re-fetch to get IDs
+      const newCategories = await prisma.category.findMany({
+        where: { name: { in: missingCategories, mode: 'insensitive' } },
       })
-    }
-
-    cache.set(key, optionValue.id)
-    return optionValue.id
-  }
-
-  // Process each product
-  for (let i = 0; i < products.length; i++) {
-    const productData = products[i]
-
-    try {
-      if (!productData.sku || !productData.name) {
-        result.errors.push(`Product ${i + 1}: SKU และชื่อสินค้าต้องไม่ว่าง`)
-        continue
+      for (const cat of newCategories) {
+        categoryMap.set(cat.name.toLowerCase(), cat.id)
       }
+    }
 
-      const categoryId = productData.categoryName
-        ? categoryMap.get(productData.categoryName.toLowerCase()) || null
-        : null
+    // Get all units at once
+    const unitMap = new Map<string, string>()
+    const units = await prisma.unitOfMeasure.findMany()
+    for (const unit of units) {
+      unitMap.set(unit.code.toLowerCase(), unit.id)
+      unitMap.set(unit.name.toLowerCase(), unit.id)
+    }
 
-      const unitId = productData.unitCode
-        ? unitMap.get(productData.unitCode.toLowerCase()) || null
-        : null
+    // Get or create option types for Color and Size
+    let [colorOptionType, sizeOptionType] = await Promise.all([
+      prisma.optionType.findFirst({
+        where: { OR: [
+          { name: { equals: 'สี', mode: 'insensitive' } },
+          { name: { equals: 'Color', mode: 'insensitive' } },
+        ]},
+      }),
+      prisma.optionType.findFirst({
+        where: { OR: [
+          { name: { equals: 'ไซส์', mode: 'insensitive' } },
+          { name: { equals: 'Size', mode: 'insensitive' } },
+        ]},
+      }),
+    ])
 
-      // Check if product exists
-      let product = await prisma.product.findUnique({
-        where: { sku: productData.sku },
+    if (!colorOptionType) {
+      colorOptionType = await prisma.optionType.create({
+        data: { name: 'สี', displayOrder: 1 },
       })
+    }
+    if (!sizeOptionType) {
+      sizeOptionType = await prisma.optionType.create({
+        data: { name: 'ไซส์', displayOrder: 2 },
+      })
+    }
 
-      if (product) {
-        // Update product
-        product = await prisma.product.update({
-          where: { id: product.id },
-          data: {
-            name: productData.name,
-            description: productData.description,
-            categoryId,
-            unitId,
-            reorderPoint: productData.reorderPoint ?? product.reorderPoint,
-            standardCost: productData.standardCost ?? product.standardCost,
-            hasVariants: productData.variants.length > 0,
-          },
-        })
-        result.productsUpdated++
-      } else {
-        // Create product
-        product = await prisma.product.create({
-          data: {
-            sku: productData.sku,
-            name: productData.name,
-            description: productData.description,
-            categoryId,
-            unitId,
-            reorderPoint: productData.reorderPoint ?? 0,
-            standardCost: productData.standardCost ?? 0,
-            lastCost: productData.standardCost ?? 0,
-            hasVariants: productData.variants.length > 0,
-          },
-        })
-        result.productsCreated++
+    // === PHASE 2: Batch load existing products and variants ===
+    
+    const productSkus = products.map(p => p.sku)
+    const allVariantSkus = products.flatMap(p => p.variants.map(v => v.variantSku))
+    
+    const [existingProducts, existingVariants] = await Promise.all([
+      prisma.product.findMany({
+        where: { sku: { in: productSkus } },
+      }),
+      prisma.productVariant.findMany({
+        where: { sku: { in: allVariantSkus } },
+      }),
+    ])
+    
+    const existingProductMap = new Map(existingProducts.map(p => [p.sku, p]))
+    const existingVariantMap = new Map(existingVariants.map(v => [v.sku, v]))
+
+    // === PHASE 3: Batch load/create option values ===
+    
+    const uniqueColors = [...new Set(products.flatMap(p => p.variants.map(v => v.color).filter(Boolean)))] as string[]
+    const uniqueSizes = [...new Set(products.flatMap(p => p.variants.map(v => v.size).filter(Boolean)))] as string[]
+    
+    // Load existing option values
+    const [existingColorValues, existingSizeValues] = await Promise.all([
+      prisma.optionValue.findMany({
+        where: { optionTypeId: colorOptionType.id, value: { in: uniqueColors, mode: 'insensitive' } },
+      }),
+      prisma.optionValue.findMany({
+        where: { optionTypeId: sizeOptionType.id, value: { in: uniqueSizes, mode: 'insensitive' } },
+      }),
+    ])
+    
+    const colorValueMap = new Map<string, string>()
+    const sizeValueMap = new Map<string, string>()
+    
+    for (const ov of existingColorValues) {
+      colorValueMap.set(ov.value.toLowerCase(), ov.id)
+    }
+    for (const ov of existingSizeValues) {
+      sizeValueMap.set(ov.value.toLowerCase(), ov.id)
+    }
+    
+    // Create missing option values
+    const missingColors = uniqueColors.filter(c => !colorValueMap.has(c.toLowerCase()))
+    const missingSizes = uniqueSizes.filter(s => !sizeValueMap.has(s.toLowerCase()))
+    
+    if (missingColors.length > 0) {
+      await prisma.optionValue.createMany({
+        data: missingColors.map(value => ({ optionTypeId: colorOptionType!.id, value })),
+        skipDuplicates: true,
+      })
+      const newColorValues = await prisma.optionValue.findMany({
+        where: { optionTypeId: colorOptionType.id, value: { in: missingColors, mode: 'insensitive' } },
+      })
+      for (const ov of newColorValues) {
+        colorValueMap.set(ov.value.toLowerCase(), ov.id)
       }
+    }
+    
+    if (missingSizes.length > 0) {
+      await prisma.optionValue.createMany({
+        data: missingSizes.map(value => ({ optionTypeId: sizeOptionType!.id, value })),
+        skipDuplicates: true,
+      })
+      const newSizeValues = await prisma.optionValue.findMany({
+        where: { optionTypeId: sizeOptionType.id, value: { in: missingSizes, mode: 'insensitive' } },
+      })
+      for (const ov of newSizeValues) {
+        sizeValueMap.set(ov.value.toLowerCase(), ov.id)
+      }
+    }
 
-      // Process variants
-      for (const variantData of productData.variants) {
-        try {
-          const variantSku = variantData.variantSku
+    // === PHASE 4: Process products and variants in transaction ===
+    
+    await prisma.$transaction(async (tx) => {
+      // Track created products for variant creation
+      const createdProductMap = new Map<string, string>()
+      
+      for (const productData of products) {
+        if (!productData.sku || !productData.name) {
+          result.errors.push(`Product: SKU และชื่อสินค้าต้องไม่ว่าง`)
+          continue
+        }
 
-          // Check if variant exists
-          let variant = await prisma.productVariant.findUnique({
-            where: { sku: variantSku },
+        const categoryId = productData.categoryName
+          ? categoryMap.get(productData.categoryName.toLowerCase()) || null
+          : null
+
+        const unitId = productData.unitCode
+          ? unitMap.get(productData.unitCode.toLowerCase()) || null
+          : null
+
+        const existingProduct = existingProductMap.get(productData.sku)
+
+        if (existingProduct) {
+          // Update product
+          await tx.product.update({
+            where: { id: existingProduct.id },
+            data: {
+              name: productData.name,
+              description: productData.description,
+              categoryId,
+              unitId,
+              reorderPoint: productData.reorderPoint ?? existingProduct.reorderPoint,
+              standardCost: productData.standardCost ?? existingProduct.standardCost,
+              hasVariants: productData.variants.length > 0,
+            },
           })
+          createdProductMap.set(productData.sku, existingProduct.id)
+          result.productsUpdated++
+        } else {
+          // Create product
+          const newProduct = await tx.product.create({
+            data: {
+              sku: productData.sku,
+              name: productData.name,
+              description: productData.description,
+              categoryId,
+              unitId,
+              reorderPoint: productData.reorderPoint ?? 0,
+              standardCost: productData.standardCost ?? 0,
+              lastCost: productData.standardCost ?? 0,
+              hasVariants: productData.variants.length > 0,
+            },
+          })
+          createdProductMap.set(productData.sku, newProduct.id)
+          result.productsCreated++
+        }
+      }
 
-          if (variant) {
-            // Update variant
-            await prisma.productVariant.update({
-              where: { id: variant.id },
-              data: {
-                barcode: variantData.barcode || variant.barcode,
-                costPrice: variantData.cost ?? variant.costPrice,
-              },
+      // Process all variants
+      const variantsToCreate: Array<{
+        productId: string
+        sku: string
+        barcode: string | null
+        costPrice: number
+        active: boolean
+        color?: string
+        size?: string
+      }> = []
+      
+      const variantsToUpdate: Array<{
+        id: string
+        barcode: string | null
+        costPrice: number
+      }> = []
+
+      for (const productData of products) {
+        const productId = createdProductMap.get(productData.sku)
+        if (!productId) continue
+
+        for (const variantData of productData.variants) {
+          const existingVariant = existingVariantMap.get(variantData.variantSku)
+          
+          if (existingVariant) {
+            // Use new barcode if provided and not empty, otherwise keep existing
+            const newBarcode = variantData.barcode?.trim() || null
+            variantsToUpdate.push({
+              id: existingVariant.id,
+              barcode: newBarcode !== null ? newBarcode : existingVariant.barcode,
+              costPrice: variantData.cost ?? Number(existingVariant.costPrice),
             })
             result.variantsUpdated++
           } else {
-            // Create variant
-            variant = await prisma.productVariant.create({
-              data: {
-                productId: product.id,
-                sku: variantSku,
-                barcode: variantData.barcode,
-                costPrice: variantData.cost ?? 0,
-                active: true,
-              },
+            variantsToCreate.push({
+              productId,
+              sku: variantData.variantSku,
+              barcode: variantData.barcode?.trim() || null, // Empty string -> null
+              costPrice: variantData.cost ?? 0,
+              active: true,
+              color: variantData.color,
+              size: variantData.size,
             })
             result.variantsCreated++
-
-            // Create option value associations
-            if (variantData.color) {
-              const colorValueId = await getOrCreateOptionValue(
-                colorOptionType.id,
-                variantData.color,
-                colorValueMap
-              )
-              await prisma.variantOptionValue.create({
-                data: {
-                  variantId: variant.id,
-                  optionValueId: colorValueId,
-                },
-              })
-            }
-
-            if (variantData.size) {
-              const sizeValueId = await getOrCreateOptionValue(
-                sizeOptionType.id,
-                variantData.size,
-                sizeValueMap
-              )
-              await prisma.variantOptionValue.create({
-                data: {
-                  variantId: variant.id,
-                  optionValueId: sizeValueId,
-                },
-              })
-            }
           }
-        } catch (variantError) {
-          const message = variantError instanceof Error ? variantError.message : 'Unknown error'
-          result.errors.push(`Variant ${variantData.variantSku}: ${message}`)
         }
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      result.errors.push(`Product ${productData.sku}: ${message}`)
-    }
+
+      // Batch update existing variants
+      for (const v of variantsToUpdate) {
+        await tx.productVariant.update({
+          where: { id: v.id },
+          data: { barcode: v.barcode?.trim() || null, costPrice: v.costPrice },
+        })
+      }
+
+      // Create new variants and their option associations
+      for (const v of variantsToCreate) {
+        const newVariant = await tx.productVariant.create({
+          data: {
+            productId: v.productId,
+            sku: v.sku,
+            barcode: v.barcode?.trim() || null, // Ensure empty strings become null
+            costPrice: v.costPrice,
+            active: v.active,
+          },
+        })
+
+        // Create option value associations in batch
+        const optionValueAssocs: Array<{ variantId: string; optionValueId: string }> = []
+        
+        if (v.color) {
+          const colorValueId = colorValueMap.get(v.color.toLowerCase())
+          if (colorValueId) {
+            optionValueAssocs.push({ variantId: newVariant.id, optionValueId: colorValueId })
+          }
+        }
+        
+        if (v.size) {
+          const sizeValueId = sizeValueMap.get(v.size.toLowerCase())
+          if (sizeValueId) {
+            optionValueAssocs.push({ variantId: newVariant.id, optionValueId: sizeValueId })
+          }
+        }
+
+        if (optionValueAssocs.length > 0) {
+          await tx.variantOptionValue.createMany({
+            data: optionValueAssocs,
+            skipDuplicates: true,
+          })
+        }
+      }
+    }, {
+      timeout: 120000, // 2 minutes for large imports
+      maxWait: 10000,
+    })
+
+  } catch (error) {
+    console.error('Error importing products with variants:', error)
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, error: `เกิดข้อผิดพลาด: ${message}` }
   }
 
   // Audit log
@@ -315,95 +395,121 @@ export async function importProducts(rows: ProductImportRow[]): Promise<ActionRe
     errors: [],
   }
 
-  // Get or create categories
-  const categoryMap = new Map<string, string>()
-  const uniqueCategories = [...new Set(rows.map((r) => r.categoryName).filter(Boolean))]
-
-  for (const catName of uniqueCategories) {
-    if (!catName) continue
-    let category = await prisma.category.findFirst({
-      where: { name: { equals: catName, mode: 'insensitive' } },
+  try {
+    // === PHASE 1: Batch load all reference data ===
+    
+    // Get all categories at once
+    const uniqueCategories = [...new Set(rows.map((r) => r.categoryName).filter(Boolean))] as string[]
+    const existingCategories = await prisma.category.findMany({
+      where: { name: { in: uniqueCategories, mode: 'insensitive' } },
     })
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: catName },
-      })
+    const categoryMap = new Map<string, string>()
+    for (const cat of existingCategories) {
+      categoryMap.set(cat.name.toLowerCase(), cat.id)
     }
-    categoryMap.set(catName.toLowerCase(), category.id)
-  }
-
-  // Get units
-  const unitMap = new Map<string, string>()
-  const units = await prisma.unitOfMeasure.findMany()
-  for (const unit of units) {
-    unitMap.set(unit.code.toLowerCase(), unit.id)
-    unitMap.set(unit.name.toLowerCase(), unit.id)
-  }
-
-  // Process each row
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]
-    const rowNum = i + 2 // Account for header row
-
-    try {
-      if (!row.sku || !row.name) {
-        result.errors.push(`Row ${rowNum}: SKU และชื่อสินค้าต้องไม่ว่าง`)
-        continue
-      }
-
-      const categoryId = row.categoryName
-        ? categoryMap.get(row.categoryName.toLowerCase())
-        : null
-
-      const unitId = row.unitCode
-        ? unitMap.get(row.unitCode.toLowerCase())
-        : null
-
-      // Check if product exists
-      const existingProduct = await prisma.product.findUnique({
-        where: { sku: row.sku },
+    
+    // Create missing categories in batch
+    const missingCategories = uniqueCategories.filter(c => !categoryMap.has(c.toLowerCase()))
+    if (missingCategories.length > 0) {
+      await prisma.category.createMany({
+        data: missingCategories.map(name => ({ name })),
+        skipDuplicates: true,
       })
-
-      if (existingProduct) {
-        // Update
-        await prisma.product.update({
-          where: { id: existingProduct.id },
-          data: {
-            name: row.name,
-            description: row.description,
-            barcode: row.barcode || null,
-            categoryId,
-            unitId,
-            reorderPoint: row.reorderPoint ?? existingProduct.reorderPoint,
-            minQty: row.minQty ?? existingProduct.minQty,
-            maxQty: row.maxQty ?? existingProduct.maxQty,
-            standardCost: row.standardCost ?? existingProduct.standardCost,
-          },
-        })
-        result.updated++
-      } else {
-        // Create
-        await prisma.product.create({
-          data: {
-            sku: row.sku,
-            name: row.name,
-            description: row.description,
-            barcode: row.barcode || null,
-            categoryId,
-            unitId,
-            reorderPoint: row.reorderPoint ?? 0,
-            minQty: row.minQty ?? 0,
-            maxQty: row.maxQty ?? 0,
-            standardCost: row.standardCost ?? 0,
-            lastCost: row.standardCost ?? 0,
-          },
-        })
-        result.created++
+      const newCategories = await prisma.category.findMany({
+        where: { name: { in: missingCategories, mode: 'insensitive' } },
+      })
+      for (const cat of newCategories) {
+        categoryMap.set(cat.name.toLowerCase(), cat.id)
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      result.errors.push(`Row ${rowNum} (${row.sku}): ${message}`)
     }
+
+    // Get all units at once
+    const unitMap = new Map<string, string>()
+    const units = await prisma.unitOfMeasure.findMany()
+    for (const unit of units) {
+      unitMap.set(unit.code.toLowerCase(), unit.id)
+      unitMap.set(unit.name.toLowerCase(), unit.id)
+    }
+
+    // === PHASE 2: Batch load existing products ===
+    
+    const skus = rows.map(r => r.sku).filter(Boolean) as string[]
+    const existingProducts = await prisma.product.findMany({
+      where: { sku: { in: skus } },
+    })
+    const existingProductMap = new Map(existingProducts.map(p => [p.sku, p]))
+
+    // === PHASE 3: Process products in transaction ===
+    
+    await prisma.$transaction(async (tx) => {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        const rowNum = i + 2
+
+        if (!row.sku || !row.name) {
+          result.errors.push(`Row ${rowNum}: SKU และชื่อสินค้าต้องไม่ว่าง`)
+          continue
+        }
+
+        const categoryId = row.categoryName
+          ? categoryMap.get(row.categoryName.toLowerCase()) || null
+          : null
+
+        const unitId = row.unitCode
+          ? unitMap.get(row.unitCode.toLowerCase()) || null
+          : null
+
+        const existingProduct = existingProductMap.get(row.sku)
+
+        try {
+          if (existingProduct) {
+            await tx.product.update({
+              where: { id: existingProduct.id },
+              data: {
+                name: row.name,
+                description: row.description,
+                barcode: row.barcode || null,
+                categoryId,
+                unitId,
+                reorderPoint: row.reorderPoint ?? existingProduct.reorderPoint,
+                minQty: row.minQty ?? existingProduct.minQty,
+                maxQty: row.maxQty ?? existingProduct.maxQty,
+                standardCost: row.standardCost ?? existingProduct.standardCost,
+              },
+            })
+            result.updated++
+          } else {
+            await tx.product.create({
+              data: {
+                sku: row.sku,
+                name: row.name,
+                description: row.description,
+                barcode: row.barcode || null,
+                categoryId,
+                unitId,
+                reorderPoint: row.reorderPoint ?? 0,
+                minQty: row.minQty ?? 0,
+                maxQty: row.maxQty ?? 0,
+                standardCost: row.standardCost ?? 0,
+                lastCost: row.standardCost ?? 0,
+              },
+            })
+            result.created++
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error'
+          result.errors.push(`Row ${rowNum} (${row.sku}): ${message}`)
+        }
+      }
+    }, {
+      timeout: 60000, // 1 minute for large imports
+      maxWait: 10000,
+    })
+
+  } catch (error) {
+    console.error('Error importing products:', error)
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, error: `เกิดข้อผิดพลาด: ${message}` }
   }
 
   // Audit log

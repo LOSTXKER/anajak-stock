@@ -209,36 +209,107 @@ export async function createMovement(data: CreateMovementInput): Promise<ActionR
   try {
     const docNumber = await generateDocNumber('MOVEMENT')
 
-    // Create new lots first (for RECEIVE type with newLotNumber)
+    // Create new lots first (for RECEIVE type with newLotNumber) - Optimized with batching
     const lotIdMap = new Map<number, string>() // lineIndex -> lotId
     
     if (data.type === 'RECEIVE') {
-      for (let i = 0; i < data.lines.length; i++) {
-        const line = data.lines[i]
-        if (line.newLotNumber && !line.lotId) {
-          // Check if lot already exists
-          const existingLot = await prisma.lot.findFirst({
-            where: {
-              lotNumber: line.newLotNumber,
+      // Collect all lines that need lot handling
+      const linesWithNewLot = data.lines
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => line.newLotNumber && !line.lotId)
+
+      if (linesWithNewLot.length > 0) {
+        // Batch load existing lots
+        const lotKeys = linesWithNewLot.map(({ line }) => ({
+          lotNumber: line.newLotNumber!,
+          productId: line.productId,
+        }))
+
+        const existingLots = await prisma.lot.findMany({
+          where: {
+            OR: lotKeys.map(k => ({
+              lotNumber: k.lotNumber,
+              productId: k.productId,
+            })),
+          },
+        })
+
+        // Create a map for quick lookup
+        const existingLotMap = new Map(
+          existingLots.map(lot => [`${lot.productId}:${lot.lotNumber}`, lot.id])
+        )
+
+        // Separate lines into those with existing lots and those needing new lots
+        const linesToCreateLot: Array<{
+          index: number
+          lotNumber: string
+          productId: string
+          variantId: string | null
+          expiryDate: Date | null
+          qty: number
+        }> = []
+
+        for (const { line, index } of linesWithNewLot) {
+          const key = `${line.productId}:${line.newLotNumber}`
+          const existingLotId = existingLotMap.get(key)
+          
+          if (existingLotId) {
+            lotIdMap.set(index, existingLotId)
+          } else {
+            linesToCreateLot.push({
+              index,
+              lotNumber: line.newLotNumber!,
               productId: line.productId,
+              variantId: line.variantId || null,
+              expiryDate: line.newLotExpiryDate ? new Date(line.newLotExpiryDate) : null,
+              qty: line.qty,
+            })
+          }
+        }
+
+        // Create all new lots (need to do sequentially to get IDs back, but faster than before)
+        if (linesToCreateLot.length > 0) {
+          // Use createMany for efficiency, then fetch the created lots
+          const uniqueLotsToCreate = new Map<string, typeof linesToCreateLot[0]>()
+          for (const lot of linesToCreateLot) {
+            const key = `${lot.productId}:${lot.lotNumber}`
+            if (!uniqueLotsToCreate.has(key)) {
+              uniqueLotsToCreate.set(key, lot)
+            }
+          }
+
+          await prisma.lot.createMany({
+            data: [...uniqueLotsToCreate.values()].map(lot => ({
+              lotNumber: lot.lotNumber,
+              productId: lot.productId,
+              variantId: lot.variantId,
+              expiryDate: lot.expiryDate,
+              qtyReceived: lot.qty,
+            })),
+            skipDuplicates: true,
+          })
+
+          // Fetch the newly created lots
+          const newLots = await prisma.lot.findMany({
+            where: {
+              OR: [...uniqueLotsToCreate.values()].map(lot => ({
+                lotNumber: lot.lotNumber,
+                productId: lot.productId,
+              })),
             },
           })
 
-          if (existingLot) {
-            // Use existing lot
-            lotIdMap.set(i, existingLot.id)
-          } else {
-            // Create new lot
-            const newLot = await prisma.lot.create({
-              data: {
-                lotNumber: line.newLotNumber,
-                productId: line.productId,
-                variantId: line.variantId || null,
-                expiryDate: line.newLotExpiryDate ? new Date(line.newLotExpiryDate) : null,
-                qtyReceived: line.qty,
-              },
-            })
-            lotIdMap.set(i, newLot.id)
+          // Map the new lots back to line indices
+          const newLotMap = new Map(
+            newLots.map(lot => [`${lot.productId}:${lot.lotNumber}`, lot.id])
+          )
+
+          for (const lot of linesToCreateLot) {
+            const key = `${lot.productId}:${lot.lotNumber}`
+            const lotId = newLotMap.get(key)
+            if (lotId) {
+              lotIdMap.set(lot.index, lotId)
+            }
           }
         }
       }

@@ -60,15 +60,15 @@ export async function createGRN(data: CreateGRNInput): Promise<ActionResult> {
         },
       })
 
-      // Update PO line quantities
-      for (const line of data.lines) {
-        await tx.pOLine.update({
-          where: { id: line.poLineId },
-          data: {
-            qtyReceived: { increment: line.qtyReceived },
-          },
-        })
-      }
+      // Update PO line quantities - batch by using Promise.all
+      await Promise.all(
+        data.lines.map(line =>
+          tx.pOLine.update({
+            where: { id: line.poLineId },
+            data: { qtyReceived: { increment: line.qtyReceived } },
+          })
+        )
+      )
 
       // Generate doc number for movement
       const movementSeq = await tx.docSequence.update({
@@ -106,48 +106,50 @@ export async function createGRN(data: CreateGRNInput): Promise<ActionResult> {
         },
       })
 
-      // Update stock balances
-      for (const line of data.lines) {
-        if (line.locationId) {
+      // Update stock balances using upsert (more efficient than findFirst + update/create)
+      const linesWithLocation = data.lines.filter((line): line is typeof line & { locationId: string } => !!line.locationId)
+      await Promise.all(
+        linesWithLocation.map(line => {
           const variantId = line.variantId || null
-          const existing = await tx.stockBalance.findFirst({
+          return tx.stockBalance.upsert({
             where: {
+              productId_variantId_locationId: {
+                productId: line.productId,
+                variantId: variantId || '',
+                locationId: line.locationId,
+              },
+            },
+            create: {
               productId: line.productId,
               variantId,
               locationId: line.locationId,
+              qtyOnHand: line.qtyReceived,
+            },
+            update: {
+              qtyOnHand: { increment: line.qtyReceived },
             },
           })
+        })
+      )
 
-          if (existing) {
-            await tx.stockBalance.update({
-              where: { id: existing.id },
-              data: { qtyOnHand: { increment: line.qtyReceived } },
-            })
-          } else {
-            await tx.stockBalance.create({
-              data: {
-                productId: line.productId,
-                variantId,
-                locationId: line.locationId,
-                qtyOnHand: line.qtyReceived,
-              },
-            })
-          }
+      // Update product/variant last cost in parallel
+      const variantUpdates = linesWithLocation.filter(l => l.variantId)
+      const productUpdates = linesWithLocation.filter(l => !l.variantId)
 
-          // Update product/variant last cost
-          if (variantId) {
-            await tx.productVariant.update({
-              where: { id: variantId },
-              data: { lastCost: line.unitCost },
-            })
-          } else {
-            await tx.product.update({
-              where: { id: line.productId },
-              data: { lastCost: line.unitCost },
-            })
-          }
-        }
-      }
+      await Promise.all([
+        ...variantUpdates.map(line =>
+          tx.productVariant.update({
+            where: { id: line.variantId! },
+            data: { lastCost: line.unitCost },
+          })
+        ),
+        ...productUpdates.map(line =>
+          tx.product.update({
+            where: { id: line.productId },
+            data: { lastCost: line.unitCost },
+          })
+        ),
+      ])
 
       // Check if PO is fully received
       const updatedPO = await tx.pO.findUnique({
