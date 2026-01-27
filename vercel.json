@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/pending-actions-alert",
+      "schedule": "0 1 * * 1-5"
+    },
+    {
+      "path": "/api/cron/low-stock-alert",
+      "schedule": "0 2 * * 1-5"
+    },
+    {
+      "path": "/api/cron/expiring-stock-alert",
+      "schedule": "0 3 * * 1"
+    }
+  ]
+}
