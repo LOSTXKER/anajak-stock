@@ -15,6 +15,7 @@ import { revalidatePath } from 'next/cache'
 import { 
   shouldNotifyUser,
   getUserLineId,
+  filterLineRecipientsByPreferences,
   type NotificationTypeKey 
 } from '@/actions/user-notification-preferences'
 
@@ -337,9 +338,15 @@ export async function sendLinePRPendingAlert(prId: string): Promise<ActionResult
       return { success: false, error: 'LINE not configured' }
     }
 
-    const recipientIds = await getRecipientIds()
-    if (recipientIds.length === 0) {
+    const allRecipientIds = await getRecipientIds()
+    if (allRecipientIds.length === 0) {
       return { success: false, error: 'No recipients configured' }
+    }
+
+    // Filter recipients based on their notification preferences
+    const recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, 'prPending')
+    if (recipientIds.length === 0) {
+      return { success: true, data: undefined } // All recipients have disabled this notification
     }
 
     const pr = await prisma.pR.findUnique({
@@ -389,6 +396,20 @@ export async function sendLinePRPendingAlert(prId: string): Promise<ActionResult
 }
 
 /**
+ * Map PO status string to notification type key
+ */
+function mapPOStatusToNotificationType(status: string): NotificationTypeKey | null {
+  const statusMap: Record<string, NotificationTypeKey> = {
+    'รออนุมัติ': 'poPending',
+    'อนุมัติแล้ว': 'poApproved',
+    'ไม่อนุมัติ': 'poRejected',
+    'ส่งให้ Supplier แล้ว': 'poSent',
+    'ยกเลิกแล้ว': 'poCancelled',
+  }
+  return statusMap[status] || null
+}
+
+/**
  * Send PO Status Update via LINE
  */
 export async function sendLinePOStatusUpdate(poId: string, status: string): Promise<ActionResult<void>> {
@@ -403,9 +424,20 @@ export async function sendLinePOStatusUpdate(poId: string, status: string): Prom
       return { success: false, error: 'LINE not configured' }
     }
 
-    const recipientIds = await getRecipientIds()
-    if (recipientIds.length === 0) {
+    const allRecipientIds = await getRecipientIds()
+    if (allRecipientIds.length === 0) {
       return { success: false, error: 'No recipients configured' }
+    }
+
+    // Map status to notification type and filter recipients
+    const notificationType = mapPOStatusToNotificationType(status)
+    let recipientIds = allRecipientIds
+    
+    if (notificationType) {
+      recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, notificationType)
+      if (recipientIds.length === 0) {
+        return { success: true, data: undefined } // All recipients have disabled this notification
+      }
     }
 
     const po = await prisma.pO.findUnique({
@@ -462,9 +494,15 @@ export async function sendLineMovementPosted(movementId: string): Promise<Action
       return { success: false, error: 'LINE not configured' }
     }
 
-    const recipientIds = await getRecipientIds()
-    if (recipientIds.length === 0) {
+    const allRecipientIds = await getRecipientIds()
+    if (allRecipientIds.length === 0) {
       return { success: false, error: 'No recipients configured' }
+    }
+
+    // Filter recipients based on their notification preferences
+    const recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, 'movementPosted')
+    if (recipientIds.length === 0) {
+      return { success: true, data: undefined } // All recipients have disabled this notification
     }
 
     const movement = await prisma.stockMovement.findUnique({
@@ -522,9 +560,15 @@ export async function sendLineMovementPending(movementId: string): Promise<Actio
       return { success: false, error: 'LINE not configured' }
     }
 
-    const recipientIds = await getRecipientIds()
-    if (recipientIds.length === 0) {
+    const allRecipientIds = await getRecipientIds()
+    if (allRecipientIds.length === 0) {
       return { success: false, error: 'No recipients configured' }
+    }
+
+    // Filter recipients based on their notification preferences
+    const recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, 'movementPending')
+    if (recipientIds.length === 0) {
+      return { success: true, data: undefined } // All recipients have disabled this notification
     }
 
     const movement = await prisma.stockMovement.findUnique({

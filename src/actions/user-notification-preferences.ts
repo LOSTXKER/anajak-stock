@@ -395,6 +395,70 @@ export async function getUserLineId(userId: string): Promise<string | null> {
   return prefs?.lineUserId ?? null
 }
 
+/**
+ * Filter LINE recipient IDs by user preferences
+ * Maps LINE User IDs to system users and checks their preferences
+ * 
+ * @param lineUserIds - Array of LINE User IDs to filter
+ * @param notificationType - The notification type to check preferences for
+ * @returns Filtered array of LINE User IDs that should receive the notification
+ */
+export async function filterLineRecipientsByPreferences(
+  lineUserIds: string[],
+  notificationType: NotificationTypeKey
+): Promise<string[]> {
+  if (lineUserIds.length === 0) {
+    return []
+  }
+
+  try {
+    // Find users who have set their LINE User ID in preferences
+    const prefsWithLineId = await prisma.userNotificationPreference.findMany({
+      where: {
+        lineUserId: { in: lineUserIds },
+      },
+    })
+
+    // Build a map of LINE User ID -> preferences
+    const prefsMap = new Map<string, typeof prefsWithLineId[0]>()
+    for (const pref of prefsWithLineId) {
+      if (pref.lineUserId) {
+        prefsMap.set(pref.lineUserId, pref)
+      }
+    }
+
+    // Filter recipients based on their preferences
+    const filteredRecipients: string[] = []
+
+    for (const lineUserId of lineUserIds) {
+      const pref = prefsMap.get(lineUserId)
+      
+      if (!pref) {
+        // User not found in preferences - use default (send notification)
+        // This handles recipients who haven't configured their preferences
+        filteredRecipients.push(lineUserId)
+        continue
+      }
+
+      // Check the LINE preference for this notification type
+      const lineFieldName = `${notificationType}Line` as keyof typeof pref
+      const isLineEnabled = pref[lineFieldName]
+
+      // If the field doesn't exist or is true, send the notification
+      if (isLineEnabled === undefined || isLineEnabled === true) {
+        filteredRecipients.push(lineUserId)
+      }
+      // If explicitly set to false, skip this recipient
+    }
+
+    return filteredRecipients
+  } catch (error) {
+    console.error('Error filtering LINE recipients by preferences:', error)
+    // On error, return all recipients (fail-safe to ensure notifications are sent)
+    return lineUserIds
+  }
+}
+
 
 // ============================================
 // Notification Delivery Logs
