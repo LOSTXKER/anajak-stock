@@ -469,6 +469,7 @@ export interface NotificationDeliveryLogItem {
   channel: 'WEB' | 'LINE' | 'EMAIL'
   status: 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED'
   recipientId: string | null
+  recipientName: string | null
   error: string | null
   sentAt: Date | null
   createdAt: Date
@@ -509,6 +510,46 @@ export async function getNotificationDeliveryLogs(
       },
     })
 
+    // Get unique recipient IDs to lookup user names
+    const recipientIds = [...new Set(logs.map(log => log.recipientId).filter(Boolean))] as string[]
+    
+    // Lookup users by their IDs
+    const users = await prisma.user.findMany({
+      where: { id: { in: recipientIds } },
+      select: { id: true, name: true },
+    })
+    
+    // Also lookup by LINE User ID (stored in preferences)
+    const lineUserPrefs = await prisma.userNotificationPreference.findMany({
+      where: { lineUserId: { in: recipientIds } },
+      select: { userId: true, lineUserId: true },
+    })
+    
+    // Get user names for LINE recipients
+    const lineUserIds = lineUserPrefs.map(p => p.userId)
+    const lineUsers = await prisma.user.findMany({
+      where: { id: { in: lineUserIds } },
+      select: { id: true, name: true },
+    })
+    
+    // Create a map of recipientId -> user name
+    const recipientNameMap: Record<string, string> = {}
+    
+    // Map user IDs to names
+    for (const user of users) {
+      recipientNameMap[user.id] = user.name
+    }
+    
+    // Map LINE User IDs to names
+    for (const pref of lineUserPrefs) {
+      if (pref.lineUserId) {
+        const user = lineUsers.find(u => u.id === pref.userId)
+        if (user) {
+          recipientNameMap[pref.lineUserId] = user.name
+        }
+      }
+    }
+
     return {
       success: true,
       data: logs.map((log) => ({
@@ -516,6 +557,7 @@ export async function getNotificationDeliveryLogs(
         channel: log.channel as 'WEB' | 'LINE' | 'EMAIL',
         status: log.status as 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED',
         recipientId: log.recipientId,
+        recipientName: log.recipientId ? recipientNameMap[log.recipientId] || null : null,
         error: log.error,
         sentAt: log.sentAt,
         createdAt: log.createdAt,

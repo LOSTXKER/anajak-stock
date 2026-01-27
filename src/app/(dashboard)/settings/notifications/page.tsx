@@ -1057,8 +1057,14 @@ export default function NotificationSettingsPage() {
                               </Badge>
                             )}
                           </TableCell>
-                          <TableCell className="text-xs font-mono text-[var(--text-muted)] truncate max-w-[150px]">
-                            {log.recipientId || '-'}
+                          <TableCell className="text-xs truncate max-w-[150px]">
+                            {log.recipientName ? (
+                              <span className="text-[var(--text-primary)]">{log.recipientName}</span>
+                            ) : log.recipientId ? (
+                              <span className="font-mono text-[var(--text-muted)]">{log.recipientId.slice(0, 12)}...</span>
+                            ) : (
+                              <span className="text-[var(--text-muted)]">-</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

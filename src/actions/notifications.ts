@@ -248,6 +248,55 @@ export async function logLineDelivery(
   }
 }
 
+/**
+ * Create a notification and log LINE delivery in one operation
+ * Use this for LINE-only notifications that need to be tracked
+ */
+export async function createNotificationWithLineDelivery({
+  type,
+  title,
+  message,
+  url,
+  recipientIds,
+  success,
+  error,
+}: {
+  type: string
+  title: string
+  message: string
+  url?: string
+  recipientIds: string[]
+  success: boolean
+  error?: string
+}): Promise<void> {
+  try {
+    // Create notification (broadcast)
+    const notification = await prisma.notification.create({
+      data: {
+        type,
+        title,
+        message,
+        url,
+        read: false,
+      },
+    })
+
+    // Log LINE delivery for each recipient
+    await prisma.notificationDeliveryLog.createMany({
+      data: recipientIds.map(recipientId => ({
+        notificationId: notification.id,
+        channel: 'LINE' as const,
+        status: success ? 'SENT' as const : 'FAILED' as const,
+        recipientId,
+        error,
+        sentAt: success ? new Date() : null,
+      })),
+    })
+  } catch (err) {
+    console.error('[Notification] Failed to create notification with LINE delivery:', err)
+  }
+}
+
 // Log Email delivery result
 export async function logEmailDelivery(
   notificationId: string,

@@ -286,12 +286,15 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
     const flexMessage = FlexTemplates.lowStockAlert(lowStockItems, appUrl)
     const altText = `⚠️ สินค้าใกล้หมด ${lowStockItems.length} รายการ`
 
+    // Collect all recipient IDs
+    const allRecipientIds: string[] = []
+    
     // Send to global recipients
     const globalRecipientIds = await getRecipientIds()
-    const tasks: Promise<unknown>[] = []
+    allRecipientIds.push(...globalRecipientIds)
 
     if (globalRecipientIds.length > 0) {
-      tasks.push(client.sendFlex(globalRecipientIds, altText, flexMessage))
+      await client.sendFlex(globalRecipientIds, altText, flexMessage)
     }
 
     // Also send to individual users who have LINE enabled for lowStock
@@ -309,12 +312,24 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
       if (shouldSend) {
         const lineUserId = await getUserLineId(user.id)
         if (lineUserId && !globalRecipientIds.includes(lineUserId)) {
-          tasks.push(client.sendFlex([lineUserId], altText, flexMessage))
+          await client.sendFlex([lineUserId], altText, flexMessage)
+          allRecipientIds.push(lineUserId)
         }
       }
     }
 
-    await Promise.allSettled(tasks)
+    // Log LINE delivery
+    if (allRecipientIds.length > 0) {
+      const { createNotificationWithLineDelivery } = await import('./notifications')
+      await createNotificationWithLineDelivery({
+        type: 'low_stock',
+        title: altText,
+        message: `สินค้าใกล้หมด ${lowStockItems.length} รายการ`,
+        url: '/reports/low-stock',
+        recipientIds: allRecipientIds,
+        success: true,
+      })
+    }
 
     return { success: true, data: undefined }
   } catch (error) {
@@ -1032,6 +1047,18 @@ export async function sendLinePendingActionsAlert(): Promise<ActionResult<{ sent
       `⚡ งานค้าง ${pending.total} รายการ`,
       flexMessage
     )
+
+    // Log LINE delivery
+    const { createNotificationWithLineDelivery } = await import('./notifications')
+    await createNotificationWithLineDelivery({
+      type: 'system',
+      title: `⚡ งานค้าง ${pending.total} รายการ`,
+      message: summaryLines.join(', '),
+      url: '/dashboard',
+      recipientIds: settings.recipientUserIds,
+      success: result.success,
+      error: result.error,
+    })
 
     if (!result.success) {
       console.error('LINE pending actions alert error:', result.error)
