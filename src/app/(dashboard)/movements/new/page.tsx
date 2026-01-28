@@ -24,11 +24,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, Scan, ListPlus } from 'lucide-react'
+import { ArrowLeftRight, ArrowLeft, Loader2, Plus, Trash2, Send, Save, Package, ArrowDown, ArrowUp, RefreshCw, CornerDownRight, Scan, ListPlus, FileText, ArrowRight } from 'lucide-react'
 import { BulkAddModal, BulkAddResult, BulkAddVariant } from '@/components/bulk-add-modal'
-import { createMovement, submitMovement, getMovement } from '@/actions/movements'
+import { createMovement, submitMovement, getMovement, getIssuedMovements, getIssuedMovementForReturn } from '@/actions/movements'
 import { getProducts, getProductByBarcode } from '@/actions/products'
-import { getLocations } from '@/actions/stock'
+import { getLocations, getStockByProductVariantLocation } from '@/actions/stock'
+
+// Helper to create stock map key (local function since it's used in client component)
+function createStockMapKey(productId: string, variantId: string | null, locationId: string): string {
+  return `${productId}|${variantId || ''}|${locationId}`
+}
 import { toast } from 'sonner'
 import { MovementType } from '@/generated/prisma'
 import type { ProductWithRelations, LocationWithWarehouse } from '@/types'
@@ -77,6 +82,37 @@ interface MovementLine {
   // New lot creation (for RECEIVE)
   newLotNumber?: string
   newExpiryDate?: string
+  // For ADJUST mode - new absolute quantity input
+  newQty?: number
+  // For RETURN mode - track issued and returned quantities
+  issuedQty?: number
+  returnedQty?: number
+  remainingQty?: number
+}
+
+// Issued movement for RETURN selection
+interface IssuedMovementSummary {
+  id: string
+  docNumber: string
+  note: string | null
+  createdAt: Date
+  postedAt: Date | null
+  createdBy: { id: string; name: string }
+  lines: Array<{
+    id: string
+    productId: string
+    productName: string
+    productSku: string
+    variantId: string | null
+    variantName: string | null
+    variantSku: string | null
+    fromLocationId: string | null
+    fromLocationCode: string | null
+    fromWarehouseName: string | null
+    issuedQty: number
+    returnedQty: number
+    remainingQty: number
+  }>
 }
 
 const typeConfig: Record<MovementType, { label: string; icon: React.ReactNode; color: string; description: string }> = {
@@ -132,6 +168,15 @@ export default function NewMovementPage(props: PageProps) {
   const [loadingVariantFor, setLoadingVariantFor] = useState<string | null>(null)
   const [showBulkAddModal, setShowBulkAddModal] = useState(false)
   const [loadedVariants, setLoadedVariants] = useState<Record<string, Variant[]>>({})
+  
+  // Stock tracking for ADJUST/TRANSFER modes
+  const [stockCache, setStockCache] = useState<Map<string, number>>(new Map())
+  const [loadingStock, setLoadingStock] = useState<Set<string>>(new Set())
+  
+  // Issued movements for RETURN mode
+  const [issuedMovements, setIssuedMovements] = useState<IssuedMovementSummary[]>([])
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null)
+  const [isLoadingIssues, setIsLoadingIssues] = useState(false)
 
   // Handle barcode scan - add product to lines
   const handleBarcodeScan = useCallback(async (barcode: string) => {
@@ -183,6 +228,111 @@ export default function NewMovementPage(props: PageProps) {
 
   // USB Scanner hook - listen for barcode scans
   useBarcodeScanner(handleBarcodeScan, !showBarcodeInput)
+  
+  // Function to get current stock for a product/variant/location
+  const fetchCurrentStock = useCallback(async (
+    productId: string,
+    variantId: string | null | undefined,
+    locationId: string
+  ): Promise<number> => {
+    const key = createStockMapKey(productId, variantId || null, locationId)
+    
+    // Check cache first
+    if (stockCache.has(key)) {
+      return stockCache.get(key)!
+    }
+    
+    // Mark as loading
+    setLoadingStock(prev => new Set(prev).add(key))
+    
+    try {
+      const qty = await getStockByProductVariantLocation(productId, variantId || null, locationId)
+      setStockCache(prev => new Map(prev).set(key, qty))
+      return qty
+    } finally {
+      setLoadingStock(prev => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }
+  }, [stockCache])
+  
+  // Get stock from cache (returns undefined if not loaded)
+  const getStockFromCache = useCallback((
+    productId: string,
+    variantId: string | null | undefined,
+    locationId: string
+  ): number | undefined => {
+    const key = createStockMapKey(productId, variantId || null, locationId)
+    return stockCache.get(key)
+  }, [stockCache])
+  
+  // Check if stock is loading
+  const isStockLoading = useCallback((
+    productId: string,
+    variantId: string | null | undefined,
+    locationId: string
+  ): boolean => {
+    const key = createStockMapKey(productId, variantId || null, locationId)
+    return loadingStock.has(key)
+  }, [loadingStock])
+  
+  // Load issued movements for RETURN mode
+  const loadIssuedMovements = useCallback(async () => {
+    setIsLoadingIssues(true)
+    try {
+      const result = await getIssuedMovements({ limit: 50 })
+      setIssuedMovements(result.items as IssuedMovementSummary[])
+    } catch (error) {
+      console.error('Failed to load issued movements:', error)
+    } finally {
+      setIsLoadingIssues(false)
+    }
+  }, [])
+  
+  // Handle selecting an issued movement for RETURN
+  const handleSelectIssuedMovement = useCallback(async (issueId: string) => {
+    setSelectedIssueId(issueId)
+    
+    const issueData = await getIssuedMovementForReturn(issueId)
+    if (!issueData) {
+      toast.error('ไม่พบใบเบิก')
+      return
+    }
+    
+    setRefId(issueId)
+    setRefDocNumber(issueData.docNumber)
+    setNote(`คืนของจาก ${issueData.docNumber}`)
+    setReason('คืนสินค้าจากการเบิก')
+    
+    // Create lines from the issued movement
+    const newLines: MovementLine[] = issueData.lines
+      .filter(line => line.remainingQty > 0)
+      .map((line) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        productId: line.productId,
+        variantId: line.variantId || undefined,
+        productName: line.productName,
+        variantLabel: line.variantName || undefined,
+        // For RETURN, destination is the source of issue (return to where it was issued from)
+        toLocationId: line.fromLocationId || undefined,
+        qty: line.remainingQty, // Default to remaining qty
+        unitCost: 0,
+        issuedQty: line.issuedQty,
+        returnedQty: line.returnedQty,
+        remainingQty: line.remainingQty,
+      }))
+    
+    setLines(newLines)
+    
+    // Preload products if needed
+    for (const line of issueData.lines) {
+      if (line.variantId) {
+        await loadVariantsForProduct(line.productId)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     async function loadData() {
@@ -201,31 +351,62 @@ export default function NewMovementPage(props: PageProps) {
 
       // If refId is provided (return from issue), load the original movement
       if (searchParams.refId && searchParams.type === MovementType.RETURN) {
-        const refMovement = await getMovement(searchParams.refId)
-        if (refMovement) {
-          setRefDocNumber(refMovement.docNumber)
-          setProjectCode(refMovement.projectCode || '')
-          setNote(`คืนของจาก ${refMovement.docNumber}`)
-          setReason('คืนสินค้าจากการเบิก')
-          
-          // Pre-fill lines from the issue movement
-          const prefilledLines: MovementLine[] = refMovement.lines.map((line) => ({
-            id: Math.random().toString(36).substr(2, 9),
-            productId: line.productId,
-            variantId: line.variantId || undefined,
-            productName: line.product?.name,
-            // For return, destination is the source of issue
-            toLocationId: line.fromLocationId || undefined,
-            qty: Number(line.qty),
-            unitCost: Number(line.unitCost),
-            note: `คืนจาก ${refMovement.docNumber}`,
-          }))
-          setLines(prefilledLines)
-        }
+        await handleSelectIssuedMovement(searchParams.refId)
       }
     }
     loadData()
-  }, [searchParams.refId, searchParams.type])
+  }, [searchParams.refId, searchParams.type, handleSelectIssuedMovement])
+  
+  // Load issued movements when type is RETURN
+  useEffect(() => {
+    if (type === MovementType.RETURN && !searchParams.refId) {
+      loadIssuedMovements()
+    }
+  }, [type, searchParams.refId, loadIssuedMovements])
+  
+  // Fetch stock for lines when needed (ADJUST, TRANSFER modes)
+  useEffect(() => {
+    if (type !== MovementType.ADJUST && type !== MovementType.TRANSFER && type !== MovementType.RETURN) {
+      return
+    }
+    
+    // Fetch stock for each line that has product/location selected
+    for (const line of lines) {
+      if (!line.productId) continue
+      
+      // For ADJUST - fetch stock at destination location
+      if (type === MovementType.ADJUST && line.toLocationId) {
+        const key = createStockMapKey(line.productId, line.variantId || null, line.toLocationId)
+        if (!stockCache.has(key) && !loadingStock.has(key)) {
+          fetchCurrentStock(line.productId, line.variantId, line.toLocationId)
+        }
+      }
+      
+      // For TRANSFER - fetch stock at both source and destination
+      if (type === MovementType.TRANSFER) {
+        if (line.fromLocationId) {
+          const fromKey = createStockMapKey(line.productId, line.variantId || null, line.fromLocationId)
+          if (!stockCache.has(fromKey) && !loadingStock.has(fromKey)) {
+            fetchCurrentStock(line.productId, line.variantId, line.fromLocationId)
+          }
+        }
+        if (line.toLocationId) {
+          const toKey = createStockMapKey(line.productId, line.variantId || null, line.toLocationId)
+          if (!stockCache.has(toKey) && !loadingStock.has(toKey)) {
+            fetchCurrentStock(line.productId, line.variantId, line.toLocationId)
+          }
+        }
+      }
+      
+      // For RETURN - fetch stock at destination location (where returning to)
+      if (type === MovementType.RETURN && line.toLocationId) {
+        const key = createStockMapKey(line.productId, line.variantId || null, line.toLocationId)
+        if (!stockCache.has(key) && !loadingStock.has(key)) {
+          fetchCurrentStock(line.productId, line.variantId, line.toLocationId)
+        }
+      }
+    }
+  }, [type, lines, stockCache, loadingStock, fetchCurrentStock])
 
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
     // Check if already loaded (including empty result)
@@ -402,38 +583,82 @@ export default function NewMovementPage(props: PageProps) {
         toast.error(`กรุณาเลือก variant สำหรับ ${product.name}`)
         return
       }
-      // ADJUST allows negative qty (for stock reduction)
-      if (type !== MovementType.ADJUST && line.qty <= 0) {
-        toast.error('จำนวนต้องมากกว่า 0')
-        return
+      
+      // Validate quantity based on type
+      if (type === MovementType.ADJUST) {
+        // For ADJUST, calculate the actual qty (diff from current stock)
+        const currentStock = line.toLocationId 
+          ? getStockFromCache(line.productId, line.variantId, line.toLocationId) ?? 0
+          : 0
+        const newQty = line.newQty ?? currentStock
+        const diff = newQty - currentStock
+        if (diff === 0) {
+          toast.error(`${product?.name || 'สินค้า'}: ไม่มีการเปลี่ยนแปลงยอด`)
+          return
+        }
+      } else if (type === MovementType.RETURN) {
+        // For RETURN, qty must be > 0 and <= remainingQty
+        if (line.qty <= 0) {
+          toast.error('จำนวนคืนต้องมากกว่า 0')
+          return
+        }
+        if (line.remainingQty !== undefined && line.qty > line.remainingQty) {
+          toast.error(`${product?.name || 'สินค้า'}: จำนวนคืนเกินจำนวนที่คืนได้ (${line.remainingQty})`)
+          return
+        }
+      } else {
+        // For other types, qty must be > 0
+        if (line.qty <= 0) {
+          toast.error('จำนวนต้องมากกว่า 0')
+          return
+        }
       }
-      if (line.qty === 0) {
-        toast.error('จำนวนต้องไม่เป็น 0')
-        return
+      
+      // Validate TRANSFER has enough stock
+      if (type === MovementType.TRANSFER && line.fromLocationId) {
+        const fromStock = getStockFromCache(line.productId, line.variantId, line.fromLocationId) ?? 0
+        if (line.qty > fromStock) {
+          toast.error(`${product?.name || 'สินค้า'}: สต๊อคต้นทางไม่เพียงพอ (มี ${fromStock})`)
+          return
+        }
       }
     }
 
     setIsLoading(true)
+
+    // Prepare lines with calculated qty for ADJUST mode
+    const processedLines = lines.map((line) => {
+      let qty = line.qty
+      
+      // For ADJUST, calculate the diff from current stock
+      if (type === MovementType.ADJUST && line.toLocationId) {
+        const currentStock = getStockFromCache(line.productId, line.variantId, line.toLocationId) ?? 0
+        const newQty = line.newQty ?? currentStock
+        qty = newQty - currentStock
+      }
+      
+      return {
+        productId: line.productId,
+        variantId: line.variantId,
+        fromLocationId: line.fromLocationId,
+        toLocationId: line.toLocationId,
+        qty,
+        unitCost: line.unitCost,
+        note: line.note,
+        lotId: line.lotId,
+        newLotNumber: line.newLotNumber,
+        newExpiryDate: line.newExpiryDate,
+      }
+    })
 
     const result = await createMovement({
       type,
       note,
       reason,
       projectCode,
-      refType: refId && type === MovementType.RETURN ? 'RETURN_FROM' : undefined,
+      refType: refId && type === MovementType.RETURN ? 'MOVEMENT' : undefined,
       refId: refId,
-      lines: lines.map((line) => ({
-        productId: line.productId,
-        variantId: line.variantId,
-        fromLocationId: line.fromLocationId,
-        toLocationId: line.toLocationId,
-        qty: line.qty,
-        unitCost: line.unitCost,
-        note: line.note,
-        lotId: line.lotId,
-        newLotNumber: line.newLotNumber,
-        newExpiryDate: line.newExpiryDate,
-      })),
+      lines: processedLines,
     })
 
     if (result.success && andSubmit) {
@@ -512,15 +737,107 @@ export default function NewMovementPage(props: PageProps) {
         {refId && refDocNumber && (
           <Card className="mb-6 bg-[var(--accent-light)]/50 border-[var(--accent-primary)]/30">
             <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <CornerDownRight className="w-5 h-5 text-[var(--accent-primary)]" />
-                <div>
-                  <span className="text-sm text-[var(--text-muted)]">คืนจากเอกสาร:</span>
-                  <span className="ml-2 font-mono font-medium text-[var(--accent-primary)]">
-                    {refDocNumber}
-                  </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CornerDownRight className="w-5 h-5 text-[var(--accent-primary)]" />
+                  <div>
+                    <span className="text-sm text-[var(--text-muted)]">คืนจากเอกสาร:</span>
+                    <span className="ml-2 font-mono font-medium text-[var(--accent-primary)]">
+                      {refDocNumber}
+                    </span>
+                  </div>
                 </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    setRefId(undefined)
+                    setRefDocNumber(null)
+                    setSelectedIssueId(null)
+                    setLines([])
+                    setNote('')
+                    setReason('')
+                  }}
+                  className="text-[var(--text-muted)]"
+                >
+                  เปลี่ยนใบเบิก
+                </Button>
               </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Select Issue Movement for RETURN */}
+        {type === MovementType.RETURN && !refId && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="w-5 h-5 text-[var(--accent-primary)]" />
+                เลือกใบเบิกที่ต้องการคืน
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingIssues ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" />
+                  <span className="ml-2 text-[var(--text-muted)]">กำลังโหลดรายการเบิก...</span>
+                </div>
+              ) : issuedMovements.length === 0 ? (
+                <div className="text-center py-8 text-[var(--text-muted)]">
+                  <FileText className="w-10 h-10 mx-auto opacity-50 mb-2" />
+                  <p>ไม่พบรายการเบิกที่ยังมีของให้คืน</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {issuedMovements.map((movement) => {
+                    const hasReturnable = movement.lines.some(l => l.remainingQty > 0)
+                    if (!hasReturnable) return null
+                    
+                    return (
+                      <div
+                        key={movement.id}
+                        className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                          selectedIssueId === movement.id
+                            ? 'border-[var(--accent-primary)] bg-[var(--accent-light)]'
+                            : 'border-[var(--border-default)] hover:border-[var(--accent-primary)]/50 hover:bg-[var(--bg-secondary)]'
+                        }`}
+                        onClick={() => handleSelectIssuedMovement(movement.id)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-medium text-[var(--accent-primary)]">
+                              {movement.docNumber}
+                            </span>
+                            <Badge variant="secondary" className="text-xs">
+                              {movement.lines.filter(l => l.remainingQty > 0).length} รายการคืนได้
+                            </Badge>
+                          </div>
+                          <span className="text-xs text-[var(--text-muted)]">
+                            {new Date(movement.createdAt).toLocaleDateString('th-TH')}
+                          </span>
+                        </div>
+                        {movement.note && (
+                          <p className="text-sm text-[var(--text-muted)] mb-2">{movement.note}</p>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {movement.lines.filter(l => l.remainingQty > 0).slice(0, 3).map((line) => (
+                            <Badge key={line.id} variant="outline" className="text-xs">
+                              {line.productSku}
+                              {line.variantName && ` - ${line.variantName}`}
+                              : คืนได้ {line.remainingQty}
+                            </Badge>
+                          ))}
+                          {movement.lines.filter(l => l.remainingQty > 0).length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{movement.lines.filter(l => l.remainingQty > 0).length - 3} รายการ
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -646,10 +963,36 @@ export default function NewMovementPage(props: PageProps) {
                     {(type === 'ISSUE' || type === 'TRANSFER') && (
                       <TableHead className="min-w-[150px]">จากโลเคชัน</TableHead>
                     )}
-                    {(type === 'RECEIVE' || type === 'TRANSFER' || type === 'ADJUST') && (
+                    {type === 'TRANSFER' && (
+                      <TableHead className="w-24 text-center">สต๊อคต้นทาง</TableHead>
+                    )}
+                    {(type === 'RECEIVE' || type === 'TRANSFER' || type === 'ADJUST' || type === 'RETURN') && (
                       <TableHead className="min-w-[150px]">ไปโลเคชัน</TableHead>
                     )}
-                    <TableHead className="w-24">จำนวน</TableHead>
+                    {(type === 'ADJUST' || type === 'TRANSFER' || type === 'RETURN') && (
+                      <TableHead className="w-24 text-center">สต๊อคปลายทาง</TableHead>
+                    )}
+                    {type === 'RETURN' && (
+                      <>
+                        <TableHead className="w-20 text-center">เบิกไป</TableHead>
+                        <TableHead className="w-20 text-center">คืนแล้ว</TableHead>
+                        <TableHead className="w-20 text-center">คืนได้</TableHead>
+                      </>
+                    )}
+                    {type === 'ADJUST' ? (
+                      <>
+                        <TableHead className="w-24 text-center">ยอดใหม่</TableHead>
+                        <TableHead className="w-24 text-center">ผลต่าง</TableHead>
+                      </>
+                    ) : (
+                      <TableHead className="w-24">{type === 'RETURN' ? 'คืนครั้งนี้' : 'จำนวน'}</TableHead>
+                    )}
+                    {type === 'TRANSFER' && (
+                      <TableHead className="w-28 text-center">หลังโอน</TableHead>
+                    )}
+                    {type === 'RETURN' && (
+                      <TableHead className="w-28 text-center">หลังคืน</TableHead>
+                    )}
                     {type === 'RECEIVE' && (
                       <TableHead className="w-32">ต้นทุน</TableHead>
                     )}
@@ -791,6 +1134,7 @@ export default function NewMovementPage(props: PageProps) {
                               <div className="text-[var(--text-muted)] text-sm">-</div>
                             )}
                           </TableCell>
+                          {/* From Location (ISSUE, TRANSFER) */}
                           {(type === 'ISSUE' || type === 'TRANSFER') && (
                             <TableCell>
                               <Select
@@ -810,7 +1154,26 @@ export default function NewMovementPage(props: PageProps) {
                               </Select>
                             </TableCell>
                           )}
-                          {(type === 'RECEIVE' || type === 'TRANSFER' || type === 'ADJUST') && (
+                          
+                          {/* From Stock (TRANSFER only) */}
+                          {type === 'TRANSFER' && (
+                            <TableCell className="text-center">
+                              {line.productId && line.fromLocationId ? (
+                                isStockLoading(line.productId, line.variantId, line.fromLocationId) ? (
+                                  <Loader2 className="w-4 h-4 animate-spin mx-auto text-[var(--text-muted)]" />
+                                ) : (
+                                  <Badge variant="outline" className="bg-[var(--bg-secondary)]">
+                                    {getStockFromCache(line.productId, line.variantId, line.fromLocationId)?.toLocaleString() ?? '-'}
+                                  </Badge>
+                                )
+                              ) : (
+                                <span className="text-[var(--text-muted)]">-</span>
+                              )}
+                            </TableCell>
+                          )}
+                          
+                          {/* To Location (RECEIVE, TRANSFER, ADJUST, RETURN) */}
+                          {(type === 'RECEIVE' || type === 'TRANSFER' || type === 'ADJUST' || type === 'RETURN') && (
                             <TableCell>
                               <Select
                                 value={line.toLocationId || ''}
@@ -829,21 +1192,163 @@ export default function NewMovementPage(props: PageProps) {
                               </Select>
                             </TableCell>
                           )}
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min={type === 'ADJUST' ? undefined : 1}
-                              value={line.qty}
-                              onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
-                              className="w-20"
-                              placeholder={type === 'ADJUST' ? '±' : undefined}
-                            />
-                            {type === 'ADJUST' && (
-                              <span className="text-xs text-[var(--text-muted)] mt-1">
-                                {line.qty >= 0 ? '+เพิ่ม' : '-ลด'}
-                              </span>
-                            )}
-                          </TableCell>
+                          
+                          {/* Current Stock at destination (ADJUST, TRANSFER, RETURN) */}
+                          {(type === 'ADJUST' || type === 'TRANSFER' || type === 'RETURN') && (
+                            <TableCell className="text-center">
+                              {line.productId && line.toLocationId ? (
+                                isStockLoading(line.productId, line.variantId, line.toLocationId) ? (
+                                  <Loader2 className="w-4 h-4 animate-spin mx-auto text-[var(--text-muted)]" />
+                                ) : (
+                                  <Badge variant="outline" className="bg-[var(--bg-secondary)]">
+                                    {getStockFromCache(line.productId, line.variantId, line.toLocationId)?.toLocaleString() ?? '-'}
+                                  </Badge>
+                                )
+                              ) : (
+                                <span className="text-[var(--text-muted)]">-</span>
+                              )}
+                            </TableCell>
+                          )}
+                          
+                          {/* RETURN mode - Issued/Returned/Remaining columns */}
+                          {type === 'RETURN' && (
+                            <>
+                              <TableCell className="text-center">
+                                <span className="font-medium">{line.issuedQty ?? '-'}</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="text-[var(--text-muted)]">{line.returnedQty ?? 0}</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline" className={line.remainingQty && line.remainingQty > 0 ? 'bg-[var(--status-success-light)] text-[var(--status-success)]' : ''}>
+                                  {line.remainingQty ?? '-'}
+                                </Badge>
+                              </TableCell>
+                            </>
+                          )}
+                          
+                          {/* ADJUST mode - New Qty and Diff */}
+                          {type === 'ADJUST' ? (
+                            <>
+                              <TableCell>
+                                {(() => {
+                                  const currentStock = line.productId && line.toLocationId 
+                                    ? getStockFromCache(line.productId, line.variantId, line.toLocationId) ?? 0
+                                    : 0
+                                  return (
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      value={line.newQty ?? currentStock}
+                                      onChange={(e) => {
+                                        const newQty = Number(e.target.value)
+                                        const diff = newQty - currentStock
+                                        updateLine(line.id, { newQty, qty: diff })
+                                      }}
+                                      className="w-20"
+                                      placeholder="ยอดใหม่"
+                                    />
+                                  )
+                                })()}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {(() => {
+                                  const currentStock = line.productId && line.toLocationId 
+                                    ? getStockFromCache(line.productId, line.variantId, line.toLocationId)
+                                    : undefined
+                                  if (currentStock === undefined) return <span className="text-[var(--text-muted)]">-</span>
+                                  const newQty = line.newQty ?? currentStock
+                                  const diff = newQty - currentStock
+                                  return (
+                                    <div className="flex flex-col items-center">
+                                      <Badge 
+                                        variant="outline" 
+                                        className={
+                                          diff > 0 
+                                            ? 'bg-[var(--status-success-light)] text-[var(--status-success)]'
+                                            : diff < 0
+                                            ? 'bg-[var(--status-error-light)] text-[var(--status-error)]'
+                                            : ''
+                                        }
+                                      >
+                                        {diff > 0 ? '+' : ''}{diff}
+                                      </Badge>
+                                      <span className="text-xs text-[var(--text-muted)] mt-1">
+                                        {currentStock} → {newQty}
+                                      </span>
+                                    </div>
+                                  )
+                                })()}
+                              </TableCell>
+                            </>
+                          ) : (
+                            /* Normal qty input for other types */
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={type === 'RETURN' ? (line.remainingQty ?? undefined) : undefined}
+                                value={line.qty}
+                                onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
+                                className="w-20"
+                              />
+                            </TableCell>
+                          )}
+                          
+                          {/* After Transfer preview (TRANSFER) */}
+                          {type === 'TRANSFER' && (
+                            <TableCell className="text-center">
+                              {line.productId && line.fromLocationId && line.toLocationId ? (
+                                (() => {
+                                  const fromStock = getStockFromCache(line.productId, line.variantId, line.fromLocationId)
+                                  const toStock = getStockFromCache(line.productId, line.variantId, line.toLocationId)
+                                  if (fromStock === undefined || toStock === undefined) {
+                                    return <span className="text-[var(--text-muted)]">-</span>
+                                  }
+                                  const afterFrom = fromStock - line.qty
+                                  const afterTo = toStock + line.qty
+                                  return (
+                                    <div className="flex flex-col text-xs">
+                                      <span className={afterFrom < 0 ? 'text-[var(--status-error)]' : ''}>
+                                        ต้นทาง: {afterFrom}
+                                      </span>
+                                      <span className="text-[var(--status-success)]">
+                                        ปลายทาง: {afterTo}
+                                      </span>
+                                    </div>
+                                  )
+                                })()
+                              ) : (
+                                <span className="text-[var(--text-muted)]">-</span>
+                              )}
+                            </TableCell>
+                          )}
+                          
+                          {/* After Return preview (RETURN) */}
+                          {type === 'RETURN' && (
+                            <TableCell className="text-center">
+                              {line.productId && line.toLocationId ? (
+                                (() => {
+                                  const currentStock = getStockFromCache(line.productId, line.variantId, line.toLocationId)
+                                  if (currentStock === undefined) {
+                                    return <span className="text-[var(--text-muted)]">-</span>
+                                  }
+                                  const afterReturn = currentStock + line.qty
+                                  return (
+                                    <div className="flex flex-col text-xs">
+                                      <span className="text-[var(--status-success)]">
+                                        {currentStock} → {afterReturn}
+                                      </span>
+                                    </div>
+                                  )
+                                })()
+                              ) : (
+                                <span className="text-[var(--text-muted)]">-</span>
+                              )}
+                            </TableCell>
+                          )}
+                          
+                          {/* Unit Cost (RECEIVE only) */}
                           {type === 'RECEIVE' && (
                             <TableCell>
                               <div className="flex items-center">
@@ -859,6 +1364,8 @@ export default function NewMovementPage(props: PageProps) {
                               </div>
                             </TableCell>
                           )}
+                          
+                          {/* Delete button */}
                           <TableCell>
                             <Button
                               type="button"

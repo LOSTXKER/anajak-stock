@@ -1339,3 +1339,437 @@ async function notifyMovementPosted(
 
   await Promise.allSettled(tasks)
 }
+
+/**
+ * Get movements by variant (or product if no variant)
+ * Used for showing movement history in product detail page
+ */
+export async function getMovementsByVariant(params: {
+  productId: string
+  variantId?: string | null
+  page?: number
+  limit?: number
+  dateFrom?: string
+  dateTo?: string
+}): Promise<PaginatedResult<{
+  id: string
+  docNumber: string
+  type: MovementType
+  status: DocStatus
+  qty: number
+  fromLocation: { id: string; code: string; warehouseName: string } | null
+  toLocation: { id: string; code: string; warehouseName: string } | null
+  note: string | null
+  createdAt: Date
+  postedAt: Date | null
+  createdBy: { id: string; name: string }
+}>> {
+  const { productId, variantId, page = 1, limit = 10, dateFrom, dateTo } = params
+
+  const where = {
+    productId,
+    variantId: variantId || null,
+    movement: {
+      status: DocStatus.POSTED,
+      ...((dateFrom || dateTo) && {
+        createdAt: {
+          ...(dateFrom && { gte: new Date(dateFrom) }),
+          ...(dateTo && { lte: new Date(dateTo + 'T23:59:59.999Z') }),
+        },
+      }),
+    },
+  }
+
+  const [lines, total] = await Promise.all([
+    prisma.movementLine.findMany({
+      where,
+      include: {
+        movement: {
+          select: {
+            id: true,
+            docNumber: true,
+            type: true,
+            status: true,
+            note: true,
+            createdAt: true,
+            postedAt: true,
+            createdBy: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+        fromLocation: {
+          select: {
+            id: true,
+            code: true,
+            warehouse: { select: { name: true } },
+          },
+        },
+        toLocation: {
+          select: {
+            id: true,
+            code: true,
+            warehouse: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: {
+        movement: { createdAt: 'desc' },
+      },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.movementLine.count({ where }),
+  ])
+
+  const items = lines.map((line) => ({
+    id: line.movement.id,
+    docNumber: line.movement.docNumber,
+    type: line.movement.type,
+    status: line.movement.status,
+    qty: Number(line.qty),
+    fromLocation: line.fromLocation
+      ? {
+          id: line.fromLocation.id,
+          code: line.fromLocation.code,
+          warehouseName: line.fromLocation.warehouse.name,
+        }
+      : null,
+    toLocation: line.toLocation
+      ? {
+          id: line.toLocation.id,
+          code: line.toLocation.code,
+          warehouseName: line.toLocation.warehouse.name,
+        }
+      : null,
+    note: line.movement.note,
+    createdAt: line.movement.createdAt,
+    postedAt: line.movement.postedAt,
+    createdBy: line.movement.createdBy,
+  }))
+
+  return {
+    items: serialize(items),
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  }
+}
+
+/**
+ * Get ISSUE movements that have been POSTED for RETURN selection
+ * Only returns movements that still have items to return
+ */
+export async function getIssuedMovements(params: {
+  page?: number
+  limit?: number
+  search?: string
+}): Promise<PaginatedResult<{
+  id: string
+  docNumber: string
+  note: string | null
+  createdAt: Date
+  postedAt: Date | null
+  createdBy: { id: string; name: string }
+  lines: Array<{
+    id: string
+    productId: string
+    productName: string
+    productSku: string
+    variantId: string | null
+    variantName: string | null
+    variantSku: string | null
+    fromLocationId: string | null
+    fromLocationCode: string | null
+    fromWarehouseName: string | null
+    issuedQty: number
+    returnedQty: number
+    remainingQty: number
+  }>
+}>> {
+  const { page = 1, limit = 20, search } = params
+
+  const where = {
+    type: MovementType.ISSUE,
+    status: DocStatus.POSTED,
+    ...(search && {
+      OR: [
+        { docNumber: { contains: search, mode: 'insensitive' as const } },
+        { note: { contains: search, mode: 'insensitive' as const } },
+      ],
+    }),
+  }
+
+  const [movements, total] = await Promise.all([
+    prisma.stockMovement.findMany({
+      where,
+      include: {
+        createdBy: {
+          select: { id: true, name: true },
+        },
+        lines: {
+          select: {
+            id: true,
+            productId: true,
+            variantId: true,
+            fromLocationId: true,
+            qty: true,
+            product: {
+              select: { id: true, name: true, sku: true },
+            },
+            variant: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                optionValues: {
+                  select: {
+                    optionValue: {
+                      select: {
+                        value: true,
+                        optionType: { select: { name: true } },
+                      },
+                    },
+                  },
+                  orderBy: {
+                    optionValue: {
+                      optionType: { displayOrder: 'asc' },
+                    },
+                  },
+                },
+              },
+            },
+            fromLocation: {
+              select: {
+                id: true,
+                code: true,
+                warehouse: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { postedAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.stockMovement.count({ where }),
+  ])
+
+  // Get all return movements that reference these issues
+  const issueIds = movements.map((m) => m.id)
+  const returnMovements = await prisma.stockMovement.findMany({
+    where: {
+      type: MovementType.RETURN,
+      status: DocStatus.POSTED,
+      refType: 'MOVEMENT',
+      refId: { in: issueIds },
+    },
+    include: {
+      lines: {
+        select: {
+          productId: true,
+          variantId: true,
+          qty: true,
+        },
+      },
+    },
+  })
+
+  // Build a map of returned quantities: issueId -> productId|variantId -> qty
+  const returnedQtyMap = new Map<string, Map<string, number>>()
+  for (const returnMov of returnMovements) {
+    if (!returnMov.refId) continue
+    if (!returnedQtyMap.has(returnMov.refId)) {
+      returnedQtyMap.set(returnMov.refId, new Map())
+    }
+    const productMap = returnedQtyMap.get(returnMov.refId)!
+    for (const line of returnMov.lines) {
+      const key = `${line.productId}|${line.variantId || ''}`
+      const current = productMap.get(key) || 0
+      productMap.set(key, current + Number(line.qty))
+    }
+  }
+
+  const items = movements.map((movement) => {
+    const returnedMap = returnedQtyMap.get(movement.id) || new Map()
+
+    return {
+      id: movement.id,
+      docNumber: movement.docNumber,
+      note: movement.note,
+      createdAt: movement.createdAt,
+      postedAt: movement.postedAt,
+      createdBy: movement.createdBy,
+      lines: movement.lines.map((line) => {
+        const key = `${line.productId}|${line.variantId || ''}`
+        const issuedQty = Number(line.qty)
+        const returnedQty = returnedMap.get(key) || 0
+        const remainingQty = issuedQty - returnedQty
+
+        // Build variant display name
+        const variantName = line.variant
+          ? line.variant.optionValues.map((ov) => ov.optionValue.value).join(' / ') || line.variant.name
+          : null
+
+        return {
+          id: line.id,
+          productId: line.productId,
+          productName: line.product.name,
+          productSku: line.product.sku,
+          variantId: line.variantId,
+          variantName,
+          variantSku: line.variant?.sku || null,
+          fromLocationId: line.fromLocationId,
+          fromLocationCode: line.fromLocation?.code || null,
+          fromWarehouseName: line.fromLocation?.warehouse.name || null,
+          issuedQty,
+          returnedQty,
+          remainingQty,
+        }
+      }),
+    }
+  })
+
+  // Filter out movements with no remaining items to return
+  const filteredItems = items.filter((item) =>
+    item.lines.some((line) => line.remainingQty > 0)
+  )
+
+  return {
+    items: serialize(filteredItems),
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  }
+}
+
+/**
+ * Get a single issued movement for RETURN reference
+ */
+export async function getIssuedMovementForReturn(movementId: string) {
+  const movement = await prisma.stockMovement.findFirst({
+    where: {
+      id: movementId,
+      type: MovementType.ISSUE,
+      status: DocStatus.POSTED,
+    },
+    include: {
+      createdBy: {
+        select: { id: true, name: true },
+      },
+      lines: {
+        select: {
+          id: true,
+          productId: true,
+          variantId: true,
+          fromLocationId: true,
+          qty: true,
+          product: {
+            select: { id: true, name: true, sku: true, hasVariants: true },
+          },
+          variant: {
+            select: {
+              id: true,
+              name: true,
+              sku: true,
+              optionValues: {
+                select: {
+                  optionValue: {
+                    select: {
+                      value: true,
+                      optionType: { select: { name: true } },
+                    },
+                  },
+                },
+                orderBy: {
+                  optionValue: {
+                    optionType: { displayOrder: 'asc' },
+                  },
+                },
+              },
+            },
+          },
+          fromLocation: {
+            select: {
+              id: true,
+              code: true,
+              warehouse: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!movement) return null
+
+  // Get return movements for this issue
+  const returnMovements = await prisma.stockMovement.findMany({
+    where: {
+      type: MovementType.RETURN,
+      status: DocStatus.POSTED,
+      refType: 'MOVEMENT',
+      refId: movement.id,
+    },
+    include: {
+      lines: {
+        select: {
+          productId: true,
+          variantId: true,
+          qty: true,
+        },
+      },
+    },
+  })
+
+  // Build returned qty map
+  const returnedMap = new Map<string, number>()
+  for (const returnMov of returnMovements) {
+    for (const line of returnMov.lines) {
+      const key = `${line.productId}|${line.variantId || ''}`
+      const current = returnedMap.get(key) || 0
+      returnedMap.set(key, current + Number(line.qty))
+    }
+  }
+
+  const lines = movement.lines.map((line) => {
+    const key = `${line.productId}|${line.variantId || ''}`
+    const issuedQty = Number(line.qty)
+    const returnedQty = returnedMap.get(key) || 0
+    const remainingQty = issuedQty - returnedQty
+
+    const variantName = line.variant
+      ? line.variant.optionValues.map((ov) => ov.optionValue.value).join(' / ') || line.variant.name
+      : null
+
+    return {
+      id: line.id,
+      productId: line.productId,
+      productName: line.product.name,
+      productSku: line.product.sku,
+      hasVariants: line.product.hasVariants,
+      variantId: line.variantId,
+      variantName,
+      variantSku: line.variant?.sku || null,
+      fromLocationId: line.fromLocationId,
+      fromLocationCode: line.fromLocation?.code || null,
+      fromWarehouseName: line.fromLocation?.warehouse.name || null,
+      issuedQty,
+      returnedQty,
+      remainingQty,
+    }
+  })
+
+  return serialize({
+    id: movement.id,
+    docNumber: movement.docNumber,
+    note: movement.note,
+    createdAt: movement.createdAt,
+    postedAt: movement.postedAt,
+    createdBy: movement.createdBy,
+    lines,
+  })
+}

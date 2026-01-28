@@ -25,6 +25,7 @@ const stockTypeLabels: Record<string, { label: string; color: string }> = {
 import { VariantsSection } from './variants-section'
 import { OptionGroupsSection } from './option-groups-section'
 import { ProductStats } from './product-stats'
+import { VariantMovementHistory } from './variant-movement-history'
 import { PageHeader, EmptyState } from '@/components/common'
 import { PrintLabelButton } from './print-label-button'
 import { OptionGroup } from '@/types'
@@ -388,94 +389,94 @@ async function ProductDetail({ id }: { id: string }) {
         {product.hasVariants && <div className="lg:col-span-2"></div>}
       </div>
 
-      {/* Recent Movements */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <History className="w-4 h-4 text-[var(--accent-primary)]" />
-            การเคลื่อนไหวล่าสุด
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentMovements.length === 0 ? (
-            <EmptyState
-              icon={<History className="w-8 h-8" />}
-              title="ไม่มีประวัติ"
-              description="ยังไม่มีประวัติการเคลื่อนไหว"
-            />
-          ) : (
-            <div className="overflow-x-auto mobile-scroll">
-              <Table className="min-w-[900px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>วันที่</TableHead>
-                  <TableHead>เลขที่เอกสาร</TableHead>
-                  {product.hasVariants && <TableHead>Variant</TableHead>}
-                  <TableHead>ประเภท</TableHead>
-                  <TableHead>จาก</TableHead>
-                  <TableHead>ไป</TableHead>
-                  <TableHead className="text-right">จำนวน</TableHead>
-                  <TableHead>โดย</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentMovements.map((line) => (
-                  <TableRow key={line.id}>
-                    <TableCell className="text-sm text-[var(--text-muted)]">
-                      {formatDate(line.movement.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/movements/${line.movement.id}`}
-                        className="text-[var(--accent-primary)] hover:underline font-mono text-sm"
-                      >
-                        {line.movement.docNumber}
-                      </Link>
-                    </TableCell>
-                    {product.hasVariants && (
-                      <TableCell>
-                        {line.variant ? (
-                          <div className="flex flex-wrap gap-1">
-                            {line.variant.optionValues.map((ov, i) => (
-                              <Badge key={i} variant="secondary" className="text-xs">
-                                {ov.optionValue.value}
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-[var(--text-muted)]">-</span>
-                        )}
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <Badge className={typeColors[line.movement.type]}>
-                        {line.movement.type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-[var(--text-muted)]">
-                      {line.fromLocation
-                        ? `${line.fromLocation.warehouse.name} / ${line.fromLocation.code}`
-                        : '-'}
-                    </TableCell>
-                    <TableCell className="text-sm text-[var(--text-muted)]">
-                      {line.toLocation
-                        ? `${line.toLocation.warehouse.name} / ${line.toLocation.code}`
-                        : '-'}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-medium">
-                      {Number(line.qty).toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-sm text-[var(--text-muted)]">
-                      {line.movement.createdBy?.name || '-'}
-                    </TableCell>
+      {/* Movement History */}
+      {product.hasVariants ? (
+        <VariantMovementHistory 
+          productId={product.id}
+          productName={product.name}
+          variants={product.variants.map(v => ({
+            id: v.id,
+            sku: v.sku,
+            name: v.name,
+            options: v.optionValues.map(ov => ({
+              typeName: ov.optionValue.optionType.name,
+              value: ov.optionValue.value,
+            })),
+          }))}
+        />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="w-4 h-4 text-[var(--accent-primary)]" />
+              การเคลื่อนไหวล่าสุด
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recentMovements.length === 0 ? (
+              <EmptyState
+                icon={<History className="w-8 h-8" />}
+                title="ไม่มีประวัติ"
+                description="ยังไม่มีประวัติการเคลื่อนไหว"
+              />
+            ) : (
+              <div className="overflow-x-auto mobile-scroll">
+                <Table className="min-w-[900px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>วันที่</TableHead>
+                    <TableHead>เลขที่เอกสาร</TableHead>
+                    <TableHead>ประเภท</TableHead>
+                    <TableHead>จาก</TableHead>
+                    <TableHead>ไป</TableHead>
+                    <TableHead className="text-right">จำนวน</TableHead>
+                    <TableHead>โดย</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {recentMovements.map((line) => (
+                    <TableRow key={line.id}>
+                      <TableCell className="text-sm text-[var(--text-muted)]">
+                        {formatDate(line.movement.createdAt)}
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/movements/${line.movement.id}`}
+                          className="text-[var(--accent-primary)] hover:underline font-mono text-sm"
+                        >
+                          {line.movement.docNumber}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={typeColors[line.movement.type]}>
+                          {line.movement.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-[var(--text-muted)]">
+                        {line.fromLocation
+                          ? `${line.fromLocation.warehouse.name} / ${line.fromLocation.code}`
+                          : '-'}
+                      </TableCell>
+                      <TableCell className="text-sm text-[var(--text-muted)]">
+                        {line.toLocation
+                          ? `${line.toLocation.warehouse.name} / ${line.toLocation.code}`
+                          : '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-medium">
+                        {Number(line.qty).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-sm text-[var(--text-muted)]">
+                        {line.movement.createdBy?.name || '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

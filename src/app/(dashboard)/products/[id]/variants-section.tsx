@@ -29,11 +29,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Layers, Pencil, Trash2, ChevronDown, ChevronRight, Warehouse, Save, Loader2, Plus, X } from 'lucide-react'
+import { Layers, Pencil, Trash2, ChevronDown, ChevronRight, Warehouse, Save, Loader2, Plus, X, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateVariant, deleteVariant } from '@/actions/variants'
 import { useRouter } from 'next/navigation'
 import { AddVariantDialog } from './add-variant-dialog'
+import { QuickAdjustDialog } from './quick-adjust-dialog'
 import { PrintLabel, BulkPrintLabel } from '@/components/print-label'
 import { StockType } from '@/types'
 
@@ -111,6 +112,15 @@ export function VariantsSection({ productId, productSku, productName, variants: 
 
   // Add variant dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  
+  // Quick adjust dialog
+  const [quickAdjustDialogOpen, setQuickAdjustDialogOpen] = useState(false)
+  const [adjustingVariant, setAdjustingVariant] = useState<Variant | null>(null)
+  
+  const openQuickAdjust = (variant: Variant) => {
+    setAdjustingVariant(variant)
+    setQuickAdjustDialogOpen(true)
+  }
 
   const toggleExpanded = (variantId: string) => {
     setExpandedVariants(prev => {
@@ -550,6 +560,14 @@ export function VariantsSection({ productId, productSku, productName, variants: 
                           {!isEditMode && (
                             <TableCell>
                               <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openQuickAdjust(variant)}
+                                  title="ปรับยอดสต๊อค"
+                                >
+                                  <RefreshCw className="w-4 h-4 text-[var(--status-warning)]" />
+                                </Button>
                                 <PrintLabel 
                                   variant="icon"
                                   product={{
@@ -647,6 +665,29 @@ export function VariantsSection({ productId, productSku, productName, variants: 
         }))}
         productOptionGroups={productOptionGroups}
       />
+      
+      {/* Quick Adjust Dialog */}
+      {adjustingVariant && (
+        <QuickAdjustDialog
+          open={quickAdjustDialogOpen}
+          onOpenChange={(open) => {
+            setQuickAdjustDialogOpen(open)
+            if (!open) setAdjustingVariant(null)
+          }}
+          variant={{
+            id: adjustingVariant.id,
+            sku: adjustingVariant.sku,
+            name: adjustingVariant.name,
+            productId: productId,
+            productName: productName,
+            options: adjustingVariant.options.map(o => ({
+              typeName: o.typeName,
+              value: o.value,
+            })),
+            stockByLocation: adjustingVariant.stockByLocation,
+          }}
+        />
+      )}
     </>
   )
 }

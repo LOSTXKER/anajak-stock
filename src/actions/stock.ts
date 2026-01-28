@@ -377,6 +377,70 @@ export async function getLocations(warehouseId?: string) {
   })
 }
 
+/**
+ * Get stock quantity for a specific product/variant at a specific location
+ * Used for showing current stock in ADJUST, TRANSFER, RETURN movements
+ */
+export async function getStockByProductVariantLocation(
+  productId: string,
+  variantId: string | null,
+  locationId: string
+): Promise<number> {
+  const stockBalance = await prisma.stockBalance.findFirst({
+    where: {
+      productId,
+      variantId: variantId || null,
+      locationId,
+    },
+    select: {
+      qtyOnHand: true,
+    },
+  })
+
+  return Number(stockBalance?.qtyOnHand ?? 0)
+}
+
+/**
+ * Batch get stock quantities for multiple product/variant/location combinations
+ * More efficient than calling getStockByProductVariantLocation multiple times
+ */
+export async function getBatchStockQuantities(
+  items: Array<{
+    productId: string
+    variantId: string | null
+    locationId: string
+  }>
+): Promise<Map<string, number>> {
+  if (items.length === 0) return new Map()
+
+  // Create unique keys and fetch all at once
+  const stockBalances = await prisma.stockBalance.findMany({
+    where: {
+      OR: items.map(item => ({
+        productId: item.productId,
+        variantId: item.variantId || null,
+        locationId: item.locationId,
+      })),
+    },
+    select: {
+      productId: true,
+      variantId: true,
+      locationId: true,
+      qtyOnHand: true,
+    },
+  })
+
+  // Build map with key format: productId|variantId|locationId
+  const stockMap = new Map<string, number>()
+  for (const balance of stockBalances) {
+    const key = `${balance.productId}|${balance.variantId || ''}|${balance.locationId}`
+    stockMap.set(key, Number(balance.qtyOnHand))
+  }
+
+  return stockMap
+}
+
+
 export async function getStockSummary() {
   const [totalValue, productCount, lowStockCount] = await Promise.all([
     prisma.$queryRaw<{ total: number }[]>`
