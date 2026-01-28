@@ -27,24 +27,55 @@ export interface LineSettings {
   enabled: boolean
   channelAccessToken: string
   channelSecret: string
-  notifyLowStock: boolean
-  notifyPRPending: boolean
-  notifyPOStatus: boolean
-  notifyMovementPosted: boolean
-  notifyExpiring: boolean
   recipientUserIds: string[] // LINE User IDs to notify
+  
+  // Stock alerts
+  notifyLowStock: boolean
+  notifyExpiring: boolean
+  
+  // PR notifications
+  notifyPRPending: boolean
+  
+  // PO notifications (granular)
+  notifyPOPending: boolean
+  notifyPOApproved: boolean
+  notifyPORejected: boolean
+  notifyPOSent: boolean
+  notifyPOCancelled: boolean
+  notifyPOReceived: boolean
+  
+  // Movement notifications
+  notifyMovementPending: boolean
+  notifyMovementPosted: boolean
+  
+  // Legacy field (for backward compatibility)
+  notifyPOStatus?: boolean
 }
 
 const DEFAULT_LINE_SETTINGS: LineSettings = {
   enabled: false,
   channelAccessToken: '',
   channelSecret: '',
-  notifyLowStock: true,
-  notifyPRPending: true,
-  notifyPOStatus: true,
-  notifyMovementPosted: false,
-  notifyExpiring: true,
   recipientUserIds: [],
+  
+  // Stock alerts
+  notifyLowStock: true,
+  notifyExpiring: true,
+  
+  // PR notifications
+  notifyPRPending: true,
+  
+  // PO notifications (granular)
+  notifyPOPending: true,
+  notifyPOApproved: true,
+  notifyPORejected: true,
+  notifyPOSent: true,
+  notifyPOCancelled: true,
+  notifyPOReceived: true,
+  
+  // Movement notifications
+  notifyMovementPending: false,
+  notifyMovementPosted: false,
 }
 
 export async function getLineSettings(): Promise<ActionResult<LineSettings>> {
@@ -62,7 +93,18 @@ export async function getLineSettings(): Promise<ActionResult<LineSettings>> {
       return { success: true, data: DEFAULT_LINE_SETTINGS }
     }
 
-    const data = JSON.parse(setting.value) as Partial<LineSettings>
+    const data = JSON.parse(setting.value) as Partial<LineSettings> & { notifyPOStatus?: boolean }
+    
+    // Backward compatibility: migrate notifyPOStatus to granular fields
+    if (data.notifyPOStatus !== undefined && data.notifyPOPending === undefined) {
+      data.notifyPOPending = data.notifyPOStatus
+      data.notifyPOApproved = data.notifyPOStatus
+      data.notifyPORejected = data.notifyPOStatus
+      data.notifyPOSent = data.notifyPOStatus
+      data.notifyPOCancelled = data.notifyPOStatus
+      data.notifyPOReceived = data.notifyPOStatus
+    }
+    
     return { 
       success: true, 
       data: { ...DEFAULT_LINE_SETTINGS, ...data } 
@@ -425,12 +467,36 @@ function mapPOStatusToNotificationType(status: string): NotificationTypeKey | nu
 }
 
 /**
+ * Check if a specific PO status notification is enabled in settings
+ */
+function isPOStatusNotificationEnabled(settings: LineSettings, status: string): boolean {
+  const statusSettingMap: Record<string, keyof LineSettings> = {
+    'รออนุมัติ': 'notifyPOPending',
+    'อนุมัติแล้ว': 'notifyPOApproved',
+    'ไม่อนุมัติ': 'notifyPORejected',
+    'ส่งให้ Supplier แล้ว': 'notifyPOSent',
+    'ยกเลิกแล้ว': 'notifyPOCancelled',
+    'รับสินค้าแล้ว': 'notifyPOReceived',
+  }
+  
+  const settingKey = statusSettingMap[status]
+  if (!settingKey) return true // Unknown status, allow by default
+  
+  return settings[settingKey] as boolean
+}
+
+/**
  * Send PO Status Update via LINE
  */
 export async function sendLinePOStatusUpdate(poId: string, status: string): Promise<ActionResult<void>> {
   try {
     const settingsResult = await getLineSettings()
-    if (!settingsResult.success || !settingsResult.data.enabled || !settingsResult.data.notifyPOStatus) {
+    if (!settingsResult.success || !settingsResult.data.enabled) {
+      return { success: true, data: undefined }
+    }
+    
+    // Check if this specific PO status notification is enabled
+    if (!isPOStatusNotificationEnabled(settingsResult.data, status)) {
       return { success: true, data: undefined }
     }
 
@@ -444,16 +510,8 @@ export async function sendLinePOStatusUpdate(poId: string, status: string): Prom
       return { success: false, error: 'No recipients configured' }
     }
 
-    // Map status to notification type and filter recipients
-    const notificationType = mapPOStatusToNotificationType(status)
-    let recipientIds = allRecipientIds
-    
-    if (notificationType) {
-      recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, notificationType)
-      if (recipientIds.length === 0) {
-        return { success: true, data: undefined } // All recipients have disabled this notification
-      }
-    }
+    // Recipients are now controlled by system settings, no need to filter by user preferences
+    const recipientIds = allRecipientIds
 
     const po = await prisma.pO.findUnique({
       where: { id: poId },
@@ -509,15 +567,9 @@ export async function sendLineMovementPosted(movementId: string): Promise<Action
       return { success: false, error: 'LINE not configured' }
     }
 
-    const allRecipientIds = await getRecipientIds()
-    if (allRecipientIds.length === 0) {
-      return { success: false, error: 'No recipients configured' }
-    }
-
-    // Filter recipients based on their notification preferences
-    const recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, 'movementPosted')
+    const recipientIds = await getRecipientIds()
     if (recipientIds.length === 0) {
-      return { success: true, data: undefined } // All recipients have disabled this notification
+      return { success: false, error: 'No recipients configured' }
     }
 
     const movement = await prisma.stockMovement.findUnique({
@@ -566,7 +618,7 @@ export async function sendLineMovementPosted(movementId: string): Promise<Action
 export async function sendLineMovementPending(movementId: string): Promise<ActionResult<void>> {
   try {
     const settingsResult = await getLineSettings()
-    if (!settingsResult.success || !settingsResult.data.enabled) {
+    if (!settingsResult.success || !settingsResult.data.enabled || !settingsResult.data.notifyMovementPending) {
       return { success: true, data: undefined }
     }
 
@@ -575,15 +627,9 @@ export async function sendLineMovementPending(movementId: string): Promise<Actio
       return { success: false, error: 'LINE not configured' }
     }
 
-    const allRecipientIds = await getRecipientIds()
-    if (allRecipientIds.length === 0) {
-      return { success: false, error: 'No recipients configured' }
-    }
-
-    // Filter recipients based on their notification preferences
-    const recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, 'movementPending')
+    const recipientIds = await getRecipientIds()
     if (recipientIds.length === 0) {
-      return { success: true, data: undefined } // All recipients have disabled this notification
+      return { success: false, error: 'No recipients configured' }
     }
 
     const movement = await prisma.stockMovement.findUnique({

@@ -513,6 +513,137 @@ export default function NotificationSettingsPage() {
                 </div>
               </div>
 
+              {/* LINE Notification Types */}
+              {lineSettings?.enabled && (
+                <div className="border-t pt-4 mt-4">
+                  <h4 className="text-sm font-medium mb-4">ประเภทการแจ้งเตือน LINE</h4>
+                  
+                  {/* Stock Alerts */}
+                  <div className="mb-4">
+                    <p className="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-1">
+                      <Package className="w-3 h-3" /> สต๊อค
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">สินค้าใกล้หมด</span>
+                        <Switch
+                          checked={lineSettings?.notifyLowStock ?? true}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyLowStock: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">สินค้าใกล้หมดอายุ</span>
+                        <Switch
+                          checked={lineSettings?.notifyExpiring ?? true}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyExpiring: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PR Notifications */}
+                  <div className="mb-4">
+                    <p className="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-1">
+                      <FileText className="w-3 h-3" /> ใบขอซื้อ (PR)
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">PR รออนุมัติ</span>
+                        <Switch
+                          checked={lineSettings?.notifyPRPending ?? true}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyPRPending: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PO Notifications */}
+                  <div className="mb-4">
+                    <p className="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-1">
+                      <ShoppingCart className="w-3 h-3" /> ใบสั่งซื้อ (PO)
+                    </p>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">PO รออนุมัติ</span>
+                        <Switch
+                          checked={lineSettings?.notifyPOPending ?? true}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyPOPending: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">PO อนุมัติแล้ว</span>
+                        <Switch
+                          checked={lineSettings?.notifyPOApproved ?? true}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyPOApproved: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">PO ไม่อนุมัติ</span>
+                        <Switch
+                          checked={lineSettings?.notifyPORejected ?? true}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyPORejected: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">ส่งให้ Supplier</span>
+                        <Switch
+                          checked={lineSettings?.notifyPOSent ?? true}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyPOSent: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">PO ยกเลิก</span>
+                        <Switch
+                          checked={lineSettings?.notifyPOCancelled ?? true}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyPOCancelled: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">รับสินค้าแล้ว</span>
+                        <Switch
+                          checked={lineSettings?.notifyPOReceived ?? true}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyPOReceived: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Movement Notifications */}
+                  <div className="mb-4">
+                    <p className="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-1">
+                      <Truck className="w-3 h-3" /> การเคลื่อนไหวสต๊อค
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">รอดำเนินการ</span>
+                        <Switch
+                          checked={lineSettings?.notifyMovementPending ?? false}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyMovementPending: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)]">
+                        <span className="text-sm">บันทึกแล้ว</span>
+                        <Switch
+                          checked={lineSettings?.notifyMovementPosted ?? false}
+                          onCheckedChange={(v) => lineSettings && setLineSettings({ ...lineSettings, notifyMovementPosted: v })}
+                          className="data-[state=checked]:bg-[#00B900]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-end">
                 <Button onClick={handleSaveLineSettings} disabled={isSaving}>
                   {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
