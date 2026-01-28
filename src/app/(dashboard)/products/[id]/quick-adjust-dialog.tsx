@@ -231,12 +231,19 @@ export function QuickAdjustDialog({
                     <div className="border-t border-[var(--border-default)] my-1" />
                   </>
                 )}
-                <div className="px-2 py-1 text-xs text-[var(--text-muted)]">ทั้งหมด</div>
-                {locations.map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id}>
-                    {loc.warehouse.name} - {loc.code}
-                  </SelectItem>
-                ))}
+                {/* Show other locations without stock */}
+                {locations.filter(loc => !variant.stockByLocation.some(s => s.locationId === loc.id)).length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs text-[var(--text-muted)]">โลเคชันอื่น</div>
+                    {locations
+                      .filter(loc => !variant.stockByLocation.some(s => s.locationId === loc.id))
+                      .map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>
+                          {loc.warehouse.name} - {loc.code}
+                        </SelectItem>
+                      ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
