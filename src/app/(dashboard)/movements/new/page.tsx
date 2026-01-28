@@ -967,9 +967,14 @@ export default function NewMovementPage(props: PageProps) {
                       <TableHead className="w-24 text-center">สต๊อคต้นทาง</TableHead>
                     )}
                     {(type === 'RECEIVE' || type === 'TRANSFER' || type === 'ADJUST' || type === 'RETURN') && (
-                      <TableHead className="min-w-[150px]">ไปโลเคชัน</TableHead>
+                      <TableHead className="min-w-[150px]">
+                        {type === 'ADJUST' ? 'โลเคชัน' : 'ไปโลเคชัน'}
+                      </TableHead>
                     )}
-                    {(type === 'ADJUST' || type === 'TRANSFER' || type === 'RETURN') && (
+                    {type === 'ADJUST' && (
+                      <TableHead className="w-24 text-center">สต๊อคปัจจุบัน</TableHead>
+                    )}
+                    {(type === 'TRANSFER' || type === 'RETURN') && (
                       <TableHead className="w-24 text-center">สต๊อคปลายทาง</TableHead>
                     )}
                     {type === 'RETURN' && (
