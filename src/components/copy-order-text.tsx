@@ -39,13 +39,21 @@ export function CopyOrderText({
 }: CopyOrderTextProps) {
   const [copied, setCopied] = useState<'simple' | 'detailed' | null>(null)
 
-  // แบบย่อ - ส่ง Supplier (ใช้ชื่อ Supplier ถ้ามี)
+  // แบบย่อ - ส่ง Supplier (ชื่อ Supplier + สี/ไซส์ + จำนวน)
   function generateSimpleText() {
     let text = ''
     
     lines.forEach((line, index) => {
-      // ใช้ supplierProductName ถ้ามี ไม่งั้นใช้ variantName
-      const displayName = line.supplierProductName || line.variantName || '-'
+      // ถ้ามี supplierName: แสดง "supplierName (สี/ไซส์) x จำนวน"
+      // ถ้าไม่มี: แสดง "สี/ไซส์ x จำนวน"
+      let displayName = ''
+      if (line.supplierProductName) {
+        displayName = line.variantName 
+          ? `${line.supplierProductName} (${line.variantName})`
+          : line.supplierProductName
+      } else {
+        displayName = line.variantName || '-'
+      }
       text += `${index + 1}. ${displayName} x ${line.qty.toLocaleString()}\n`
     })
     
@@ -134,7 +142,7 @@ export function CopyOrderText({
         <DropdownMenuItem onClick={() => handleCopy('simple')}>
           <div>
             <p className="font-medium">แบบย่อ (ส่ง Supplier)</p>
-            <p className="text-xs text-[var(--text-muted)]">สี/ไซส์ + จำนวน</p>
+            <p className="text-xs text-[var(--text-muted)]">ชื่อ Supplier + สี/ไซส์ + จำนวน</p>
           </div>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleCopy('detailed')}>
