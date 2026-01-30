@@ -7,6 +7,62 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Calendar, X } from 'lucide-react'
+import { DocStatus } from '@/generated/prisma'
+import { movementStatusConfig } from '@/lib/status-config'
+
+const statusFilterOptions: { value: DocStatus | null; label: string }[] = [
+  { value: null, label: 'ทุกสถานะ' },
+  { value: DocStatus.DRAFT, label: 'ร่าง' },
+  { value: DocStatus.SUBMITTED, label: 'รออนุมัติ' },
+  { value: DocStatus.APPROVED, label: 'อนุมัติแล้ว' },
+  { value: DocStatus.REJECTED, label: 'ปฏิเสธ' },
+  { value: DocStatus.POSTED, label: 'บันทึกแล้ว' },
+  { value: DocStatus.CANCELLED, label: 'ยกเลิก' },
+]
+
+export function MovementStatusFilter() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const currentStatus = searchParams.get('status') as DocStatus | null
+
+  const handleStatusChange = useCallback((status: DocStatus | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    
+    if (status) {
+      params.set('status', status)
+    } else {
+      params.delete('status')
+    }
+    
+    // Reset to page 1 when filter changes
+    params.set('page', '1')
+    
+    startNavigation()
+    router.push(`/movements?${params.toString()}`)
+  }, [searchParams, router])
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {statusFilterOptions.map((option) => {
+        const isActive = currentStatus === option.value
+        const statusConfig = option.value ? movementStatusConfig[option.value] : null
+        
+        return (
+          <Button
+            key={option.value || 'all'}
+            variant={isActive ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleStatusChange(option.value)}
+            className={isActive && statusConfig ? `${statusConfig.bgColor} ${statusConfig.color} border-transparent hover:opacity-80` : ''}
+          >
+            {statusConfig && statusConfig.icon}
+            <span className={statusConfig ? 'ml-1' : ''}>{option.label}</span>
+          </Button>
+        )
+      })}
+    </div>
+  )
+}
 
 export function MovementDateFilter() {
   const router = useRouter()

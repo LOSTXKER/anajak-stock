@@ -159,3 +159,18 @@ export type UpcomingPO = {
   total: number
   daysUntilDue: number
 }
+
+// Batch action result types
+export type BatchResultItem = {
+  id: string
+  docNumber: string
+  success: boolean
+  error?: string
+}
+
+export type BatchResult = {
+  total: number
+  succeeded: number
+  failed: number
+  results: BatchResultItem[]
+}

@@ -1,24 +1,16 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { getMovements } from '@/actions/movements'
+import { getSession } from '@/lib/auth'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, RefreshCw, Settings2, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
-import { MovementType, DocStatus } from '@/generated/prisma'
-import { formatDateTime } from '@/lib/date'
+import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, RefreshCw, Settings2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { MovementType, DocStatus, Role } from '@/generated/prisma'
 import { ExportButton } from '@/components/export-button'
-import { PageHeader, EmptyState } from '@/components/common'
+import { PageHeader } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
-import { MovementDateFilter } from './movement-filters'
+import { MovementDateFilter, MovementStatusFilter } from './movement-filters'
+import { MovementsTable } from './movements-table'
 
 interface PageProps {
   searchParams: Promise<{
@@ -64,8 +56,6 @@ const typeConfig: Record<MovementType, { label: string; icon: React.ElementType;
   },
 }
 
-import { movementStatusConfig } from '@/lib/status-config'
-
 async function MovementsContent({ searchParams }: PageProps) {
   const params = await searchParams
   const page = Number(params.page) || 1
@@ -74,6 +64,10 @@ async function MovementsContent({ searchParams }: PageProps) {
   const search = params.search
   const dateFrom = params.dateFrom
   const dateTo = params.dateTo
+
+  // Get session for permission check
+  const session = await getSession()
+  const canApprove = session?.role === Role.ADMIN || session?.role === Role.APPROVER
 
   const { items: movements, total, totalPages } = await getMovements({
     page,
@@ -135,13 +129,14 @@ async function MovementsContent({ searchParams }: PageProps) {
       {/* Quick Filters */}
       <Card>
         <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
+          {/* Type Filter */}
           <div className="flex flex-wrap gap-1.5 md:gap-2">
             <Button
-              variant={!type && !status ? 'default' : 'outline'}
+              variant={!type ? 'default' : 'outline'}
               size="sm"
               asChild
             >
-              <Link href="/movements">ทั้งหมด</Link>
+              <Link href={status ? `/movements?status=${status}` : '/movements'}>ทุกประเภท</Link>
             </Button>
             {Object.entries(typeConfig).map(([key, config]) => {
               const isActive = type === key
@@ -153,13 +148,19 @@ async function MovementsContent({ searchParams }: PageProps) {
                   className={isActive ? config.activeColor : ''}
                   asChild
                 >
-                  <Link href={`/movements?type=${key}`}>
+                  <Link href={status ? `/movements?type=${key}&status=${status}` : `/movements?type=${key}`}>
                     <config.icon className="w-4 h-4 mr-1" />
                     {config.label}
                   </Link>
                 </Button>
               )
             })}
+          </div>
+          
+          {/* Status Filter */}
+          <div className="border-t border-[var(--border-default)] pt-3">
+            <div className="text-xs text-[var(--text-muted)] mb-2">กรองตามสถานะ</div>
+            <MovementStatusFilter />
           </div>
           
           {/* Date Range Filter */}
@@ -169,105 +170,15 @@ async function MovementsContent({ searchParams }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Movements Table */}
-      <Card>
-        <CardContent className="p-0">
-          {movements.length === 0 ? (
-            <EmptyState
-              icon={<ArrowLeftRight className="w-12 h-12" />}
-              title="ไม่พบรายการเคลื่อนไหว"
-              description="ลองเปลี่ยนตัวกรอง หรือสร้างรายการเคลื่อนไหวใหม่"
-              action={
-                <Button asChild>
-                  <Link href="/movements/new?type=RECEIVE">
-                    <ArrowDownToLine className="w-4 h-4 mr-2" />
-                    รับเข้าสินค้า
-                  </Link>
-                </Button>
-              }
-            />
-          ) : (
-            <div className="overflow-x-auto mobile-scroll">
-              <Table className="min-w-[800px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>เลขที่เอกสาร</TableHead>
-                  <TableHead>ประเภท</TableHead>
-                  <TableHead>สถานะ</TableHead>
-                  <TableHead>รายการ</TableHead>
-                  <TableHead>ผู้สร้าง</TableHead>
-                  <TableHead>วันที่</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {movements.map((movement) => {
-                  const typeInfo = typeConfig[movement.type]
-                  const statusInfo = movementStatusConfig[movement.status]
-                  const TypeIcon = typeInfo.icon
-
-                  return (
-                    <TableRow key={movement.id}>
-                      <TableCell>
-                        <Link
-                          href={`/movements/${movement.id}`}
-                          className="font-mono text-sm text-[var(--accent-primary)] hover:underline"
-                        >
-                          {movement.docNumber}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={typeInfo.color}>
-                          <TypeIcon className="w-3 h-3 mr-1" />
-                          {typeInfo.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
-                          {statusInfo.icon}
-                          <span className="ml-1">{statusInfo.shortLabel || statusInfo.label}</span>
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-[var(--text-secondary)]">
-                        {movement.lines.length} รายการ
-                        {movement.lines[0] && (
-                          <span className="text-[var(--text-muted)] text-xs ml-2">
-                            ({movement.lines[0].product.name}
-                            {movement.lines[0].variant && (
-                              <span className="text-[var(--accent-primary)]">
-                                {' - '}{movement.lines[0].variant.name || movement.lines[0].variant.sku}
-                              </span>
-                            )}
-                            {movement.lines.length > 1 && ` +${movement.lines.length - 1}`})
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-[var(--text-secondary)]">
-                        {movement.createdBy.name}
-                      </TableCell>
-                      <TableCell className="text-[var(--text-muted)] text-sm">
-                        {formatDateTime(movement.createdAt)}
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon-sm" asChild>
-                          <Link href={`/movements/${movement.id}`}>
-                            <Eye className="w-4 h-4" />
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Movements Table with Selection */}
+      <MovementsTable 
+        movements={movements as unknown as Parameters<typeof MovementsTable>[0]['movements']} 
+        canApprove={canApprove} 
+      />
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex items-center justify-center gap-2 pb-16">
           <Button
             variant="outline"
             size="sm"
