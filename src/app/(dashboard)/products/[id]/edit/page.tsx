@@ -32,6 +32,7 @@ const stockTypeLabels: Record<StockType, { label: string; description: string }>
 interface EditProductFormData {
   sku: string
   name: string
+  supplierName?: string
   description?: string
   barcode?: string
   categoryId?: string
@@ -84,6 +85,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       // Set form values
       setValue('sku', product.sku)
       setValue('name', product.name)
+      setValue('supplierName', product.supplierName || '')
       setValue('description', product.description || '')
       setValue('barcode', product.barcode || '')
       setValue('categoryId', product.categoryId || '')
@@ -178,6 +180,18 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                 {errors.name && (
                   <p className="text-sm text-[var(--status-error)]">{errors.name.message}</p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="supplierName">ชื่อ Supplier</Label>
+                <Input
+                  id="supplierName"
+                  {...register('supplierName')}
+                  placeholder="ชื่อที่ Supplier เรียก (ไม่บังคับ)"
+                />
+                <p className="text-xs text-[var(--text-muted)]">
+                  ใช้ในการคัดลอกข้อความส่ง Supplier
+                </p>
               </div>
 
               <div className="space-y-2">

@@ -63,6 +63,7 @@ model Product {
   id             String           @id @default(cuid())
   sku            String           @unique
   name           String
+  supplierName   String?          // ชื่อที่ Supplier เรียก (ไม่บังคับ)
   description    String?
   barcode        String?          @unique
   categoryId     String?

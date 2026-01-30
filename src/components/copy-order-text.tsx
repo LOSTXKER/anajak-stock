@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 interface OrderLine {
   productName: string
   variantName?: string
+  supplierProductName?: string  // ชื่อที่ Supplier เรียก
   sku: string
   qty: number
   unitPrice?: number
@@ -38,13 +39,14 @@ export function CopyOrderText({
 }: CopyOrderTextProps) {
   const [copied, setCopied] = useState<'simple' | 'detailed' | null>(null)
 
-  // แบบย่อ - ส่ง Supplier (สี/ไซส์ + จำนวน + ราคารวม)
+  // แบบย่อ - ส่ง Supplier (ใช้ชื่อ Supplier ถ้ามี)
   function generateSimpleText() {
     let text = ''
     
     lines.forEach((line, index) => {
-      const variant = line.variantName || '-'
-      text += `${index + 1}. ${variant} x ${line.qty.toLocaleString()}\n`
+      // ใช้ supplierProductName ถ้ามี ไม่งั้นใช้ variantName
+      const displayName = line.supplierProductName || line.variantName || '-'
+      text += `${index + 1}. ${displayName} x ${line.qty.toLocaleString()}\n`
     })
     
     if (totalAmount !== undefined) {

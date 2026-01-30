@@ -11,6 +11,7 @@ import { StockType } from '@/generated/prisma'
 const productSchema = z.object({
   sku: z.string().min(1, 'กรุณากรอก SKU'),
   name: z.string().min(1, 'กรุณากรอกชื่อสินค้า'),
+  supplierName: z.string().optional(),
   description: z.string().optional(),
   barcode: z.string().optional(),
   categoryId: z.string().optional(),
@@ -265,6 +266,7 @@ export async function createProduct(data: ProductInput): Promise<ActionResult<Pr
         data: {
           sku: validated.sku,
           name: validated.name,
+          supplierName: validated.supplierName || null,
           description: validated.description,
           barcode: validated.barcode || null,
           categoryId: validated.categoryId || null,
@@ -416,6 +418,7 @@ export async function updateProduct(
       data: {
         ...(data.sku && { sku: data.sku }),
         ...(data.name && { name: data.name }),
+        ...(data.supplierName !== undefined && { supplierName: data.supplierName || null }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.barcode !== undefined && { barcode: data.barcode || null }),
         ...(data.categoryId !== undefined && { categoryId: data.categoryId || null }),

@@ -293,6 +293,7 @@ export default function NewProductPage() {
         const result = await createProduct({
           sku: formData.get('sku') as string,
           name: formData.get('name') as string,
+          supplierName: (formData.get('supplierName') as string) || undefined,
           description: (formData.get('description') as string) || undefined,
           barcode: (formData.get('barcode') as string) || undefined,
           categoryId: (formData.get('categoryId') as string) || undefined,
@@ -373,6 +374,17 @@ export default function NewProductPage() {
                 required
                 placeholder="เช่น เสื้อยืดคอกลม"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>ชื่อ Supplier</Label>
+              <Input
+                name="supplierName"
+                placeholder="ชื่อที่ Supplier เรียก (ไม่บังคับ)"
+              />
+              <p className="text-xs text-[var(--text-muted)]">
+                ใช้ในการคัดลอกข้อความส่ง Supplier
+              </p>
             </div>
 
             <div className="space-y-2">

@@ -166,6 +166,7 @@ async function PRDetail({ id }: { id: string }) {
               variantName: line.variant?.optionValues
                 ?.map((ov) => ov.optionValue.value)
                 .join(', ') || line.variant?.name || undefined,
+              supplierProductName: line.product.supplierName || undefined,
               sku: line.variant?.sku || line.product.sku,
               qty: Number(line.qty),
             }))}
