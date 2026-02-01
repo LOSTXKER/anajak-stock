@@ -1231,6 +1231,15 @@ const MOVEMENT_TYPE_LABELS: Record<string, string> = {
   RETURN: 'คืนของ',
 }
 
+// Map MovementType to notification key prefix for granular notifications
+const MOVEMENT_NOTIFICATION_PREFIX: Record<string, string> = {
+  RECEIVE: 'receive',
+  ISSUE: 'issue',
+  TRANSFER: 'transfer',
+  ADJUST: 'adjust',
+  RETURN: 'return',
+}
+
 /**
  * Send notifications to all approvers when a movement is submitted
  * Respects user notification preferences for each channel
@@ -1242,7 +1251,9 @@ async function notifyMovementSubmitted(
   submitterName: string
 ) {
   const typeLabel = MOVEMENT_TYPE_LABELS[type] || type
-  const notificationType: NotificationTypeKey = 'movementPending'
+  // Use granular notification type based on movement type (e.g., 'receivePending', 'issuePending')
+  const prefix = MOVEMENT_NOTIFICATION_PREFIX[type] || 'receive'
+  const notificationType = `${prefix}Pending` as NotificationTypeKey
 
   // Get all approvers (ADMIN and APPROVER roles)
   const approvers = await prisma.user.findMany({
@@ -1276,7 +1287,7 @@ async function notifyMovementSubmitted(
     if (channels.line) {
       const lineUserId = await getUserLineId(approver.id)
       if (lineUserId) {
-        tasks.push(sendLineNotificationToUser(lineUserId, 'movementPending', {
+        tasks.push(sendLineNotificationToUser(lineUserId, notificationType, {
           movementId,
           docNumber,
           type: typeLabel,
@@ -1308,7 +1319,9 @@ async function notifyMovementPosted(
   creatorId: string
 ) {
   const typeLabel = MOVEMENT_TYPE_LABELS[type] || type
-  const notificationType: NotificationTypeKey = 'movementPosted'
+  // Use granular notification type based on movement type (e.g., 'receivePosted', 'issuePosted')
+  const prefix = MOVEMENT_NOTIFICATION_PREFIX[type] || 'receive'
+  const notificationType = `${prefix}Posted` as NotificationTypeKey
   const channels = await getUserEnabledChannels(creatorId, notificationType)
   const tasks: Promise<unknown>[] = []
 
@@ -1329,7 +1342,7 @@ async function notifyMovementPosted(
   if (channels.line) {
     const lineUserId = await getUserLineId(creatorId)
     if (lineUserId) {
-      tasks.push(sendLineNotificationToUser(lineUserId, 'movementPosted', {
+      tasks.push(sendLineNotificationToUser(lineUserId, notificationType, {
         movementId,
         docNumber,
         type: typeLabel,

@@ -28,28 +28,6 @@ export interface LineSettings {
   channelAccessToken: string
   channelSecret: string
   recipientUserIds: string[] // LINE User IDs to notify
-  
-  // Stock alerts
-  notifyLowStock: boolean
-  notifyExpiring: boolean
-  
-  // PR notifications
-  notifyPRPending: boolean
-  
-  // PO notifications (granular)
-  notifyPOPending: boolean
-  notifyPOApproved: boolean
-  notifyPORejected: boolean
-  notifyPOSent: boolean
-  notifyPOCancelled: boolean
-  notifyPOReceived: boolean
-  
-  // Movement notifications
-  notifyMovementPending: boolean
-  notifyMovementPosted: boolean
-  
-  // Legacy field (for backward compatibility)
-  notifyPOStatus?: boolean
 }
 
 const DEFAULT_LINE_SETTINGS: LineSettings = {
@@ -57,25 +35,6 @@ const DEFAULT_LINE_SETTINGS: LineSettings = {
   channelAccessToken: '',
   channelSecret: '',
   recipientUserIds: [],
-  
-  // Stock alerts
-  notifyLowStock: true,
-  notifyExpiring: true,
-  
-  // PR notifications
-  notifyPRPending: true,
-  
-  // PO notifications (granular)
-  notifyPOPending: true,
-  notifyPOApproved: true,
-  notifyPORejected: true,
-  notifyPOSent: true,
-  notifyPOCancelled: true,
-  notifyPOReceived: true,
-  
-  // Movement notifications
-  notifyMovementPending: false,
-  notifyMovementPosted: false,
 }
 
 export async function getLineSettings(): Promise<ActionResult<LineSettings>> {
@@ -93,17 +52,7 @@ export async function getLineSettings(): Promise<ActionResult<LineSettings>> {
       return { success: true, data: DEFAULT_LINE_SETTINGS }
     }
 
-    const data = JSON.parse(setting.value) as Partial<LineSettings> & { notifyPOStatus?: boolean }
-    
-    // Backward compatibility: migrate notifyPOStatus to granular fields
-    if (data.notifyPOStatus !== undefined && data.notifyPOPending === undefined) {
-      data.notifyPOPending = data.notifyPOStatus
-      data.notifyPOApproved = data.notifyPOStatus
-      data.notifyPORejected = data.notifyPOStatus
-      data.notifyPOSent = data.notifyPOStatus
-      data.notifyPOCancelled = data.notifyPOStatus
-      data.notifyPOReceived = data.notifyPOStatus
-    }
+    const data = JSON.parse(setting.value) as Partial<LineSettings>
     
     return { 
       success: true, 
@@ -254,7 +203,7 @@ async function getRecipientIds(): Promise<string[]> {
 export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
   try {
     const settingsResult = await getLineSettings()
-    if (!settingsResult.success || !settingsResult.data.enabled || !settingsResult.data.notifyLowStock) {
+    if (!settingsResult.success || !settingsResult.data.enabled) {
       return { success: true, data: undefined } // Silently skip if disabled
     }
 
@@ -386,7 +335,7 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
 export async function sendLinePRPendingAlert(prId: string): Promise<ActionResult<void>> {
   try {
     const settingsResult = await getLineSettings()
-    if (!settingsResult.success || !settingsResult.data.enabled || !settingsResult.data.notifyPRPending) {
+    if (!settingsResult.success || !settingsResult.data.enabled) {
       return { success: true, data: undefined }
     }
 
@@ -467,36 +416,12 @@ function mapPOStatusToNotificationType(status: string): NotificationTypeKey | nu
 }
 
 /**
- * Check if a specific PO status notification is enabled in settings
- */
-function isPOStatusNotificationEnabled(settings: LineSettings, status: string): boolean {
-  const statusSettingMap: Record<string, keyof LineSettings> = {
-    'รออนุมัติ': 'notifyPOPending',
-    'อนุมัติแล้ว': 'notifyPOApproved',
-    'ไม่อนุมัติ': 'notifyPORejected',
-    'ส่งให้ Supplier แล้ว': 'notifyPOSent',
-    'ยกเลิกแล้ว': 'notifyPOCancelled',
-    'รับสินค้าแล้ว': 'notifyPOReceived',
-  }
-  
-  const settingKey = statusSettingMap[status]
-  if (!settingKey) return true // Unknown status, allow by default
-  
-  return settings[settingKey] as boolean
-}
-
-/**
  * Send PO Status Update via LINE
  */
 export async function sendLinePOStatusUpdate(poId: string, status: string): Promise<ActionResult<void>> {
   try {
     const settingsResult = await getLineSettings()
     if (!settingsResult.success || !settingsResult.data.enabled) {
-      return { success: true, data: undefined }
-    }
-    
-    // Check if this specific PO status notification is enabled
-    if (!isPOStatusNotificationEnabled(settingsResult.data, status)) {
       return { success: true, data: undefined }
     }
 
@@ -558,7 +483,7 @@ export async function sendLinePOStatusUpdate(poId: string, status: string): Prom
 export async function sendLineMovementPosted(movementId: string): Promise<ActionResult<void>> {
   try {
     const settingsResult = await getLineSettings()
-    if (!settingsResult.success || !settingsResult.data.enabled || !settingsResult.data.notifyMovementPosted) {
+    if (!settingsResult.success || !settingsResult.data.enabled) {
       return { success: true, data: undefined }
     }
 
@@ -618,7 +543,7 @@ export async function sendLineMovementPosted(movementId: string): Promise<Action
 export async function sendLineMovementPending(movementId: string): Promise<ActionResult<void>> {
   try {
     const settingsResult = await getLineSettings()
-    if (!settingsResult.success || !settingsResult.data.enabled || !settingsResult.data.notifyMovementPending) {
+    if (!settingsResult.success || !settingsResult.data.enabled) {
       return { success: true, data: undefined }
     }
 
@@ -680,7 +605,7 @@ export async function sendLineMovementPending(movementId: string): Promise<Actio
 export async function sendLineExpiringAlert(): Promise<ActionResult<void>> {
   try {
     const settingsResult = await getLineSettings()
-    if (!settingsResult.success || !settingsResult.data.enabled || !settingsResult.data.notifyExpiring) {
+    if (!settingsResult.success || !settingsResult.data.enabled) {
       return { success: true, data: undefined }
     }
 
