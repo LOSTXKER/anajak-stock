@@ -26,6 +26,7 @@ import {
   Scan,
   HelpCircle,
   Layers,
+  FileText,
 } from 'lucide-react'
 import { Role } from '@/generated/prisma'
 import { hasPermission } from '@/lib/permissions'
@@ -124,6 +125,7 @@ const reportsGroup: MenuGroup = {
   permission: 'reports:read',
   items: [
     { title: 'วิเคราะห์เชิงลึก', href: '/reports/analytics', icon: BarChart3, permission: 'reports:read' },
+    { title: 'สรุปออเดอร์', href: '/reports/orders', icon: FileText, permission: 'reports:read' },
     { title: 'สินค้าใกล้หมด', href: '/reports/low-stock', icon: AlertTriangle, permission: 'reports:read' },
     { title: 'Dead Stock', href: '/reports/dead-stock', icon: Archive, permission: 'reports:read' },
     { title: 'สินค้าใกล้หมดอายุ', href: '/reports/expiring', icon: Clock, permission: 'reports:read' },

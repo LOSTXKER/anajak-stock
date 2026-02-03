@@ -424,3 +424,183 @@ export async function getForecast(months: number = 3) {
     return { success: false as const, error: 'เกิดข้อผิดพลาดในการดึงข้อมูล' }
   }
 }
+
+// ==================== ORDER SUMMARY REPORT ====================
+
+export interface OrderSummaryItem {
+  orderRef: string
+  firstIssueDate: Date
+  lastIssueDate: Date
+  itemCount: number
+  totalQty: number
+  items: {
+    productId: string
+    variantId: string | null
+    sku: string
+    productName: string
+    variantName: string | null
+    qty: number
+    movementDocNumber: string
+    issuedAt: Date
+  }[]
+}
+
+export interface OrderSummaryData {
+  totalOrders: number
+  totalItems: number
+  totalQty: number
+  orders: OrderSummaryItem[]
+}
+
+export async function getOrderSummaryReport(params: {
+  dateFrom?: string
+  dateTo?: string
+  search?: string
+}): Promise<{ success: true; data: OrderSummaryData } | { success: false; error: string }> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'กรุณาเข้าสู่ระบบ' }
+  }
+
+  try {
+    const { dateFrom, dateTo, search } = params
+
+    // Query movement lines with orderRef
+    const movementLines = await prisma.movementLine.findMany({
+      where: {
+        orderRef: search 
+          ? { contains: search, mode: 'insensitive' }
+          : { not: null },
+        movement: {
+          type: 'ISSUE',
+          status: 'POSTED',
+          ...((dateFrom || dateTo) && {
+            postedAt: {
+              ...(dateFrom && { gte: new Date(dateFrom) }),
+              ...(dateTo && { lte: new Date(dateTo + 'T23:59:59.999Z') }),
+            },
+          }),
+        },
+      },
+      include: {
+        product: {
+          select: { id: true, sku: true, name: true },
+        },
+        variant: {
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+            optionValues: {
+              select: {
+                optionValue: {
+                  select: {
+                    value: true,
+                    optionType: { select: { name: true } },
+                  },
+                },
+              },
+              orderBy: {
+                optionValue: {
+                  optionType: { displayOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
+        movement: {
+          select: {
+            id: true,
+            docNumber: true,
+            postedAt: true,
+          },
+        },
+      },
+      orderBy: {
+        movement: { postedAt: 'desc' },
+      },
+    })
+
+    // Group by orderRef
+    const orderMap = new Map<string, {
+      orderRef: string
+      firstIssueDate: Date
+      lastIssueDate: Date
+      items: {
+        productId: string
+        variantId: string | null
+        sku: string
+        productName: string
+        variantName: string | null
+        qty: number
+        movementDocNumber: string
+        issuedAt: Date
+      }[]
+    }>()
+
+    for (const line of movementLines) {
+      if (!line.orderRef) continue
+
+      const variantName = line.variant?.optionValues
+        ?.map((ov) => ov.optionValue.value)
+        .join(' / ') || line.variant?.name || null
+
+      const item = {
+        productId: line.productId,
+        variantId: line.variantId,
+        sku: line.variant?.sku || line.product.sku,
+        productName: line.product.name,
+        variantName,
+        qty: Number(line.qty),
+        movementDocNumber: line.movement.docNumber,
+        issuedAt: line.movement.postedAt || new Date(),
+      }
+
+      const existing = orderMap.get(line.orderRef)
+      if (existing) {
+        existing.items.push(item)
+        if (item.issuedAt < existing.firstIssueDate) {
+          existing.firstIssueDate = item.issuedAt
+        }
+        if (item.issuedAt > existing.lastIssueDate) {
+          existing.lastIssueDate = item.issuedAt
+        }
+      } else {
+        orderMap.set(line.orderRef, {
+          orderRef: line.orderRef,
+          firstIssueDate: item.issuedAt,
+          lastIssueDate: item.issuedAt,
+          items: [item],
+        })
+      }
+    }
+
+    // Convert to array and calculate totals
+    const orders: OrderSummaryItem[] = Array.from(orderMap.values()).map(order => ({
+      ...order,
+      itemCount: order.items.length,
+      totalQty: order.items.reduce((sum, item) => sum + item.qty, 0),
+    }))
+
+    // Sort by lastIssueDate descending (most recent first)
+    orders.sort((a, b) => b.lastIssueDate.getTime() - a.lastIssueDate.getTime())
+
+    // Calculate summary
+    const totalOrders = orders.length
+    const totalItems = orders.reduce((sum, order) => sum + order.itemCount, 0)
+    const totalQty = orders.reduce((sum, order) => sum + order.totalQty, 0)
+
+    return {
+      success: true,
+      data: {
+        totalOrders,
+        totalItems,
+        totalQty,
+        orders,
+      },
+    }
+  } catch (error) {
+    console.error('Error getting order summary:', error)
+    return { success: false, error: 'เกิดข้อผิดพลาดในการดึงข้อมูล' }
+  }
+}
