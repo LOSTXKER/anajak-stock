@@ -37,6 +37,18 @@ const DEFAULT_LINE_SETTINGS: LineSettings = {
   recipientUserIds: [],
 }
 
+// Helper function to map MovementType to notification prefix
+function getMovementTypePrefix(type: string): string {
+  const prefixMap: Record<string, string> = {
+    RECEIVE: 'receive',
+    ISSUE: 'issue',
+    TRANSFER: 'transfer',
+    ADJUST: 'adjust',
+    RETURN: 'return',
+  }
+  return prefixMap[type] || 'receive'
+}
+
 export async function getLineSettings(): Promise<ActionResult<LineSettings>> {
   const session = await getSession()
   if (!session) {
@@ -492,11 +504,7 @@ export async function sendLineMovementPosted(movementId: string): Promise<Action
       return { success: false, error: 'LINE not configured' }
     }
 
-    const recipientIds = await getRecipientIds()
-    if (recipientIds.length === 0) {
-      return { success: false, error: 'No recipients configured' }
-    }
-
+    // Get movement first to determine notification type
     const movement = await prisma.stockMovement.findUnique({
       where: { id: movementId },
       include: {
@@ -507,6 +515,20 @@ export async function sendLineMovementPosted(movementId: string): Promise<Action
 
     if (!movement) {
       return { success: false, error: 'Movement not found' }
+    }
+
+    // Get all recipients and filter by user preferences
+    const allRecipientIds = await getRecipientIds()
+    if (allRecipientIds.length === 0) {
+      return { success: true, data: undefined } // No recipients configured
+    }
+
+    // Determine notification type based on movement type (e.g., 'issuePosted', 'receivePosted')
+    const notificationType = `${getMovementTypePrefix(movement.type)}Posted` as NotificationTypeKey
+    const recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, notificationType)
+    
+    if (recipientIds.length === 0) {
+      return { success: true, data: undefined } // All recipients have disabled this notification
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
@@ -552,11 +574,7 @@ export async function sendLineMovementPending(movementId: string): Promise<Actio
       return { success: false, error: 'LINE not configured' }
     }
 
-    const recipientIds = await getRecipientIds()
-    if (recipientIds.length === 0) {
-      return { success: false, error: 'No recipients configured' }
-    }
-
+    // Get movement first to determine notification type
     const movement = await prisma.stockMovement.findUnique({
       where: { id: movementId },
       include: {
@@ -567,6 +585,20 @@ export async function sendLineMovementPending(movementId: string): Promise<Actio
 
     if (!movement) {
       return { success: false, error: 'Movement not found' }
+    }
+
+    // Get all recipients and filter by user preferences
+    const allRecipientIds = await getRecipientIds()
+    if (allRecipientIds.length === 0) {
+      return { success: true, data: undefined } // No recipients configured
+    }
+
+    // Determine notification type based on movement type (e.g., 'issuePending', 'receivePending')
+    const notificationType = `${getMovementTypePrefix(movement.type)}Pending` as NotificationTypeKey
+    const recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, notificationType)
+    
+    if (recipientIds.length === 0) {
+      return { success: true, data: undefined } // All recipients have disabled this notification
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
