@@ -244,6 +244,9 @@ async function MovementDetail({ id }: { id: string }) {
                 <TableHead className="text-right">จำนวน</TableHead>
                 <TableHead>หน่วย</TableHead>
                 <TableHead className="text-right">ราคาทุน</TableHead>
+                {movement.type === 'ISSUE' && (
+                  <TableHead>เลขออเดอร์</TableHead>
+                )}
                 <TableHead>หมายเหตุ</TableHead>
               </TableRow>
             </TableHeader>
@@ -316,6 +319,11 @@ async function MovementDetail({ id }: { id: string }) {
                       </div>
                     ) : '-'}
                   </TableCell>
+                  {movement.type === 'ISSUE' && (
+                    <TableCell className="text-sm font-mono">
+                      {line.orderRef || '-'}
+                    </TableCell>
+                  )}
                   <TableCell className="text-sm text-[var(--text-muted)] max-w-[150px] truncate">
                     {line.note || '-'}
                   </TableCell>
@@ -334,6 +342,7 @@ async function MovementDetail({ id }: { id: string }) {
                 <TableCell className="text-right font-mono font-medium text-[var(--accent-primary)]">
                   ฿{movement.lines.reduce((sum, line) => sum + (Number(line.unitCost) * Number(line.qty)), 0).toLocaleString()}
                 </TableCell>
+                {movement.type === 'ISSUE' && <TableCell></TableCell>}
                 <TableCell></TableCell>
               </TableRow>
             </TableBody>

@@ -25,6 +25,7 @@ interface MovementLineInput {
   lotId?: string
   newLotNumber?: string
   newLotExpiryDate?: string
+  orderRef?: string // เลขออเดอร์จาก ERP (for ISSUE)
 }
 
 interface CreateMovementInput {
@@ -63,8 +64,9 @@ export async function getMovements(params: {
   search?: string
   dateFrom?: string
   dateTo?: string
+  orderRef?: string
 }): Promise<PaginatedResult<MovementWithRelations>> {
-  const { page = 1, limit = 20, type, status, search, dateFrom, dateTo } = params
+  const { page = 1, limit = 20, type, status, search, dateFrom, dateTo, orderRef } = params
 
   const where = {
     ...(type && { type }),
@@ -79,6 +81,14 @@ export async function getMovements(params: {
       createdAt: {
         ...(dateFrom && { gte: new Date(dateFrom) }),
         ...(dateTo && { lte: new Date(dateTo + 'T23:59:59.999Z') }),
+      },
+    }),
+    // Filter by orderRef in movement lines
+    ...(orderRef && {
+      lines: {
+        some: {
+          orderRef: { contains: orderRef, mode: 'insensitive' as const },
+        },
       },
     }),
   }
@@ -337,6 +347,7 @@ export async function createMovement(data: CreateMovementInput): Promise<ActionR
               qty: line.qty,
               unitCost: line.unitCost || 0,
               note: line.note,
+              orderRef: line.orderRef || null, // เลขออเดอร์จาก ERP
               // Create LotMovementLine if lotId is provided
               ...(lotId && {
                 lotMovementLines: {
@@ -775,6 +786,7 @@ interface UpdateMovementLineInput {
   qty: number
   unitCost?: number
   note?: string
+  orderRef?: string // เลขออเดอร์จาก ERP (for ISSUE)
 }
 
 interface UpdateMovementInput {
@@ -826,6 +838,7 @@ export async function updateMovement(id: string, data: UpdateMovementInput): Pro
             qty: line.qty,
             unitCost: line.unitCost || 0,
             note: line.note,
+            orderRef: line.orderRef || null, // เลขออเดอร์จาก ERP
           })),
         },
       },

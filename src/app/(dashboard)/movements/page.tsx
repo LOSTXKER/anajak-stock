@@ -9,7 +9,7 @@ import { MovementType, DocStatus, Role } from '@/generated/prisma'
 import { ExportButton } from '@/components/export-button'
 import { PageHeader } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
-import { MovementDateFilter, MovementStatusFilter } from './movement-filters'
+import { MovementDateFilter, MovementStatusFilter, MovementOrderRefFilter } from './movement-filters'
 import { MovementsTable } from './movements-table'
 
 interface PageProps {
@@ -20,6 +20,7 @@ interface PageProps {
     search?: string
     dateFrom?: string
     dateTo?: string
+    orderRef?: string
   }>
 }
 
@@ -64,6 +65,7 @@ async function MovementsContent({ searchParams }: PageProps) {
   const search = params.search
   const dateFrom = params.dateFrom
   const dateTo = params.dateTo
+  const orderRef = params.orderRef
 
   // Get session for permission check
   const session = await getSession()
@@ -77,6 +79,7 @@ async function MovementsContent({ searchParams }: PageProps) {
     search,
     dateFrom,
     dateTo,
+    orderRef,
   })
 
   const buildUrl = (newPage: number) => {
@@ -87,6 +90,7 @@ async function MovementsContent({ searchParams }: PageProps) {
     if (search) p.set('search', search)
     if (dateFrom) p.set('dateFrom', dateFrom)
     if (dateTo) p.set('dateTo', dateTo)
+    if (orderRef) p.set('orderRef', orderRef)
     return `/movements?${p.toString()}`
   }
 
@@ -165,7 +169,10 @@ async function MovementsContent({ searchParams }: PageProps) {
           
           {/* Date Range Filter */}
           <div className="border-t border-[var(--border-default)] pt-4">
-            <MovementDateFilter />
+            <div className="flex flex-wrap gap-4 md:gap-6">
+              <MovementDateFilter />
+              <MovementOrderRefFilter />
+            </div>
           </div>
         </CardContent>
       </Card>

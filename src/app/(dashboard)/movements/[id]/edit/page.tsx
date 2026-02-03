@@ -69,6 +69,7 @@ interface MovementLine {
   qty: number
   unitCost: number
   note?: string
+  orderRef?: string // เลขออเดอร์จาก ERP (for ISSUE)
 }
 
 const typeConfig: Record<MovementType, { label: string; icon: React.ReactNode; color: string }> = {
@@ -156,6 +157,7 @@ export default function EditMovementPage(props: PageProps) {
           qty: Number(line.qty),
           unitCost: Number(line.unitCost),
           note: line.note || undefined,
+          orderRef: line.orderRef || undefined, // เลขออเดอร์จาก ERP
         })))
 
         setProducts(productsResult.items.map(p => ({
@@ -374,6 +376,7 @@ export default function EditMovementPage(props: PageProps) {
         qty: line.qty,
         unitCost: line.unitCost,
         note: line.note,
+        orderRef: line.orderRef, // เลขออเดอร์จาก ERP (for ISSUE)
       })),
     })
 
@@ -523,6 +526,9 @@ export default function EditMovementPage(props: PageProps) {
                     {type === 'RECEIVE' && (
                       <TableHead className="w-32">ต้นทุน</TableHead>
                     )}
+                    {type === 'ISSUE' && (
+                      <TableHead className="w-32">เลขออเดอร์</TableHead>
+                    )}
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -668,6 +674,17 @@ export default function EditMovementPage(props: PageProps) {
                                   className="w-24 rounded-l-none"
                                 />
                               </div>
+                            </TableCell>
+                          )}
+                          {type === 'ISSUE' && (
+                            <TableCell>
+                              <Input
+                                type="text"
+                                value={line.orderRef || ''}
+                                onChange={(e) => updateLine(line.id, { orderRef: e.target.value })}
+                                className="w-28"
+                                placeholder="เลขออเดอร์"
+                              />
                             </TableCell>
                           )}
                           <TableCell>

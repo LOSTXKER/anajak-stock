@@ -300,6 +300,7 @@ model MovementLine {
   note             String?
   createdAt        DateTime          @default(now())
   variantId        String?
+  orderRef         String?           // เลขออเดอร์จาก ERP
   lotMovementLines LotMovementLine[]
   fromLocation     Location?         @relation("MovementFromLocation", fields: [fromLocationId], references: [id])
   movement         StockMovement     @relation(fields: [movementId], references: [id], onDelete: Cascade)
@@ -312,6 +313,7 @@ model MovementLine {
   @@index([variantId])
   @@index([fromLocationId])
   @@index([toLocationId])
+  @@index([orderRef])
   @@map("movement_lines")
 }
 

@@ -88,6 +88,8 @@ interface MovementLine {
   issuedQty?: number
   returnedQty?: number
   remainingQty?: number
+  // Order reference from ERP (for ISSUE)
+  orderRef?: string
 }
 
 // Issued movement for RETURN selection
@@ -648,6 +650,7 @@ export default function NewMovementPage(props: PageProps) {
         lotId: line.lotId,
         newLotNumber: line.newLotNumber,
         newExpiryDate: line.newExpiryDate,
+        orderRef: line.orderRef, // เลขออเดอร์จาก ERP (for ISSUE)
       }
     })
 
@@ -1000,6 +1003,9 @@ export default function NewMovementPage(props: PageProps) {
                     )}
                     {type === 'RECEIVE' && (
                       <TableHead className="w-32">ต้นทุน</TableHead>
+                    )}
+                    {type === 'ISSUE' && (
+                      <TableHead className="w-32">เลขออเดอร์</TableHead>
                     )}
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
@@ -1367,6 +1373,19 @@ export default function NewMovementPage(props: PageProps) {
                                   className="w-24 rounded-l-none"
                                 />
                               </div>
+                            </TableCell>
+                          )}
+                          
+                          {/* Order Reference (ISSUE only) */}
+                          {type === 'ISSUE' && (
+                            <TableCell>
+                              <Input
+                                type="text"
+                                value={line.orderRef || ''}
+                                onChange={(e) => updateLine(line.id, { orderRef: e.target.value })}
+                                className="w-28"
+                                placeholder="เลขออเดอร์"
+                              />
                             </TableCell>
                           )}
                           

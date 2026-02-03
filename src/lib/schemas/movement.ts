@@ -29,6 +29,8 @@ export const movementLineSchema = z.object({
   // New lot creation (for RECEIVE)
   newLotNumber: optionalStringSchema,
   newExpiryDate: z.string().optional(),
+  // Order reference (for ISSUE - tracking ERP orders)
+  orderRef: optionalStringSchema,
 })
 
 export type MovementLineInput = z.infer<typeof movementLineSchema>

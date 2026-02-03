@@ -6,7 +6,7 @@ import { startNavigation } from '@/components/navigation-progress'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Calendar, X } from 'lucide-react'
+import { Calendar, X, FileText } from 'lucide-react'
 import { DocStatus } from '@/generated/prisma'
 import { movementStatusConfig } from '@/lib/status-config'
 
@@ -146,6 +146,90 @@ export function MovementDateFilter() {
       </Button>
       
       {hasDateFilter && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={clearFilter}
+          className="text-[var(--text-muted)] hover:text-[var(--status-error)]"
+        >
+          <X className="w-4 h-4 mr-1" />
+          ล้าง
+        </Button>
+      )}
+    </div>
+  )
+}
+
+export function MovementOrderRefFilter() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  const [orderRef, setOrderRef] = useState(searchParams.get('orderRef') || '')
+
+  const applyFilter = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    
+    if (orderRef.trim()) {
+      params.set('orderRef', orderRef.trim())
+    } else {
+      params.delete('orderRef')
+    }
+    
+    // Reset to page 1 when filter changes
+    params.set('page', '1')
+    
+    startNavigation()
+    router.push(`/movements?${params.toString()}`)
+  }, [orderRef, searchParams, router])
+
+  const clearFilter = useCallback(() => {
+    setOrderRef('')
+    
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('orderRef')
+    params.set('page', '1')
+    
+    startNavigation()
+    router.push(`/movements?${params.toString()}`)
+  }, [searchParams, router])
+
+  const hasFilter = searchParams.get('orderRef')
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      applyFilter()
+    }
+  }, [applyFilter])
+
+  return (
+    <div className="flex items-end gap-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs text-[var(--text-muted)]">เลขออเดอร์</Label>
+        <div className="relative">
+          <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+          <Input
+            type="text"
+            value={orderRef}
+            onChange={(e) => setOrderRef(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="ค้นหาเลขออเดอร์..."
+            className="pl-8 w-[180px] text-sm"
+          />
+        </div>
+      </div>
+      
+      <Button
+        type="button"
+        size="sm"
+        onClick={applyFilter}
+        className="bg-[var(--accent-primary)] hover:bg-[var(--accent-primary-hover)]"
+      >
+        ค้นหา
+      </Button>
+      
+      {hasFilter && (
         <Button
           type="button"
           variant="ghost"
