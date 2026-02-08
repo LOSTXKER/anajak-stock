@@ -447,8 +447,16 @@ export async function sendLinePOStatusUpdate(poId: string, status: string): Prom
       return { success: false, error: 'No recipients configured' }
     }
 
-    // Recipients are now controlled by system settings, no need to filter by user preferences
-    const recipientIds = allRecipientIds
+    // Filter recipients based on their notification preferences
+    const notificationType = mapPOStatusToNotificationType(status)
+    let recipientIds = allRecipientIds
+
+    if (notificationType) {
+      recipientIds = await filterLineRecipientsByPreferences(allRecipientIds, notificationType)
+      if (recipientIds.length === 0) {
+        return { success: true, data: undefined } // All recipients have disabled this notification
+      }
+    }
 
     const po = await prisma.pO.findUnique({
       where: { id: poId },
