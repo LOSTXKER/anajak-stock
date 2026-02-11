@@ -81,6 +81,7 @@ model Product {
   hasVariants    Boolean          @default(false)
   optionGroups   Json?            // [{ "name": "สี", "values": ["แดง", "น้ำเงิน"] }, { "name": "ไซส์", "values": ["S", "M"] }]
   stockType      StockType        @default(STOCKED)
+  itemType       ItemType         @default(FINISHED_GOOD) @map("item_type")
   grnLines       GRNLine[]
   lots           Lot[]
   movementLines  MovementLine[]
@@ -99,6 +100,7 @@ model Product {
   @@index([active, deletedAt])
   @@index([categoryId, active])
   @@index([name])
+  @@index([itemType, active])
   @@map("products")
 }
 
@@ -863,6 +865,12 @@ enum StockType {
   STOCKED
   MADE_TO_ORDER
   DROP_SHIP
+}
+
+enum ItemType {
+  FINISHED_GOOD
+  RAW_MATERIAL
+  CONSUMABLE
 }
 
 enum StockTakeStatus {

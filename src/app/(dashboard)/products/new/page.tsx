@@ -254,6 +254,7 @@ export default function NewProductPage() {
           description: (formData.get('description') as string) || undefined,
           categoryId: (formData.get('categoryId') as string) || undefined,
           unitId: (formData.get('unitId') as string) || undefined,
+          itemType: (formData.get('itemType') as 'FINISHED_GOOD' | 'RAW_MATERIAL' | 'CONSUMABLE') || 'FINISHED_GOOD',
           reorderPoint: 0,
           minQty: 0,
           maxQty: 0,
@@ -298,7 +299,8 @@ export default function NewProductPage() {
           barcode: (formData.get('barcode') as string) || undefined,
           categoryId: (formData.get('categoryId') as string) || undefined,
           unitId: (formData.get('unitId') as string) || undefined,
-          stockType: 'STOCKED', // Default to stocked for new products
+          stockType: 'STOCKED',
+          itemType: (formData.get('itemType') as 'FINISHED_GOOD' | 'RAW_MATERIAL' | 'CONSUMABLE') || 'FINISHED_GOOD',
           reorderPoint: Number(formData.get('reorderPoint')) || 0,
           minQty: Number(formData.get('minQty')) || 0,
           maxQty: Number(formData.get('maxQty')) || 0,
@@ -394,6 +396,20 @@ export default function NewProductPage() {
                 placeholder="รายละเอียดเพิ่มเติม..."
                 rows={2}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>ประเภทสินค้า</Label>
+              <Select name="itemType" defaultValue="FINISHED_GOOD">
+                <SelectTrigger>
+                  <SelectValue placeholder="เลือกประเภท" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FINISHED_GOOD">สินค้าสำเร็จรูป</SelectItem>
+                  <SelectItem value="RAW_MATERIAL">วัตถุดิบ</SelectItem>
+                  <SelectItem value="CONSUMABLE">วัสดุสิ้นเปลือง</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">

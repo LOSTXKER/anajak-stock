@@ -29,6 +29,14 @@ const stockTypeLabels: Record<StockType, { label: string; description: string }>
   DROP_SHIP: { label: 'สั่งจากซัพพลายเออร์ส่งตรง', description: 'ไม่แจ้งเตือนสต๊อค' },
 }
 
+type ItemType = 'FINISHED_GOOD' | 'RAW_MATERIAL' | 'CONSUMABLE'
+
+const itemTypeLabels: Record<ItemType, string> = {
+  FINISHED_GOOD: 'สินค้าสำเร็จรูป',
+  RAW_MATERIAL: 'วัตถุดิบ',
+  CONSUMABLE: 'วัสดุสิ้นเปลือง',
+}
+
 interface EditProductFormData {
   sku: string
   name: string
@@ -38,6 +46,7 @@ interface EditProductFormData {
   categoryId?: string
   unitId?: string
   stockType: StockType
+  itemType: ItemType
   reorderPoint: number
   minQty: number
   maxQty: number
@@ -91,6 +100,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       setValue('categoryId', product.categoryId || '')
       setValue('unitId', product.unitId || '')
       setValue('stockType', product.stockType || 'STOCKED')
+      setValue('itemType', (product.itemType as ItemType) || 'FINISHED_GOOD')
       setValue('reorderPoint', Number(product.reorderPoint))
       setValue('minQty', Number(product.minQty))
       setValue('maxQty', Number(product.maxQty))
@@ -110,6 +120,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       categoryId: data.categoryId || undefined,
       unitId: data.unitId || undefined,
       stockType: data.stockType,
+      itemType: data.itemType,
     })
     setIsSaving(false)
 
@@ -210,6 +221,25 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   {...register('barcode')}
                   className="font-mono"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label>ประเภทสินค้า</Label>
+                <Select
+                  value={watch('itemType') || 'FINISHED_GOOD'}
+                  onValueChange={(v) => setValue('itemType', v as ItemType)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(itemTypeLabels).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

@@ -24,17 +24,26 @@ interface PageProps {
     page?: string
     search?: string
     category?: string
+    itemType?: string
   }>
 }
+
+const ITEM_TYPE_TABS = [
+  { value: '', label: 'ทั้งหมด' },
+  { value: 'FINISHED_GOOD', label: 'สินค้าสำเร็จรูป' },
+  { value: 'RAW_MATERIAL', label: 'วัตถุดิบ' },
+  { value: 'CONSUMABLE', label: 'วัสดุสิ้นเปลือง' },
+] as const
 
 async function ProductsContent({ searchParams }: PageProps) {
   const params = await searchParams
   const page = Number(params.page) || 1
   const search = params.search || ''
   const categoryId = params.category || ''
+  const itemType = params.itemType || ''
 
   const [{ items: products, total, totalPages }, categories] = await Promise.all([
-    getProducts({ page, limit: 20, search, categoryId: categoryId || undefined }),
+    getProducts({ page, limit: 20, search, categoryId: categoryId || undefined, itemType: itemType || undefined }),
     getCategories(),
   ])
 
@@ -74,6 +83,9 @@ async function ProductsContent({ searchParams }: PageProps) {
         }
       />
 
+      {/* Item Type Tabs */}
+      <ItemTypeTabs current={itemType} search={search} categoryId={categoryId} />
+
       {/* Search & Filter */}
       <ProductSearch categories={categories} />
 
@@ -101,6 +113,7 @@ async function ProductsContent({ searchParams }: PageProps) {
                 <TableRow>
                   <TableHead>SKU</TableHead>
                   <TableHead>ชื่อสินค้า</TableHead>
+                  <TableHead>ประเภท</TableHead>
                   <TableHead>หมวดหมู่</TableHead>
                   <TableHead>หน่วย</TableHead>
                   <TableHead className="text-right">Reorder Point</TableHead>
@@ -138,6 +151,13 @@ async function ProductsContent({ searchParams }: PageProps) {
                           {product.barcode}
                         </p>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs whitespace-nowrap">
+                        {product.itemType === 'RAW_MATERIAL' ? 'วัตถุดิบ'
+                          : product.itemType === 'CONSUMABLE' ? 'วัสดุสิ้นเปลือง'
+                          : 'สำเร็จรูป'}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-[var(--text-secondary)]">
                       {product.category?.name || '-'}
@@ -219,6 +239,35 @@ async function ProductsContent({ searchParams }: PageProps) {
           </Button>
         </div>
       )}
+    </div>
+  )
+}
+
+function ItemTypeTabs({ current, search, categoryId }: { current: string; search: string; categoryId: string }) {
+  function buildHref(itemType: string) {
+    const params = new URLSearchParams()
+    if (search) params.set('search', search)
+    if (categoryId) params.set('category', categoryId)
+    if (itemType) params.set('itemType', itemType)
+    const qs = params.toString()
+    return `/products${qs ? `?${qs}` : ''}`
+  }
+
+  return (
+    <div className="flex gap-1 overflow-x-auto rounded-lg border p-1" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+      {ITEM_TYPE_TABS.map((tab) => (
+        <Link
+          key={tab.value}
+          href={buildHref(tab.value)}
+          className={`whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            current === tab.value
+              ? 'bg-[var(--bg-primary)] text-[var(--brand)] shadow-sm'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+          }`}
+        >
+          {tab.label}
+        </Link>
+      ))}
     </div>
   )
 }

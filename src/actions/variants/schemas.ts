@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod'
-import { StockType } from '@/generated/prisma'
+import { StockType, ItemType } from '@/generated/prisma'
 
 // ==================== SCHEMAS ====================
 
@@ -42,6 +42,7 @@ export const CreateProductWithVariantsSchema = z.object({
   description: z.string().optional(),
   categoryId: z.string().optional(),
   unitId: z.string().optional(),
+  itemType: z.nativeEnum(ItemType).default(ItemType.FINISHED_GOOD),
   reorderPoint: z.number().min(0).default(0),
   minQty: z.number().min(0).default(0),
   maxQty: z.number().min(0).default(0),
@@ -73,6 +74,7 @@ export const CreateProductWithInlineVariantsSchema = z.object({
   description: z.string().optional(),
   categoryId: z.string().optional(),
   unitId: z.string().optional(),
+  itemType: z.nativeEnum(ItemType).default(ItemType.FINISHED_GOOD),
   reorderPoint: z.number().min(0).default(0),
   minQty: z.number().min(0).default(0),
   maxQty: z.number().min(0).default(0),

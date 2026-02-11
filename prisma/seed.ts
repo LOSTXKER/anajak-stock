@@ -155,15 +155,15 @@ async function main() {
 
   // Create sample products
   const products = [
-    { sku: 'SHIRT-001', name: 'เสื้อยืดคอกลม ขาว S', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120 },
-    { sku: 'SHIRT-002', name: 'เสื้อยืดคอกลม ขาว M', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120 },
-    { sku: 'SHIRT-003', name: 'เสื้อยืดคอกลม ขาว L', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120 },
-    { sku: 'SHIRT-004', name: 'เสื้อยืดคอกลม ดำ S', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120 },
-    { sku: 'SHIRT-005', name: 'เสื้อยืดคอกลม ดำ M', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120 },
-    { sku: 'JACKET-001', name: 'แจ็คเก็ตผ้าร่ม ดำ M', categoryId: jacketCategory?.id, unitId: pcsUnit?.id, reorderPoint: 20, standardCost: 450 },
-    { sku: 'JACKET-002', name: 'แจ็คเก็ตผ้าร่ม ดำ L', categoryId: jacketCategory?.id, unitId: pcsUnit?.id, reorderPoint: 20, standardCost: 450 },
-    { sku: 'FABRIC-001', name: 'ผ้าฝ้าย 100% ขาว', categoryId: materialCategory?.id, unitId: meterUnit?.id, reorderPoint: 100, standardCost: 85 },
-    { sku: 'FABRIC-002', name: 'ผ้าฝ้าย 100% ดำ', categoryId: materialCategory?.id, unitId: meterUnit?.id, reorderPoint: 100, standardCost: 85 },
+    { sku: 'SHIRT-001', name: 'เสื้อยืดคอกลม ขาว S', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120, itemType: 'FINISHED_GOOD' as const },
+    { sku: 'SHIRT-002', name: 'เสื้อยืดคอกลม ขาว M', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120, itemType: 'FINISHED_GOOD' as const },
+    { sku: 'SHIRT-003', name: 'เสื้อยืดคอกลม ขาว L', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120, itemType: 'FINISHED_GOOD' as const },
+    { sku: 'SHIRT-004', name: 'เสื้อยืดคอกลม ดำ S', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120, itemType: 'FINISHED_GOOD' as const },
+    { sku: 'SHIRT-005', name: 'เสื้อยืดคอกลม ดำ M', categoryId: shirtCategory?.id, unitId: pcsUnit?.id, reorderPoint: 50, standardCost: 120, itemType: 'FINISHED_GOOD' as const },
+    { sku: 'JACKET-001', name: 'แจ็คเก็ตผ้าร่ม ดำ M', categoryId: jacketCategory?.id, unitId: pcsUnit?.id, reorderPoint: 20, standardCost: 450, itemType: 'FINISHED_GOOD' as const },
+    { sku: 'JACKET-002', name: 'แจ็คเก็ตผ้าร่ม ดำ L', categoryId: jacketCategory?.id, unitId: pcsUnit?.id, reorderPoint: 20, standardCost: 450, itemType: 'FINISHED_GOOD' as const },
+    { sku: 'FABRIC-001', name: 'ผ้าฝ้าย 100% ขาว', categoryId: materialCategory?.id, unitId: meterUnit?.id, reorderPoint: 100, standardCost: 85, itemType: 'RAW_MATERIAL' as const },
+    { sku: 'FABRIC-002', name: 'ผ้าฝ้าย 100% ดำ', categoryId: materialCategory?.id, unitId: meterUnit?.id, reorderPoint: 100, standardCost: 85, itemType: 'RAW_MATERIAL' as const },
   ]
 
   for (const prod of products) {
@@ -175,6 +175,7 @@ async function main() {
         name: prod.name,
         categoryId: prod.categoryId,
         unitId: prod.unitId,
+        itemType: prod.itemType,
         reorderPoint: prod.reorderPoint,
         standardCost: prod.standardCost,
         lastCost: prod.standardCost,

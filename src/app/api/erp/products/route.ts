@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '100')
     const categoryCode = searchParams.get('category')
+    const itemType = searchParams.get('itemType') || searchParams.get('item_type')
     const search = searchParams.get('search')
     const updatedAfter = searchParams.get('updated_after')
 
@@ -50,6 +51,10 @@ export async function GET(request: NextRequest) {
 
     if (categoryCode) {
       where.category = { name: categoryCode }
+    }
+
+    if (itemType) {
+      where.itemType = itemType
     }
 
     if (search) {
@@ -125,6 +130,7 @@ export async function GET(request: NextRequest) {
       lastCost: Number(product.lastCost),
       reorderPoint: Number(product.reorderPoint),
       hasVariants: product.hasVariants,
+      itemType: product.itemType,
       totalStock: product.stockBalances.reduce(
         (sum, sb) => sum + Number(sb.qtyOnHand),
         0

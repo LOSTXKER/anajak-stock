@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { serialize } from '@/lib/serialize'
 import type { ActionResult, PaginatedResult, ProductWithRelations } from '@/types'
-import { StockType } from '@/generated/prisma'
+import { StockType, ItemType } from '@/generated/prisma'
 
 const productSchema = z.object({
   sku: z.string().min(1, 'กรุณากรอก SKU'),
@@ -17,6 +17,7 @@ const productSchema = z.object({
   categoryId: z.string().optional(),
   unitId: z.string().optional(),
   stockType: z.nativeEnum(StockType).default(StockType.STOCKED),
+  itemType: z.nativeEnum(ItemType).default(ItemType.FINISHED_GOOD),
   reorderPoint: z.number().min(0).default(0),
   minQty: z.number().min(0).default(0),
   maxQty: z.number().min(0).default(0),
@@ -35,9 +36,10 @@ export async function getProducts(params: {
   limit?: number
   search?: string
   categoryId?: string
+  itemType?: string
   active?: boolean
 }): Promise<PaginatedResult<ProductWithRelations>> {
-  const { page = 1, limit = 20, search, categoryId, active = true } = params
+  const { page = 1, limit = 20, search, categoryId, itemType, active = true } = params
 
   const where = {
     active,
@@ -50,6 +52,7 @@ export async function getProducts(params: {
       ],
     }),
     ...(categoryId && { categoryId }),
+    ...(itemType && { itemType: itemType as ItemType }),
   }
 
   const [items, total] = await Promise.all([
@@ -271,6 +274,8 @@ export async function createProduct(data: ProductInput): Promise<ActionResult<Pr
           barcode: validated.barcode || null,
           categoryId: validated.categoryId || null,
           unitId: validated.unitId || null,
+          stockType: validated.stockType,
+          itemType: validated.itemType,
           reorderPoint: validated.reorderPoint,
           minQty: validated.minQty,
           maxQty: validated.maxQty,
@@ -424,6 +429,7 @@ export async function updateProduct(
         ...(data.categoryId !== undefined && { categoryId: data.categoryId || null }),
         ...(data.unitId !== undefined && { unitId: data.unitId || null }),
         ...(data.stockType !== undefined && { stockType: data.stockType }),
+        ...(data.itemType !== undefined && { itemType: data.itemType }),
         ...(data.reorderPoint !== undefined && { reorderPoint: data.reorderPoint }),
         ...(data.minQty !== undefined && { minQty: data.minQty }),
         ...(data.maxQty !== undefined && { maxQty: data.maxQty }),
