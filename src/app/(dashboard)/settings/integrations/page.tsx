@@ -59,7 +59,7 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     loadIntegrations()
-    setApiBaseUrl(`${window.location.origin}/api/erp`)
+    setApiBaseUrl(`${window.location.origin}/api`)
   }, [])
 
   async function loadIntegrations() {
