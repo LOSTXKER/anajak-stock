@@ -44,6 +44,20 @@ export async function getIntegrations(): Promise<ActionResult<IntegrationConfig[
   }
 }
 
+/**
+ * Generate a secure API key server-side.
+ */
+function generateSecureApiKey(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = 'sk_'
+  const randomBytes = new Uint8Array(32)
+  crypto.getRandomValues(randomBytes)
+  for (let i = 0; i < 32; i++) {
+    result += chars.charAt(randomBytes[i] % chars.length)
+  }
+  return result
+}
+
 export async function createIntegration(data: {
   name: string
   provider: 'peak' | 'custom_erp'
@@ -52,13 +66,18 @@ export async function createIntegration(data: {
   clientSecret?: string
   apiKey?: string
   settings?: Record<string, unknown>
-}): Promise<ActionResult<{ id: string }>> {
+}): Promise<ActionResult<{ id: string; generatedApiKey?: string }>> {
   const session = await getSession()
   if (!session || session.role !== 'ADMIN') {
     return { success: false, error: 'ไม่มีสิทธิ์เข้าถึง' }
   }
 
   try {
+    // For custom_erp, always generate API key server-side for security
+    const apiKey = data.provider === 'custom_erp'
+      ? generateSecureApiKey()
+      : data.apiKey
+
     const integration = await prisma.eRPIntegration.create({
       data: {
         name: data.name,
@@ -66,13 +85,20 @@ export async function createIntegration(data: {
         baseUrl: data.baseUrl,
         clientId: data.clientId,
         clientSecret: data.clientSecret,
-        apiKey: data.apiKey,
+        apiKey,
         settings: data.settings as object,
         active: true,
       },
     })
 
-    return { success: true, data: { id: integration.id } }
+    return {
+      success: true,
+      data: {
+        id: integration.id,
+        // Return the full key ONCE at creation time
+        generatedApiKey: data.provider === 'custom_erp' ? apiKey : undefined,
+      },
+    }
   } catch (error) {
     console.error('Error creating integration:', error)
     return { success: false, error: 'ไม่สามารถสร้างการเชื่อมต่อได้' }
