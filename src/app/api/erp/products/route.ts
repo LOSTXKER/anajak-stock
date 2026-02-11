@@ -93,6 +93,15 @@ export async function GET(request: NextRequest) {
                   },
                 },
               },
+              optionValues: {
+                include: {
+                  optionValue: {
+                    include: {
+                      optionType: { select: { name: true } },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -140,6 +149,10 @@ export async function GET(request: NextRequest) {
           locationCode: sb.location.code,
           locationName: sb.location.name,
           qty: Number(sb.qtyOnHand),
+        })),
+        options: v.optionValues.map((ov) => ({
+          type: ov.optionValue.optionType.name,
+          value: ov.optionValue.value,
         })),
       })),
       updatedAt: product.updatedAt.toISOString(),
