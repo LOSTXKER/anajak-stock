@@ -249,6 +249,131 @@ export async function deleteVariant(variantId: string): Promise<ActionResult> {
 }
 
 /**
+ * Merge a source variant into a target variant, then soft-delete the source.
+ * Transfers all movementLines and stockBalances from source → target.
+ */
+export async function mergeAndDeleteVariant(
+  sourceVariantId: string,
+  targetVariantId: string
+): Promise<ActionResult> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้รับอนุญาต' }
+  }
+
+  try {
+    const [source, target] = await Promise.all([
+      prisma.productVariant.findUnique({
+        where: { id: sourceVariantId },
+        include: {
+          stockBalances: true,
+          movementLines: true,
+        },
+      }),
+      prisma.productVariant.findUnique({
+        where: { id: targetVariantId },
+      }),
+    ])
+
+    if (!source) {
+      return { success: false, error: 'ไม่พบ variant ต้นทาง' }
+    }
+    if (!target) {
+      return { success: false, error: 'ไม่พบ variant ปลายทาง' }
+    }
+    if (source.productId !== target.productId) {
+      return { success: false, error: 'variant ทั้งสองต้องอยู่ในสินค้าเดียวกัน' }
+    }
+    if (sourceVariantId === targetVariantId) {
+      return { success: false, error: 'ไม่สามารถ merge variant เดียวกันได้' }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Transfer all movementLines from source → target
+      if (source.movementLines.length > 0) {
+        await tx.movementLine.updateMany({
+          where: { variantId: sourceVariantId },
+          data: { variantId: targetVariantId },
+        })
+      }
+
+      // 2. Transfer stockBalances from source → target
+      for (const srcBalance of source.stockBalances) {
+        // Try to find existing balance for target at same location
+        const existingTargetBalance = await tx.stockBalance.findUnique({
+          where: {
+            productId_variantId_locationId: {
+              productId: target.productId,
+              variantId: targetVariantId,
+              locationId: srcBalance.locationId,
+            },
+          },
+        })
+
+        if (existingTargetBalance) {
+          // Merge: add source qty to target
+          await tx.stockBalance.update({
+            where: { id: existingTargetBalance.id },
+            data: {
+              qtyOnHand: { increment: srcBalance.qtyOnHand },
+            },
+          })
+        } else {
+          // Move: update the balance to point to target variant
+          await tx.stockBalance.update({
+            where: { id: srcBalance.id },
+            data: { variantId: targetVariantId },
+          })
+          // Skip deletion for this balance since we moved it
+          continue
+        }
+
+        // Delete the source balance (already merged into target)
+        await tx.stockBalance.delete({
+          where: { id: srcBalance.id },
+        })
+      }
+
+      // 3. Soft-delete the source variant
+      await tx.productVariant.update({
+        where: { id: sourceVariantId },
+        data: {
+          active: false,
+          deletedAt: new Date(),
+        },
+      })
+    })
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.id,
+        action: 'DELETE',
+        refType: 'VARIANT',
+        refId: sourceVariantId,
+        oldData: {
+          action: 'MERGE_AND_DELETE',
+          sourceVariantId,
+          sourceSku: source.sku,
+          targetVariantId,
+          targetSku: target.sku,
+          movedMovementLines: source.movementLines.length,
+          movedStockBalances: source.stockBalances.length,
+        },
+      },
+    })
+
+    revalidatePath(`/products/${source.productId}`)
+    revalidatePath('/products')
+    revalidatePath('/stock')
+
+    return { success: true, data: undefined }
+  } catch (error) {
+    return handleActionError(error, 'mergeAndDeleteVariant')
+  }
+}
+
+/**
  * Bulk update stockType for multiple variants
  */
 export async function bulkUpdateVariantStockType(
