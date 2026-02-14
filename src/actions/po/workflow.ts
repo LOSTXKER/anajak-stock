@@ -172,14 +172,9 @@ export async function sendPO(id: string): Promise<ActionResult> {
       }),
     ])
 
-    // Send notifications based on user preferences
+    // Send notifications (single entry point handles web + LINE global + LINE individual)
     notifyPOSent(id, po.poNumber, po.createdById).catch((err) =>
       console.error('Failed to send PO sent notifications:', err)
-    )
-
-    // Also send to global recipients
-    sendLinePOStatusUpdate(id, 'ส่งให้ Supplier แล้ว').catch((err) =>
-      console.error('Failed to send PO sent notification:', err)
     )
 
     revalidatePath('/po')
@@ -296,14 +291,9 @@ export async function cancelPO(id: string, reason?: string): Promise<ActionResul
       }),
     ])
 
-    // Send notifications based on user preferences
+    // Send notifications (single entry point handles web + LINE global + LINE individual)
     notifyPOCancelled(id, po.poNumber, po.createdById).catch((err) =>
       console.error('Failed to send PO cancellation notifications:', err)
-    )
-
-    // Also send to global recipients
-    sendLinePOStatusUpdate(id, 'ยกเลิกแล้ว').catch((err) =>
-      console.error('Failed to send PO cancellation notification:', err)
     )
 
     revalidatePath('/po')
@@ -505,7 +495,7 @@ async function notifyPOSent(poId: string, poNumber: string, creatorId: string) {
     )
   }
 
-  // LINE notification
+  // LINE notification (individual to creator)
   if (channels.line) {
     const lineUserId = await getUserLineId(creatorId)
     if (lineUserId) {
@@ -517,6 +507,13 @@ async function notifyPOSent(poId: string, poNumber: string, creatorId: string) {
       }))
     }
   }
+
+  // LINE notification (global recipients)
+  tasks.push(
+    sendLinePOStatusUpdate(poId, 'ส่งให้ Supplier แล้ว').catch((err) =>
+      console.error('Failed to send LINE PO sent to global recipients:', err)
+    )
+  )
 
   await Promise.allSettled(tasks)
 }
@@ -543,7 +540,7 @@ async function notifyPOCancelled(poId: string, poNumber: string, creatorId: stri
     )
   }
 
-  // LINE notification
+  // LINE notification (individual to creator)
   if (channels.line) {
     const lineUserId = await getUserLineId(creatorId)
     if (lineUserId) {
@@ -553,6 +550,13 @@ async function notifyPOCancelled(poId: string, poNumber: string, creatorId: stri
       }))
     }
   }
+
+  // LINE notification (global recipients)
+  tasks.push(
+    sendLinePOStatusUpdate(poId, 'ยกเลิกแล้ว').catch((err) =>
+      console.error('Failed to send LINE PO cancelled to global recipients:', err)
+    )
+  )
 
   await Promise.allSettled(tasks)
 }

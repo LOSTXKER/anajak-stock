@@ -251,6 +251,7 @@ export async function logLineDelivery(
 /**
  * Create a notification and log LINE delivery in one operation
  * Use this for LINE-only notifications that need to be tracked
+ * @deprecated Use logNotificationDelivery instead
  */
 export async function createNotificationWithLineDelivery({
   type,
@@ -269,32 +270,7 @@ export async function createNotificationWithLineDelivery({
   success: boolean
   error?: string
 }): Promise<void> {
-  try {
-    // Create notification (broadcast)
-    const notification = await prisma.notification.create({
-      data: {
-        type,
-        title,
-        message,
-        url,
-        read: false,
-      },
-    })
-
-    // Log LINE delivery for each recipient
-    await prisma.notificationDeliveryLog.createMany({
-      data: recipientIds.map(recipientId => ({
-        notificationId: notification.id,
-        channel: 'LINE' as const,
-        status: success ? 'SENT' as const : 'FAILED' as const,
-        recipientId,
-        error,
-        sentAt: success ? new Date() : null,
-      })),
-    })
-  } catch (err) {
-    console.error('[Notification] Failed to create notification with LINE delivery:', err)
-  }
+  return logNotificationDelivery({ channel: 'LINE', type, title, message, url, recipientIds, success, error })
 }
 
 // Log Email delivery result
@@ -317,6 +293,48 @@ export async function logEmailDelivery(
     })
   } catch (err) {
     console.error('[Notification] Failed to log Email delivery:', err)
+  }
+}
+
+/**
+ * Unified delivery logging: create a notification record and log delivery for any channel.
+ * Replaces createNotificationWithLineDelivery, logLineDelivery (broadcast), and logEmailDelivery (broadcast).
+ */
+export async function logNotificationDelivery(params: {
+  channel: 'WEB' | 'LINE' | 'EMAIL'
+  type: string
+  title: string
+  message: string
+  url?: string
+  recipientIds: string[]
+  success: boolean
+  error?: string
+}): Promise<void> {
+  try {
+    const notification = await prisma.notification.create({
+      data: {
+        type: params.type,
+        title: params.title,
+        message: params.message,
+        url: params.url,
+        read: false,
+      },
+    })
+
+    if (params.recipientIds.length > 0) {
+      await prisma.notificationDeliveryLog.createMany({
+        data: params.recipientIds.map(recipientId => ({
+          notificationId: notification.id,
+          channel: params.channel,
+          status: params.success ? 'SENT' as const : 'FAILED' as const,
+          recipientId,
+          error: params.error,
+          sentAt: params.success ? new Date() : null,
+        })),
+      })
+    }
+  } catch (err) {
+    console.error(`[Notification] Failed to log ${params.channel} delivery:`, err)
   }
 }
 

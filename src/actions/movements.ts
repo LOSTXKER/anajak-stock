@@ -709,14 +709,9 @@ export async function postMovement(id: string): Promise<ActionResult> {
       maxWait: 10000,
     })
 
-    // Send notifications based on user preferences
+    // Send notifications (single entry point handles web + LINE global + LINE individual)
     notifyMovementPosted(id, result.docNumber, result.type, result.createdById).catch((err) =>
       console.error('Failed to send movement posted notifications:', err)
-    )
-
-    // Also send LINE to global recipients
-    sendLineMovementPosted(id).catch((err) =>
-      console.error('Failed to send movement posted notification:', err)
     )
 
     revalidatePath('/movements')
@@ -1338,7 +1333,7 @@ async function notifyMovementPosted(
   const channels = await getUserEnabledChannels(creatorId, notificationType)
   const tasks: Promise<unknown>[] = []
 
-  // Web notification
+  // Web notification (to creator)
   if (channels.web) {
     tasks.push(
       createNotification({
@@ -1351,7 +1346,7 @@ async function notifyMovementPosted(
     )
   }
 
-  // LINE notification (individual)
+  // LINE notification (individual to creator)
   if (channels.line) {
     const lineUserId = await getUserLineId(creatorId)
     if (lineUserId) {
@@ -1362,6 +1357,13 @@ async function notifyMovementPosted(
       }))
     }
   }
+
+  // LINE notification (global recipients) - single entry point, no separate call needed
+  tasks.push(
+    sendLineMovementPosted(movementId).catch((err) =>
+      console.error('Failed to send LINE movement posted to global recipients:', err)
+    )
+  )
 
   await Promise.allSettled(tasks)
 }
