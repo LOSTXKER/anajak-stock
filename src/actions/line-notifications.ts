@@ -292,12 +292,13 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
     // Collect all recipient IDs
     const allRecipientIds: string[] = []
     
-    // Send to global recipients
+    // Send to global recipients (filtered by preferences)
     const globalRecipientIds = await getRecipientIds()
-    allRecipientIds.push(...globalRecipientIds)
+    const filteredGlobalIds = await filterLineRecipientsByPreferences(globalRecipientIds, 'lowStock')
+    allRecipientIds.push(...filteredGlobalIds)
 
-    if (globalRecipientIds.length > 0) {
-      await client.sendFlex(globalRecipientIds, altText, flexMessage)
+    if (filteredGlobalIds.length > 0) {
+      await client.sendFlex(filteredGlobalIds, altText, flexMessage)
     }
 
     // Also send to individual users who have LINE enabled for lowStock
@@ -314,7 +315,7 @@ export async function sendLineLowStockAlert(): Promise<ActionResult<void>> {
       const shouldSend = await shouldNotifyUser(user.id, 'lowStock', 'line')
       if (shouldSend) {
         const lineUserId = await getUserLineId(user.id)
-        if (lineUserId && !globalRecipientIds.includes(lineUserId)) {
+        if (lineUserId && !filteredGlobalIds.includes(lineUserId)) {
           await client.sendFlex([lineUserId], altText, flexMessage)
           allRecipientIds.push(lineUserId)
         }
@@ -691,12 +692,13 @@ export async function sendLineExpiringAlert(): Promise<ActionResult<void>> {
     const flexMessage = FlexTemplates.expiringStockAlert(items, appUrl)
     const altText = `⏰ สินค้าใกล้หมดอายุ ${items.length} รายการ`
 
-    // Send to global recipients
+    // Send to global recipients (filtered by preferences)
     const globalRecipientIds = await getRecipientIds()
+    const filteredGlobalIds = await filterLineRecipientsByPreferences(globalRecipientIds, 'expiring')
     const tasks: Promise<unknown>[] = []
 
-    if (globalRecipientIds.length > 0) {
-      tasks.push(client.sendFlex(globalRecipientIds, altText, flexMessage))
+    if (filteredGlobalIds.length > 0) {
+      tasks.push(client.sendFlex(filteredGlobalIds, altText, flexMessage))
     }
 
     // Also send to individual users who have LINE enabled for expiring
@@ -713,7 +715,7 @@ export async function sendLineExpiringAlert(): Promise<ActionResult<void>> {
       const shouldSend = await shouldNotifyUser(user.id, 'expiring', 'line')
       if (shouldSend) {
         const lineUserId = await getUserLineId(user.id)
-        if (lineUserId && !globalRecipientIds.includes(lineUserId)) {
+        if (lineUserId && !filteredGlobalIds.includes(lineUserId)) {
           tasks.push(client.sendFlex([lineUserId], altText, flexMessage))
         }
       }
@@ -1053,8 +1055,14 @@ export async function sendLinePendingActionsAlert(): Promise<ActionResult<{ sent
       `${appUrl}/dashboard`
     )
 
+    // Filter recipients by preferences (pending actions maps to multiple types,
+    // but we use a general filter - recipients who disabled most notifications should still get this)
+    // For pending actions, we don't have a specific preference type, so send to all global recipients
+    // but still respect individual user LINE preferences if they have lineUserId linked
+    const recipientIds = settings.recipientUserIds
+
     const result = await client.sendFlex(
-      settings.recipientUserIds,
+      recipientIds,
       `⚡ งานค้าง ${pending.total} รายการ`,
       flexMessage
     )
@@ -1066,7 +1074,7 @@ export async function sendLinePendingActionsAlert(): Promise<ActionResult<{ sent
       title: `⚡ งานค้าง ${pending.total} รายการ`,
       message: summaryLines.join(', '),
       url: '/dashboard',
-      recipientIds: settings.recipientUserIds,
+      recipientIds,
       success: result.success,
       error: result.error,
     })

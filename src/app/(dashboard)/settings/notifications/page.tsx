@@ -586,6 +586,21 @@ export default function NotificationSettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Warning if LINE User ID not linked */}
+              {!userPrefs?.lineUserId && (
+                <div className="flex items-start gap-3 p-4 bg-[var(--status-warning)]/10 border border-[var(--status-warning)]/30 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-[var(--status-warning)] mt-0.5 shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-semibold text-[var(--status-warning)]">
+                      LINE User ID ยังไม่ได้เชื่อมต่อ
+                    </p>
+                    <p className="text-[var(--text-muted)] mt-1">
+                      การตั้งค่าเปิด/ปิด LINE จะ<strong>ไม่มีผล</strong>กับการแจ้งเตือนผ่านผู้รับทั้งระบบ จนกว่าคุณจะกรอก LINE User ID ของคุณในแท็บ &quot;ผู้รับ&quot; &rarr; &quot;LINE User ID ของฉัน&quot;
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Legend */}
               <div className="flex flex-wrap items-center gap-4 p-3 bg-[var(--bg-secondary)] rounded-lg text-sm">
                 <span className="text-[var(--text-muted)]">ช่องทาง:</span>
@@ -768,7 +783,7 @@ export default function NotificationSettingsPage() {
                 LINE User ID ของฉัน
               </CardTitle>
               <CardDescription>
-                ใส่ LINE User ID ของคุณเพื่อรับแจ้งเตือนส่วนตัว
+                จำเป็นต้องใส่เพื่อให้การตั้งค่าเปิด/ปิด LINE ในแท็บ &quot;ประเภท&quot; มีผล
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

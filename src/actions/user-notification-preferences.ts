@@ -550,6 +550,10 @@ export async function filterLineRecipientsByPreferences(
       }
     }
 
+    // Get the default LINE preference for this notification type
+    const defaultTypePrefs = DEFAULT_PREFERENCES[notificationType] as NotificationChannels | undefined
+    const defaultLineEnabled = defaultTypePrefs?.line ?? true
+
     // Filter recipients based on their preferences
     const filteredRecipients: string[] = []
 
@@ -557,9 +561,18 @@ export async function filterLineRecipientsByPreferences(
       const pref = prefsMap.get(lineUserId)
       
       if (!pref) {
-        // User not found in preferences - use default (send notification)
-        // This handles recipients who haven't configured their preferences
-        filteredRecipients.push(lineUserId)
+        // User not found in preferences (lineUserId not linked)
+        // For non-user IDs (Group/Room), always send
+        if (!lineUserId.startsWith('U')) {
+          filteredRecipients.push(lineUserId)
+          continue
+        }
+        // For user IDs, use DEFAULT_PREFERENCES for this notification type
+        // This ensures that notifications like movements (default LINE: false)
+        // won't be sent to unlinked users, while PR/PO (default LINE: true) will
+        if (defaultLineEnabled) {
+          filteredRecipients.push(lineUserId)
+        }
         continue
       }
 
