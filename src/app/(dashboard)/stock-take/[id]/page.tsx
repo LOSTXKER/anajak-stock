@@ -42,6 +42,7 @@ import {
 } from '@/actions/stock-take'
 import { StatCard } from '@/components/common'
 import { BarcodeInput, useBarcodeScanner } from '@/components/barcode-scanner'
+import { PrintStockTakeSheet } from '@/components/print-stock-take-sheet'
 import { stockTakeStatusConfig } from '@/lib/status-config'
 import { StockTakeStatus } from '@/generated/prisma'
 
@@ -331,6 +332,9 @@ export default function StockTakeDetailPage({ params }: { params: Promise<{ id: 
       <Card>
         <CardContent className="py-4 space-y-4">
           <div className="flex flex-wrap gap-3">
+            {stockTake.status !== 'CANCELLED' && (
+              <PrintStockTakeSheet stockTake={stockTake} />
+            )}
             {stockTake.status === 'DRAFT' && (
               <>
                 <Button onClick={handleStart}>
