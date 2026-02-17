@@ -35,7 +35,16 @@ import { updateVariant, deleteVariant } from '@/actions/variants'
 import { useRouter } from 'next/navigation'
 import { AddVariantDialog } from './add-variant-dialog'
 import { QuickAdjustDialog } from './quick-adjust-dialog'
-import { PrintLabel, BulkPrintLabel } from '@/components/print-label'
+import dynamic from 'next/dynamic'
+
+const PrintLabel = dynamic(
+  () => import('@/components/print-label').then(m => ({ default: m.PrintLabel })),
+  { ssr: false }
+)
+const BulkPrintLabel = dynamic(
+  () => import('@/components/print-label').then(m => ({ default: m.BulkPrintLabel })),
+  { ssr: false }
+)
 import { StockType } from '@/types'
 
 const stockTypeLabels: Record<StockType, string> = {

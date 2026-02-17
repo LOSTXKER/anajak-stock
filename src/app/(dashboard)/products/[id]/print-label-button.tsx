@@ -1,6 +1,11 @@
 'use client'
 
-import { PrintLabel } from '@/components/print-label'
+import dynamic from 'next/dynamic'
+
+const PrintLabel = dynamic(
+  () => import('@/components/print-label').then(m => ({ default: m.PrintLabel })),
+  { ssr: false }
+)
 
 interface PrintLabelButtonProps {
   product: {

@@ -2,6 +2,8 @@
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
+import { hasPermission } from '@/lib/permissions'
+import { handleActionError } from '@/lib/action-utils'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { createNotification } from '@/actions/notifications'
@@ -61,8 +63,7 @@ export async function getStockTakes() {
 
     return { success: true as const, data: stockTakes }
   } catch (error) {
-    console.error('Error getting stock takes:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการดึงข้อมูล' }
+    return handleActionError(error, 'getStockTakes')
   }
 }
 
@@ -146,8 +147,7 @@ export async function getStockTake(id: string) {
 
     return { success: true as const, data: serializedStockTake }
   } catch (error) {
-    console.error('Error getting stock take:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการดึงข้อมูล' }
+    return handleActionError(error, 'getStockTake')
   }
 }
 
@@ -155,6 +155,9 @@ export async function createStockTake(input: { warehouseId: string; note?: strin
   const session = await getSession()
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
+  }
+  if (!hasPermission(session.role, 'stock:write')) {
+    return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
   try {
@@ -201,11 +204,7 @@ export async function createStockTake(input: { warehouseId: string; note?: strin
     revalidatePath('/stock-take')
     return { success: true as const, data: stockTake }
   } catch (error) {
-    console.error('Error creating stock take:', error)
-    if (error instanceof z.ZodError) {
-      return { success: false as const, error: error.issues[0].message }
-    }
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการสร้างใบตรวจนับ' }
+    return handleActionError(error, 'createStockTake')
   }
 }
 
@@ -213,6 +212,9 @@ export async function startStockTake(id: string) {
   const session = await getSession()
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
+  }
+  if (!hasPermission(session.role, 'stock:write')) {
+    return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
   try {
@@ -240,8 +242,7 @@ export async function startStockTake(id: string) {
     revalidatePath(`/stock-take/${id}`)
     return { success: true as const, data: undefined }
   } catch (error) {
-    console.error('Error starting stock take:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาด' }
+    return handleActionError(error, 'startStockTake')
   }
 }
 
@@ -249,6 +250,9 @@ export async function updateStockTakeLines(stockTakeId: string, lines: Array<{ l
   const session = await getSession()
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
+  }
+  if (!hasPermission(session.role, 'stock:write')) {
+    return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
   try {
@@ -283,11 +287,7 @@ export async function updateStockTakeLines(stockTakeId: string, lines: Array<{ l
     revalidatePath(`/stock-take/${stockTakeId}`)
     return { success: true as const, data: undefined }
   } catch (error) {
-    console.error('Error updating stock take lines:', error)
-    if (error instanceof z.ZodError) {
-      return { success: false as const, error: error.issues[0].message }
-    }
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการบันทึก' }
+    return handleActionError(error, 'updateStockTakeLines')
   }
 }
 
@@ -295,6 +295,9 @@ export async function completeStockTake(id: string) {
   const session = await getSession()
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
+  }
+  if (!hasPermission(session.role, 'stock:write')) {
+    return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
   try {
@@ -351,8 +354,7 @@ export async function completeStockTake(id: string) {
     revalidatePath(`/stock-take/${id}`)
     return { success: true as const, data: undefined }
   } catch (error) {
-    console.error('Error completing stock take:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาด' }
+    return handleActionError(error, 'completeStockTake')
   }
 }
 
@@ -360,6 +362,9 @@ export async function approveStockTake(id: string) {
   const session = await getSession()
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
+  }
+  if (!hasPermission(session.role, 'movements:approve')) {
+    return { success: false as const, error: 'คุณไม่มีสิทธิ์อนุมัติรายการนี้' }
   }
 
   try {
@@ -473,8 +478,7 @@ export async function approveStockTake(id: string) {
     revalidatePath('/movements')
     return { success: true as const, data: undefined }
   } catch (error) {
-    console.error('Error approving stock take:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาดในการอนุมัติ' }
+    return handleActionError(error, 'approveStockTake')
   }
 }
 
@@ -482,6 +486,9 @@ export async function cancelStockTake(id: string) {
   const session = await getSession()
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
+  }
+  if (!hasPermission(session.role, 'stock:write')) {
+    return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
   try {
@@ -506,8 +513,7 @@ export async function cancelStockTake(id: string) {
     revalidatePath(`/stock-take/${id}`)
     return { success: true as const, data: undefined }
   } catch (error) {
-    console.error('Error cancelling stock take:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาด' }
+    return handleActionError(error, 'cancelStockTake')
   }
 }
 
@@ -519,8 +525,7 @@ export async function getWarehouses() {
     })
     return { success: true as const, data: warehouses }
   } catch (error) {
-    console.error('Error getting warehouses:', error)
-    return { success: false as const, error: 'เกิดข้อผิดพลาด' }
+    return handleActionError(error, 'getWarehouses')
   }
 }
 

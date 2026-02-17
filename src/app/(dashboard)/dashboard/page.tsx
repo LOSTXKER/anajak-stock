@@ -20,9 +20,20 @@ import {
   Truck,
   Clock,
 } from 'lucide-react'
-import { StockValueChart } from '@/components/charts/stock-value-chart'
-import { TopProductsChart } from '@/components/charts/top-products-chart'
-import { CategoryPieChart } from '@/components/charts/category-pie-chart'
+import dynamic from 'next/dynamic'
+
+const StockValueChart = dynamic(
+  () => import('@/components/charts/stock-value-chart').then(m => ({ default: m.StockValueChart })),
+  { loading: () => <div className="h-[300px] animate-pulse bg-muted rounded-lg" /> }
+)
+const TopProductsChart = dynamic(
+  () => import('@/components/charts/top-products-chart').then(m => ({ default: m.TopProductsChart })),
+  { loading: () => <div className="h-[300px] animate-pulse bg-muted rounded-lg" /> }
+)
+const CategoryPieChart = dynamic(
+  () => import('@/components/charts/category-pie-chart').then(m => ({ default: m.CategoryPieChart })),
+  { loading: () => <div className="h-[300px] animate-pulse bg-muted rounded-lg" /> }
+)
 import { DashboardStats } from './dashboard-stats'
 import { 
   DashboardSkeleton, 

@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
+import { hasPermission } from '@/lib/permissions'
 import { handleActionError } from '@/lib/action-utils'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -23,6 +24,9 @@ export async function addVariant(
   const session = await getSession()
   if (!session) {
     return { success: false, error: 'ไม่ได้รับอนุญาต' }
+  }
+  if (!hasPermission(session.role, 'products:write')) {
+    return { success: false, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
   try {
@@ -116,6 +120,9 @@ export async function updateVariant(
   if (!session) {
     return { success: false, error: 'ไม่ได้รับอนุญาต' }
   }
+  if (!hasPermission(session.role, 'products:write')) {
+    return { success: false, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
+  }
 
   try {
     const validated = UpdateVariantSchema.parse(input)
@@ -202,6 +209,9 @@ export async function deleteVariant(variantId: string): Promise<ActionResult> {
   if (!session) {
     return { success: false, error: 'ไม่ได้รับอนุญาต' }
   }
+  if (!hasPermission(session.role, 'products:write')) {
+    return { success: false, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
+  }
 
   try {
     const existing = await prisma.productVariant.findUnique({
@@ -260,6 +270,9 @@ export async function mergeAndDeleteVariant(
   if (!session) {
     return { success: false, error: 'ไม่ได้รับอนุญาต' }
   }
+  if (!hasPermission(session.role, 'products:write')) {
+    return { success: false, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
+  }
 
   try {
     const [source, target] = await Promise.all([
@@ -298,17 +311,21 @@ export async function mergeAndDeleteVariant(
       }
 
       // 2. Transfer stockBalances from source → target
+      // Batch-fetch all target balances at once to avoid N+1 queries
+      const sourceLocationIds = source.stockBalances.map((sb) => sb.locationId)
+      const existingTargetBalances = await tx.stockBalance.findMany({
+        where: {
+          productId: target.productId,
+          variantId: targetVariantId,
+          locationId: { in: sourceLocationIds },
+        },
+      })
+      const targetBalanceMap = new Map(
+        existingTargetBalances.map((b) => [b.locationId, b])
+      )
+
       for (const srcBalance of source.stockBalances) {
-        // Try to find existing balance for target at same location
-        const existingTargetBalance = await tx.stockBalance.findUnique({
-          where: {
-            productId_variantId_locationId: {
-              productId: target.productId,
-              variantId: targetVariantId,
-              locationId: srcBalance.locationId,
-            },
-          },
-        })
+        const existingTargetBalance = targetBalanceMap.get(srcBalance.locationId)
 
         if (existingTargetBalance) {
           // Merge: add source qty to target
@@ -384,6 +401,9 @@ export async function bulkUpdateVariantStockType(
   if (!session) {
     return { success: false, error: 'ไม่ได้รับอนุญาต' }
   }
+  if (!hasPermission(session.role, 'products:write')) {
+    return { success: false, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
+  }
 
   try {
     // Update all variants in a single query
@@ -424,6 +444,9 @@ export async function bulkUpdateProductStockType(
   const session = await getSession()
   if (!session) {
     return { success: false, error: 'ไม่ได้รับอนุญาต' }
+  }
+  if (!hasPermission(session.role, 'products:write')) {
+    return { success: false, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
   try {

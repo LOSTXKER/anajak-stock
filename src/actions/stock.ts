@@ -276,7 +276,7 @@ async function getLowStockBalances(params: {
 }
 
 function buildRawSqlOrderBy(sortBy: StockSortField, sortOrder: SortOrder): string {
-  const order = sortOrder.toUpperCase()
+  const order = sortOrder === 'desc' ? 'DESC' : 'ASC'
 
   switch (sortBy) {
     case 'sku':

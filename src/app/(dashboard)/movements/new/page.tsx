@@ -30,91 +30,23 @@ import { createMovement, submitMovement, getMovement, getIssuedMovements, getIss
 import { getProducts, getProductByBarcode } from '@/actions/products'
 import { getLocations, getStockByProductVariantLocation } from '@/actions/stock'
 
-// Helper to create stock map key (local function since it's used in client component)
-function createStockMapKey(productId: string, variantId: string | null, locationId: string): string {
-  return `${productId}|${variantId || ''}|${locationId}`
-}
 import { toast } from 'sonner'
 import { MovementType } from '@/generated/prisma'
-import type { ProductWithRelations, LocationWithWarehouse } from '@/types'
 import { PageHeader, HelpTooltip } from '@/components/common'
 import { CascadingVariantPicker } from '@/components/variants'
 import { LotInput } from '@/components/lot-input'
 import { BarcodeInput, useBarcodeScanner, InlineScanButton } from '@/components/barcode-scanner'
+import {
+  createStockMapKey,
+  type MovementLine,
+  type ProductWithVariants,
+  type Variant,
+  type IssuedMovementSummary,
+  type LocationWithWarehouse,
+} from './types'
 
 interface PageProps {
   searchParams: Promise<{ type?: MovementType; refId?: string }>
-}
-
-interface VariantOption {
-  optionName: string
-  value: string
-}
-
-interface Variant {
-  id: string
-  sku: string
-  name: string | null
-  options: VariantOption[]
-  stock?: number
-  costPrice?: number
-}
-
-interface ProductWithVariants extends ProductWithRelations {
-  hasVariants: boolean
-  variants?: Variant[]
-}
-
-interface MovementLine {
-  id: string
-  productId: string
-  variantId?: string
-  productName?: string
-  variantLabel?: string
-  fromLocationId?: string
-  toLocationId?: string
-  qty: number
-  unitCost: number
-  note?: string
-  // Existing lot selection
-  lotId?: string
-  lotNumber?: string
-  // New lot creation (for RECEIVE)
-  newLotNumber?: string
-  newExpiryDate?: string
-  // For ADJUST mode - new absolute quantity input
-  newQty?: number
-  // For RETURN mode - track issued and returned quantities
-  issuedQty?: number
-  returnedQty?: number
-  remainingQty?: number
-  // Order reference from ERP (for ISSUE)
-  orderRef?: string
-}
-
-// Issued movement for RETURN selection
-interface IssuedMovementSummary {
-  id: string
-  docNumber: string
-  note: string | null
-  createdAt: Date
-  postedAt: Date | null
-  createdBy: { id: string; name: string }
-  lines: Array<{
-    id: string
-    productId: string
-    productName: string
-    productSku: string
-    variantId: string | null
-    variantName: string | null
-    variantSku: string | null
-    fromLocationId: string | null
-    fromLocationCode: string | null
-    fromWarehouseName: string | null
-    issuedQty: number
-    returnedQty: number
-    remainingQty: number
-  }>
 }
 
 const typeConfig: Record<MovementType, { label: string; icon: React.ReactNode; color: string; description: string }> = {

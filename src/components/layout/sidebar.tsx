@@ -322,6 +322,7 @@ export function Sidebar({ userRole, customPermissions = [], className }: Sidebar
             'h-8 w-8 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]',
             collapsed && 'hidden'
           )}
+          aria-label="ย่อเมนู"
         >
           <ChevronLeft className="w-4 h-4" />
         </Button>
@@ -335,6 +336,7 @@ export function Sidebar({ userRole, customPermissions = [], className }: Sidebar
             size="icon"
             onClick={() => setCollapsed(false)}
             className="h-8 w-8 mx-auto text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+            aria-label="ขยายเมนู"
           >
             <Menu className="w-4 h-4" />
           </Button>

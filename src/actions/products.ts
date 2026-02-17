@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { serialize } from '@/lib/serialize'
+import { handleActionError } from '@/lib/action-utils'
 import type { ActionResult, PaginatedResult, ProductWithRelations } from '@/types'
 import { StockType, ItemType } from '@/generated/prisma'
 
@@ -356,19 +357,19 @@ export async function createProduct(data: ProductInput): Promise<ActionResult<Pr
         })
       }
 
+      // Audit log for product creation (inside transaction)
+      await tx.auditLog.create({
+        data: {
+          actorId: session.id,
+          action: 'CREATE',
+          refType: 'PRODUCT',
+          refId: newProduct.id,
+          newData: newProduct,
+        },
+      })
+
       return newProduct
     })
-
-    // Audit log for product (run in background - non-blocking)
-    prisma.auditLog.create({
-      data: {
-        actorId: session.id,
-        action: 'CREATE',
-        refType: 'PRODUCT',
-        refId: product.id,
-        newData: product,
-      },
-    }).catch((err) => console.error('Failed to create audit log:', err))
 
     revalidatePath('/products')
     revalidatePath('/movements')
@@ -378,8 +379,7 @@ export async function createProduct(data: ProductInput): Promise<ActionResult<Pr
     if (error instanceof z.ZodError) {
       return { success: false, error: error.issues[0].message }
     }
-    console.error('Create product error:', error)
-    return { success: false, error: 'ไม่สามารถสร้างสินค้าได้' }
+    return handleActionError(error, 'createProduct')
   }
 }
 
@@ -418,47 +418,49 @@ export async function updateProduct(
       }
     }
 
-    const product = await prisma.product.update({
-      where: { id },
-      data: {
-        ...(data.sku && { sku: data.sku }),
-        ...(data.name && { name: data.name }),
-        ...(data.supplierName !== undefined && { supplierName: data.supplierName || null }),
-        ...(data.description !== undefined && { description: data.description }),
-        ...(data.barcode !== undefined && { barcode: data.barcode || null }),
-        ...(data.categoryId !== undefined && { categoryId: data.categoryId || null }),
-        ...(data.unitId !== undefined && { unitId: data.unitId || null }),
-        ...(data.stockType !== undefined && { stockType: data.stockType }),
-        ...(data.itemType !== undefined && { itemType: data.itemType }),
-        ...(data.reorderPoint !== undefined && { reorderPoint: data.reorderPoint }),
-        ...(data.minQty !== undefined && { minQty: data.minQty }),
-        ...(data.maxQty !== undefined && { maxQty: data.maxQty }),
-        ...(data.standardCost !== undefined && { standardCost: data.standardCost }),
-      },
-      include: {
-        category: true,
-        unit: true,
-      },
-    })
+    const product = await prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id },
+        data: {
+          ...(data.sku && { sku: data.sku }),
+          ...(data.name && { name: data.name }),
+          ...(data.supplierName !== undefined && { supplierName: data.supplierName || null }),
+          ...(data.description !== undefined && { description: data.description }),
+          ...(data.barcode !== undefined && { barcode: data.barcode || null }),
+          ...(data.categoryId !== undefined && { categoryId: data.categoryId || null }),
+          ...(data.unitId !== undefined && { unitId: data.unitId || null }),
+          ...(data.stockType !== undefined && { stockType: data.stockType }),
+          ...(data.itemType !== undefined && { itemType: data.itemType }),
+          ...(data.reorderPoint !== undefined && { reorderPoint: data.reorderPoint }),
+          ...(data.minQty !== undefined && { minQty: data.minQty }),
+          ...(data.maxQty !== undefined && { maxQty: data.maxQty }),
+          ...(data.standardCost !== undefined && { standardCost: data.standardCost }),
+        },
+        include: {
+          category: true,
+          unit: true,
+        },
+      })
 
-    // Audit log (run in background - non-blocking)
-    prisma.auditLog.create({
-      data: {
-        actorId: session.id,
-        action: 'UPDATE',
-        refType: 'PRODUCT',
-        refId: product.id,
-        oldData: existing,
-        newData: product,
-      },
-    }).catch((err) => console.error('Failed to create audit log:', err))
+      await tx.auditLog.create({
+        data: {
+          actorId: session.id,
+          action: 'UPDATE',
+          refType: 'PRODUCT',
+          refId: updated.id,
+          oldData: existing,
+          newData: updated,
+        },
+      })
+
+      return updated
+    })
 
     revalidatePath('/products')
     revalidatePath(`/products/${id}`)
     return { success: true, data: product as ProductWithRelations }
   } catch (error) {
-    console.error('Update product error:', error)
-    return { success: false, error: 'ไม่สามารถอัปเดตสินค้าได้' }
+    return handleActionError(error, 'updateProduct')
   }
 }
 
@@ -474,31 +476,30 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
       return { success: false, error: 'ไม่พบสินค้า' }
     }
 
-    // Soft delete
-    await prisma.product.update({
-      where: { id },
-      data: {
-        active: false,
-        deletedAt: new Date(),
-      },
-    })
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: {
+          active: false,
+          deletedAt: new Date(),
+        },
+      })
 
-    // Audit log (run in background - non-blocking)
-    prisma.auditLog.create({
-      data: {
-        actorId: session.id,
-        action: 'DELETE',
-        refType: 'PRODUCT',
-        refId: id,
-        oldData: existing,
-      },
-    }).catch((err) => console.error('Failed to create audit log:', err))
+      await tx.auditLog.create({
+        data: {
+          actorId: session.id,
+          action: 'DELETE',
+          refType: 'PRODUCT',
+          refId: id,
+          oldData: existing,
+        },
+      })
+    })
 
     revalidatePath('/products')
     return { success: true, data: undefined }
   } catch (error) {
-    console.error('Delete product error:', error)
-    return { success: false, error: 'ไม่สามารถลบสินค้าได้' }
+    return handleActionError(error, 'deleteProduct')
   }
 }
 
@@ -533,8 +534,7 @@ export async function getProductById(id: string): Promise<ActionResult<ProductWi
     // Serialize to convert Decimal to number for client components
     return { success: true, data: serialize(product) as ProductWithRelations }
   } catch (error) {
-    console.error('Get product by ID error:', error)
-    return { success: false, error: 'ไม่สามารถดึงข้อมูลสินค้าได้' }
+    return handleActionError(error, 'getProductById')
   }
 }
 
@@ -574,30 +574,30 @@ export async function updateProductOptionGroups(
       return { success: false, error: 'ชื่อกลุ่มตัวเลือกต้องไม่ซ้ำกัน' }
     }
 
-    await prisma.product.update({
-      where: { id: productId },
-      data: {
-        optionGroups: optionGroups,
-        hasVariants: optionGroups.length > 0,
-      },
-    })
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id: productId },
+        data: {
+          optionGroups: optionGroups,
+          hasVariants: optionGroups.length > 0,
+        },
+      })
 
-    // Audit log (run in background - non-blocking)
-    prisma.auditLog.create({
-      data: {
-        actorId: session.id,
-        action: 'UPDATE',
-        refType: 'PRODUCT',
-        refId: productId,
-        oldData: { optionGroups: existing.optionGroups },
-        newData: { optionGroups },
-      },
-    }).catch((err) => console.error('Failed to create audit log:', err))
+      await tx.auditLog.create({
+        data: {
+          actorId: session.id,
+          action: 'UPDATE',
+          refType: 'PRODUCT',
+          refId: productId,
+          oldData: { optionGroups: existing.optionGroups },
+          newData: { optionGroups },
+        },
+      })
+    })
 
     revalidatePath(`/products/${productId}`)
     return { success: true, data: undefined }
   } catch (error) {
-    console.error('Update option groups error:', error)
-    return { success: false, error: 'ไม่สามารถอัปเดตตัวเลือกได้' }
+    return handleActionError(error, 'updateProductOptionGroups')
   }
 }

@@ -194,7 +194,7 @@ export function NotificationBell() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="relative">
+          <Button variant="ghost" size="icon" className="relative" aria-label="การแจ้งเตือน">
             {permissionStatus === 'granted' ? (
               <Bell className="w-5 h-5" />
             ) : (
@@ -231,6 +231,7 @@ export function NotificationBell() {
                 className="h-7 w-7"
                 onClick={handleRefresh}
                 disabled={isRefreshing}
+                aria-label="รีเฟรชการแจ้งเตือน"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
               </Button>
@@ -239,6 +240,7 @@ export function NotificationBell() {
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => setShowSettings(true)}
+                aria-label="ตั้งค่าการแจ้งเตือน"
               >
                 <Settings className="w-3.5 h-3.5" />
               </Button>

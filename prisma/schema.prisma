@@ -257,6 +257,7 @@ model StockBalance {
   @@index([variantId])
   @@index([locationId])
   @@index([productId, locationId])
+  @@index([productId, variantId])
   @@index([locationId, qtyOnHand])
   @@map("stock_balances")
 }
@@ -518,7 +519,7 @@ model AuditLog {
   actor     User     @relation(fields: [actorId], references: [id])
 
   @@index([actorId])
-  @@index([refType, refId])
+  @@index([refType, refId, createdAt])
   @@index([createdAt])
   @@map("audit_logs")
 }
@@ -633,6 +634,7 @@ model Notification {
   @@index([userId])
   @@index([read])
   @@index([createdAt])
+  @@index([userId, read, createdAt])
   @@map("notifications")
 }
 

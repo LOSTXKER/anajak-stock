@@ -4,7 +4,8 @@ import { getMovements } from '@/actions/movements'
 import { getSession } from '@/lib/auth'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, RefreshCw, Settings2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, RefreshCw, Settings2 } from 'lucide-react'
+import { LinkPagination } from '@/components/common/pagination'
 import { MovementType, DocStatus, Role } from '@/generated/prisma'
 import { ExportButton } from '@/components/export-button'
 import { PageHeader } from '@/components/common'
@@ -183,50 +184,7 @@ async function MovementsContent({ searchParams }: PageProps) {
         canApprove={canApprove} 
       />
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pb-16">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            asChild={page > 1}
-          >
-            {page > 1 ? (
-              <Link href={buildUrl(page - 1)}>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                ก่อนหน้า
-              </Link>
-            ) : (
-              <>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                ก่อนหน้า
-              </>
-            )}
-          </Button>
-          <span className="text-[var(--text-secondary)] text-sm px-4">
-            หน้า {page} จาก {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            asChild={page < totalPages}
-          >
-            {page < totalPages ? (
-              <Link href={buildUrl(page + 1)}>
-                ถัดไป
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Link>
-            ) : (
-              <>
-                ถัดไป
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </>
-            )}
-          </Button>
-        </div>
-      )}
+      <LinkPagination page={page} totalPages={totalPages} buildUrl={buildUrl} className="pb-16" />
     </div>
   )
 }

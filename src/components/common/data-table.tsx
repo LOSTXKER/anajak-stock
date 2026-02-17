@@ -217,6 +217,7 @@ export function Pagination({
           className="h-8 w-8 hidden sm:flex"
           onClick={() => onPageChange(1)}
           disabled={page === 1 || isLoading}
+          aria-label="ไปหน้าแรก"
         >
           <ChevronsLeft className="w-4 h-4" />
         </Button>
@@ -226,6 +227,7 @@ export function Pagination({
           className="h-8 w-8"
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1 || isLoading}
+          aria-label="หน้าก่อนหน้า"
         >
           <ChevronLeft className="w-4 h-4" />
         </Button>
@@ -241,6 +243,7 @@ export function Pagination({
           className="h-8 w-8"
           onClick={() => onPageChange(page + 1)}
           disabled={page === totalPages || isLoading}
+          aria-label="หน้าถัดไป"
         >
           <ChevronRight className="w-4 h-4" />
         </Button>
@@ -250,6 +253,7 @@ export function Pagination({
           className="h-8 w-8 hidden sm:flex"
           onClick={() => onPageChange(totalPages)}
           disabled={page === totalPages || isLoading}
+          aria-label="ไปหน้าสุดท้าย"
         >
           <ChevronsRight className="w-4 h-4" />
         </Button>

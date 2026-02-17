@@ -42,7 +42,12 @@ import {
 } from '@/actions/stock-take'
 import { StatCard } from '@/components/common'
 import { BarcodeInput, useBarcodeScanner } from '@/components/barcode-scanner'
-import { PrintStockTakeSheet } from '@/components/print-stock-take-sheet'
+import dynamic from 'next/dynamic'
+
+const PrintStockTakeSheet = dynamic(
+  () => import('@/components/print-stock-take-sheet').then(m => ({ default: m.PrintStockTakeSheet })),
+  { ssr: false }
+)
 import { stockTakeStatusConfig } from '@/lib/status-config'
 import { StockTakeStatus } from '@/generated/prisma'
 

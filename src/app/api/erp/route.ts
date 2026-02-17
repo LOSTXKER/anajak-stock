@@ -18,50 +18,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@/generated/prisma'
-
-// API Key validation
-async function validateApiKey(request: NextRequest): Promise<{ valid: boolean; integrationId?: string }> {
-  const apiKey = request.headers.get('X-API-Key')
-  
-  if (!apiKey) {
-    return { valid: false }
-  }
-
-  try {
-    const integration = await prisma.eRPIntegration.findFirst({
-      where: {
-        apiKey,
-        active: true,
-        provider: 'custom_erp',
-      },
-    })
-
-    if (!integration) {
-      return { valid: false }
-    }
-
-    return { valid: true, integrationId: integration.id }
-  } catch (error) {
-    console.error('API key validation error:', error)
-    return { valid: false }
-  }
-}
-
-// Error response helper
-function errorResponse(message: string, status: number = 400) {
-  return NextResponse.json(
-    { success: false, error: message },
-    { status }
-  )
-}
+import { validateApiKey, errorResponse, unauthorizedResponse, rateLimitedResponse } from '@/lib/api-auth'
 
 // GET /api/erp - API info
 export async function GET(request: NextRequest) {
-  const { valid } = await validateApiKey(request)
-  
-  if (!valid) {
-    return errorResponse('Invalid or missing API key', 401)
-  }
+  const { valid, rateLimited } = await validateApiKey(request)
+  if (rateLimited) return rateLimitedResponse()
+  if (!valid) return unauthorizedResponse()
 
   return NextResponse.json({
     success: true,
@@ -83,11 +46,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/erp - Webhook receiver
 export async function POST(request: NextRequest) {
-  const { valid, integrationId } = await validateApiKey(request)
-  
-  if (!valid) {
-    return errorResponse('Invalid or missing API key', 401)
-  }
+  const { valid, integrationId, rateLimited } = await validateApiKey(request)
+  if (rateLimited) return rateLimitedResponse()
+  if (!valid) return unauthorizedResponse()
 
   try {
     const body = await request.json()

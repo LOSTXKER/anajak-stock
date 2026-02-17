@@ -272,6 +272,7 @@ export function BarcodeScanner({ onScan, placeholder }: BarcodeScannerProps) {
             size="icon"
             onClick={() => setMode('closed')}
             className="h-6 w-6"
+            aria-label="ปิดสแกนเนอร์"
           >
             <X className="w-4 h-4" />
           </Button>
@@ -367,6 +368,7 @@ export function InlineScanButton({ onScan, className }: InlineScanButtonProps) {
         size="icon"
         onClick={() => setIsOpen(true)}
         className={className}
+        aria-label="สแกนบาร์โค้ด"
       >
         <Scan className="w-4 h-4" />
       </Button>

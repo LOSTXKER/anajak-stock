@@ -154,7 +154,7 @@ export function validateInput<T>(
   const result = schema.safeParse(input)
 
   if (!result.success) {
-    const message = result.error?.issues[0]?.message || 'ข้อมูลไม่ถูกต้อง'
+    const message = result.error?.issues.map(i => i.message).join(', ') || 'ข้อมูลไม่ถูกต้อง'
     return { success: false, error: message }
   }
 

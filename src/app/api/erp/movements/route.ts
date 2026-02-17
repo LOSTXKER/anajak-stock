@@ -7,37 +7,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@/generated/prisma'
-
-// Validate API key and get integration ID
-async function validateApiKey(request: NextRequest): Promise<{ valid: boolean; integrationId?: string }> {
-  const apiKey = request.headers.get('X-API-Key')
-  
-  if (!apiKey) return { valid: false }
-
-  try {
-    const integration = await prisma.eRPIntegration.findFirst({
-      where: {
-        apiKey,
-        active: true,
-        provider: 'custom_erp',
-      },
-    })
-
-    return integration ? { valid: true, integrationId: integration.id } : { valid: false }
-  } catch {
-    return { valid: false }
-  }
-}
+import { validateApiKey, errorResponse, unauthorizedResponse, rateLimitedResponse } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
-  const { valid } = await validateApiKey(request)
-  
-  if (!valid) {
-    return NextResponse.json(
-      { success: false, error: 'Invalid or missing API key' },
-      { status: 401 }
-    )
-  }
+  const { valid, rateLimited } = await validateApiKey(request)
+  if (rateLimited) return rateLimitedResponse()
+  if (!valid) return unauthorizedResponse()
 
   try {
     const { searchParams } = new URL(request.url)
@@ -135,14 +110,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { valid, integrationId } = await validateApiKey(request)
-  
-  if (!valid) {
-    return NextResponse.json(
-      { success: false, error: 'Invalid or missing API key' },
-      { status: 401 }
-    )
-  }
+  const { valid, integrationId, rateLimited } = await validateApiKey(request)
+  if (rateLimited) return rateLimitedResponse()
+  if (!valid) return unauthorizedResponse()
 
   try {
     const body = await request.json()

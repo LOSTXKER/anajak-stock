@@ -4,7 +4,6 @@ import { getStockBalances, getWarehouses, getStockSummary, type StockSortField, 
 import { getCategories } from '@/actions/products'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -12,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Warehouse, Package, AlertTriangle, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Warehouse, Package, AlertTriangle, TrendingUp } from 'lucide-react'
+import { LinkPagination } from '@/components/common/pagination'
 import { StockSearch } from './stock-search'
 import { StockTableHeader } from './stock-table-header'
 import { PageHeader, StatCard, StatCardGrid, EmptyState } from '@/components/common'
@@ -217,50 +217,7 @@ async function StockContent({ searchParams }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            asChild={page > 1}
-          >
-            {page > 1 ? (
-              <Link href={buildUrl(page - 1)}>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                ก่อนหน้า
-              </Link>
-            ) : (
-              <>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                ก่อนหน้า
-              </>
-            )}
-          </Button>
-          <span className="text-[var(--text-secondary)] text-sm px-4">
-            หน้า {page} จาก {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            asChild={page < totalPages}
-          >
-            {page < totalPages ? (
-              <Link href={buildUrl(page + 1)}>
-                ถัดไป
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Link>
-            ) : (
-              <>
-                ถัดไป
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </>
-            )}
-          </Button>
-        </div>
-      )}
+      <LinkPagination page={page} totalPages={totalPages} buildUrl={buildUrl} />
     </div>
   )
 }

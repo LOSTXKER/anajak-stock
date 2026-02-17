@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
+import { unstable_cache } from 'next/cache'
 import type { ActionResult } from '@/types'
 
 // ============================================
@@ -19,14 +20,8 @@ export interface ABCItem {
   classification: 'A' | 'B' | 'C'
 }
 
-export async function getABCAnalysis(): Promise<ActionResult<ABCItem[]>> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
-  }
-
-  try {
-    // Get all products with their stock values
+const getCachedABCData = unstable_cache(
+  async () => {
     const products = await prisma.$queryRaw<
       { id: string; sku: string; name: string; category_name: string | null; total_value: number }[]
     >`
@@ -71,6 +66,20 @@ export async function getABCAnalysis(): Promise<ActionResult<ABCItem[]>> {
       }
     })
 
+    return items
+  },
+  ['abc-analysis'],
+  { revalidate: 600 }
+)
+
+export async function getABCAnalysis(): Promise<ActionResult<ABCItem[]>> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const items = await getCachedABCData()
     return { success: true, data: items }
   } catch (error) {
     console.error('Error getting ABC analysis:', error)
@@ -256,13 +265,8 @@ export interface CategoryPerformance {
   avgTurnover: number
 }
 
-export async function getCategoryPerformance(): Promise<ActionResult<CategoryPerformance[]>> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
-  }
-
-  try {
+const getCachedCategoryPerformance = unstable_cache(
+  async () => {
     const categories = await prisma.category.findMany({
       where: { active: true, deletedAt: null },
       include: {
@@ -283,7 +287,7 @@ export async function getCategoryPerformance(): Promise<ActionResult<CategoryPer
       },
     })
 
-    const result: CategoryPerformance[] = categories.map((cat) => {
+    return categories.map((cat) => {
       const totalValue = cat.products.reduce((sum, p) => {
         const stockValue = p.stockBalances.reduce(
           (s, sb) => s + Number(sb.qtyOnHand) * Number(p.lastCost),
@@ -306,7 +310,19 @@ export async function getCategoryPerformance(): Promise<ActionResult<CategoryPer
         avgTurnover: cat.products.length > 0 ? totalMovements / cat.products.length : 0,
       }
     }).sort((a, b) => b.totalValue - a.totalValue)
+  },
+  ['category-performance'],
+  { revalidate: 600 }
+)
 
+export async function getCategoryPerformance(): Promise<ActionResult<CategoryPerformance[]>> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const result = await getCachedCategoryPerformance()
     return { success: true, data: result }
   } catch (error) {
     console.error('Error getting category performance:', error)
@@ -487,20 +503,14 @@ export interface DashboardAnalytics {
   }
 }
 
-export async function getDashboardAnalytics(): Promise<ActionResult<DashboardAnalytics>> {
-  const session = await getSession()
-  if (!session) {
-    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
-  }
-
-  try {
+const getCachedDashboardData = unstable_cache(
+  async () => {
     const now = new Date()
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const startOfWeek = new Date(startOfDay)
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay())
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    // Run queries in parallel
     const [
       stockByCategory,
       movementsToday,
@@ -513,7 +523,6 @@ export async function getDashboardAnalytics(): Promise<ActionResult<DashboardAna
       topByValue,
       topByMovement,
     ] = await Promise.all([
-      // Stock value by category
       prisma.$queryRaw<{ name: string; value: number }[]>`
         SELECT 
           COALESCE(c.name, 'ไม่มีหมวดหมู่') as name,
@@ -526,19 +535,15 @@ export async function getDashboardAnalytics(): Promise<ActionResult<DashboardAna
         ORDER BY value DESC
         LIMIT 10
       `,
-      // Movements today
       prisma.stockMovement.count({
         where: { status: 'POSTED', postedAt: { gte: startOfDay } },
       }),
-      // Movements this week
       prisma.stockMovement.count({
         where: { status: 'POSTED', postedAt: { gte: startOfWeek } },
       }),
-      // Movements this month
       prisma.stockMovement.count({
         where: { status: 'POSTED', postedAt: { gte: startOfMonth } },
       }),
-      // Low stock count
       prisma.$queryRaw<{ count: number }[]>`
         SELECT COUNT(DISTINCT p.id) as count
         FROM products p
@@ -548,7 +553,6 @@ export async function getDashboardAnalytics(): Promise<ActionResult<DashboardAna
           AND p.reorder_point > 0
           AND sb.qty_on_hand <= p.reorder_point
       `,
-      // Expiring soon (within 30 days)
       prisma.lot.count({
         where: {
           expiryDate: {
@@ -557,15 +561,12 @@ export async function getDashboardAnalytics(): Promise<ActionResult<DashboardAna
           },
         },
       }),
-      // Pending PRs
       prisma.pR.count({
         where: { status: 'SUBMITTED' },
       }),
-      // Pending POs
       prisma.pO.count({
         where: { status: 'DRAFT' },
       }),
-      // Top products by value
       prisma.$queryRaw<{ id: string; name: string; value: number }[]>`
         SELECT 
           p.id,
@@ -578,7 +579,6 @@ export async function getDashboardAnalytics(): Promise<ActionResult<DashboardAna
         ORDER BY value DESC
         LIMIT 5
       `,
-      // Top products by movement
       prisma.$queryRaw<{ id: string; name: string; count: number }[]>`
         SELECT 
           p.id,
@@ -599,40 +599,51 @@ export async function getDashboardAnalytics(): Promise<ActionResult<DashboardAna
     const totalValue = stockByCategory.reduce((sum, c) => sum + Number(c.value), 0)
 
     return {
-      success: true,
-      data: {
-        stockValue: {
-          total: Math.round(totalValue),
-          byCategory: stockByCategory.map((c) => ({
-            name: c.name,
-            value: Math.round(Number(c.value)),
-          })),
-        },
-        movements: {
-          today: movementsToday,
-          thisWeek: movementsWeek,
-          thisMonth: movementsMonth,
-        },
-        alerts: {
-          lowStock: Number(lowStockCount[0]?.count || 0),
-          expiringSoon: expiringSoonCount,
-          pendingPR: pendingPRCount,
-          pendingPO: pendingPOCount,
-        },
-        topProducts: {
-          byValue: topByValue.map((p) => ({
-            id: p.id,
-            name: p.name,
-            value: Math.round(Number(p.value)),
-          })),
-          byMovement: topByMovement.map((p) => ({
-            id: p.id,
-            name: p.name,
-            count: Number(p.count),
-          })),
-        },
+      stockValue: {
+        total: Math.round(totalValue),
+        byCategory: stockByCategory.map((c) => ({
+          name: c.name,
+          value: Math.round(Number(c.value)),
+        })),
+      },
+      movements: {
+        today: movementsToday,
+        thisWeek: movementsWeek,
+        thisMonth: movementsMonth,
+      },
+      alerts: {
+        lowStock: Number(lowStockCount[0]?.count || 0),
+        expiringSoon: expiringSoonCount,
+        pendingPR: pendingPRCount,
+        pendingPO: pendingPOCount,
+      },
+      topProducts: {
+        byValue: topByValue.map((p) => ({
+          id: p.id,
+          name: p.name,
+          value: Math.round(Number(p.value)),
+        })),
+        byMovement: topByMovement.map((p) => ({
+          id: p.id,
+          name: p.name,
+          count: Number(p.count),
+        })),
       },
     }
+  },
+  ['dashboard-analytics'],
+  { revalidate: 300 }
+)
+
+export async function getDashboardAnalytics(): Promise<ActionResult<DashboardAnalytics>> {
+  const session = await getSession()
+  if (!session) {
+    return { success: false, error: 'ไม่ได้เข้าสู่ระบบ' }
+  }
+
+  try {
+    const data = await getCachedDashboardData()
+    return { success: true, data }
   } catch (error) {
     console.error('Error getting dashboard analytics:', error)
     return { success: false, error: 'ไม่สามารถโหลดข้อมูลได้' }
