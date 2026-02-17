@@ -69,7 +69,6 @@ import {
   testLineConnection,
   sendLineTextMessage,
   sendLineCustomMessage,
-  sendLineLowStockAlert,
   type LineSettings,
 } from '@/actions/line-notifications'
 import { getEmailStatus } from '@/actions/notifications'
@@ -280,7 +279,7 @@ export default function NotificationSettingsPage() {
   }
 
   async function handleTestLowStockAlert() {
-    const result = await sendLineLowStockAlert()
+    const result = await runCronJobManually('low-stock')
     if (result.success) {
       toast.success('ส่งแจ้งเตือนสต๊อคใกล้หมดเรียบร้อย')
     } else {

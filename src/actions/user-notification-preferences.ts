@@ -60,9 +60,9 @@ export interface UserNotificationPreferences {
   lineUserId: string | null
 }
 
-const DEFAULT_CHANNELS: NotificationChannels = {
+const DEFAULT_CHANNELS_WEB_EMAIL: NotificationChannels = {
   web: true,
-  line: true,
+  line: false,
   email: true,
 }
 
@@ -73,8 +73,8 @@ const DEFAULT_CHANNELS_WEB_ONLY: NotificationChannels = {
 }
 
 const DEFAULT_PREFERENCES: UserNotificationPreferences = {
-  lowStock: { ...DEFAULT_CHANNELS },
-  expiring: { ...DEFAULT_CHANNELS },
+  lowStock: { ...DEFAULT_CHANNELS_WEB_EMAIL },
+  expiring: { ...DEFAULT_CHANNELS_WEB_EMAIL },
   // Movement - granular per type (default: web only)
   receivePending: { ...DEFAULT_CHANNELS_WEB_ONLY },
   receivePosted: { ...DEFAULT_CHANNELS_WEB_ONLY },
@@ -86,17 +86,17 @@ const DEFAULT_PREFERENCES: UserNotificationPreferences = {
   adjustPosted: { ...DEFAULT_CHANNELS_WEB_ONLY },
   returnPending: { ...DEFAULT_CHANNELS_WEB_ONLY },
   returnPosted: { ...DEFAULT_CHANNELS_WEB_ONLY },
-  // PR
-  prPending: { ...DEFAULT_CHANNELS },
-  prApproved: { ...DEFAULT_CHANNELS },
-  prRejected: { ...DEFAULT_CHANNELS },
-  // PO
-  poPending: { ...DEFAULT_CHANNELS },
-  poApproved: { ...DEFAULT_CHANNELS },
-  poRejected: { ...DEFAULT_CHANNELS },
-  poSent: { web: true, line: true, email: false },
-  poCancelled: { web: true, line: true, email: false },
-  poReceived: { ...DEFAULT_CHANNELS },
+  // PR (LINE defaults to off - opt-in to save quota)
+  prPending: { ...DEFAULT_CHANNELS_WEB_EMAIL },
+  prApproved: { ...DEFAULT_CHANNELS_WEB_EMAIL },
+  prRejected: { ...DEFAULT_CHANNELS_WEB_EMAIL },
+  // PO (LINE defaults to off - opt-in to save quota)
+  poPending: { ...DEFAULT_CHANNELS_WEB_EMAIL },
+  poApproved: { ...DEFAULT_CHANNELS_WEB_EMAIL },
+  poRejected: { ...DEFAULT_CHANNELS_WEB_EMAIL },
+  poSent: { ...DEFAULT_CHANNELS_WEB_ONLY },
+  poCancelled: { ...DEFAULT_CHANNELS_WEB_ONLY },
+  poReceived: { ...DEFAULT_CHANNELS_WEB_EMAIL },
   // GRN & Stock Take
   grnCreated: { ...DEFAULT_CHANNELS_WEB_ONLY },
   stockTake: { ...DEFAULT_CHANNELS_WEB_ONLY },
@@ -468,12 +468,19 @@ export async function shouldNotifyUser(
   channel: 'web' | 'line' | 'email'
 ): Promise<boolean> {
   const prefs = await getUserPreferencesForNotification(userId)
-  if (!prefs) return true // Default to send if no preferences
+  if (!prefs) {
+    // No preferences found: use defaults (LINE is off by default)
+    const defaultPrefs = DEFAULT_PREFERENCES[notificationType] as NotificationChannels | undefined
+    return defaultPrefs?.[channel] ?? false
+  }
   
   const typePrefs = prefs[notificationType] as NotificationChannels | undefined
-  if (!typePrefs) return true // Default to send if type not found
+  if (!typePrefs) {
+    const defaultPrefs = DEFAULT_PREFERENCES[notificationType] as NotificationChannels | undefined
+    return defaultPrefs?.[channel] ?? false
+  }
   
-  return typePrefs[channel] ?? true
+  return typePrefs[channel] ?? false
 }
 
 /**
@@ -502,12 +509,15 @@ export async function getUserEnabledChannels(
   notificationType: NotificationTypeKey
 ): Promise<NotificationChannels> {
   const prefs = await getUserPreferencesForNotification(userId)
+  const defaultChannels = (DEFAULT_PREFERENCES[notificationType] as NotificationChannels | undefined)
+    ?? { web: true, line: false, email: false }
+
   if (!prefs) {
-    return { web: true, line: true, email: true }
+    return defaultChannels
   }
   
   const typePrefs = prefs[notificationType] as NotificationChannels | undefined
-  return typePrefs ?? { web: true, line: true, email: true }
+  return typePrefs ?? defaultChannels
 }
 
 /**
@@ -517,84 +527,6 @@ export async function getUserLineId(userId: string): Promise<string | null> {
   const prefs = await getUserPreferencesForNotification(userId)
   return prefs?.lineUserId ?? null
 }
-
-/**
- * Filter LINE recipient IDs by user preferences
- * Maps LINE User IDs to system users and checks their preferences
- * 
- * @param lineUserIds - Array of LINE User IDs to filter
- * @param notificationType - The notification type to check preferences for
- * @returns Filtered array of LINE User IDs that should receive the notification
- */
-export async function filterLineRecipientsByPreferences(
-  lineUserIds: string[],
-  notificationType: NotificationTypeKey
-): Promise<string[]> {
-  if (lineUserIds.length === 0) {
-    return []
-  }
-
-  try {
-    // Find users who have set their LINE User ID in preferences
-    const prefsWithLineId = await prisma.userNotificationPreference.findMany({
-      where: {
-        lineUserId: { in: lineUserIds },
-      },
-    })
-
-    // Build a map of LINE User ID -> preferences
-    const prefsMap = new Map<string, typeof prefsWithLineId[0]>()
-    for (const pref of prefsWithLineId) {
-      if (pref.lineUserId) {
-        prefsMap.set(pref.lineUserId, pref)
-      }
-    }
-
-    // Get the default LINE preference for this notification type
-    const defaultTypePrefs = DEFAULT_PREFERENCES[notificationType] as NotificationChannels | undefined
-    const defaultLineEnabled = defaultTypePrefs?.line ?? true
-
-    // Filter recipients based on their preferences
-    const filteredRecipients: string[] = []
-
-    for (const lineUserId of lineUserIds) {
-      const pref = prefsMap.get(lineUserId)
-      
-      if (!pref) {
-        // User not found in preferences (lineUserId not linked)
-        // For non-user IDs (Group/Room), always send
-        if (!lineUserId.startsWith('U')) {
-          filteredRecipients.push(lineUserId)
-          continue
-        }
-        // For user IDs, use DEFAULT_PREFERENCES for this notification type
-        // This ensures that notifications like movements (default LINE: false)
-        // won't be sent to unlinked users, while PR/PO (default LINE: true) will
-        if (defaultLineEnabled) {
-          filteredRecipients.push(lineUserId)
-        }
-        continue
-      }
-
-      // Check the LINE preference for this notification type
-      const lineFieldName = `${notificationType}Line` as keyof typeof pref
-      const isLineEnabled = pref[lineFieldName]
-
-      // If the field doesn't exist or is true, send the notification
-      if (isLineEnabled === undefined || isLineEnabled === true) {
-        filteredRecipients.push(lineUserId)
-      }
-      // If explicitly set to false, skip this recipient
-    }
-
-    return filteredRecipients
-  } catch (error) {
-    console.error('Error filtering LINE recipients by preferences:', error)
-    // On error, return all recipients (fail-safe to ensure notifications are sent)
-    return lineUserIds
-  }
-}
-
 
 // ============================================
 // Notification Delivery Logs

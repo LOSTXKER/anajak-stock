@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sendLineExpiringAlert } from '@/actions/line-notifications'
-
-// This endpoint can be called by a cron job (e.g., Vercel Cron, GitHub Actions)
-// to send alerts for products expiring within 30 days via LINE
+import { prisma } from '@/lib/prisma'
+import { dispatchNotification } from '@/lib/notification-dispatcher'
+import { getExpiringItems } from '@/actions/line-notifications'
+import { FlexTemplates } from '@/lib/integrations/line'
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret to prevent unauthorized access
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
@@ -14,9 +13,40 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await sendLineExpiringAlert()
+    const items = await getExpiringItems()
 
-    return NextResponse.json(result)
+    if (items.length === 0) {
+      return NextResponse.json({ success: true, message: 'No expiring items' })
+    }
+
+    // Get all eligible users
+    const users = await prisma.user.findMany({
+      where: { active: true, deletedAt: null, role: { in: ['ADMIN', 'APPROVER', 'INVENTORY'] } },
+      select: { id: true },
+    })
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const lineTemplate = {
+      altText: `⏰ สินค้าใกล้หมดอายุ ${items.length} รายการ`,
+      flex: FlexTemplates.expiringStockAlert(items, appUrl),
+    }
+
+    const result = await dispatchNotification({
+      type: 'expiring',
+      webType: 'expiring_soon',
+      title: `สินค้าใกล้หมดอายุ ${items.length} รายการ`,
+      message: `มีสินค้าที่จะหมดอายุภายใน 30 วัน ${items.length} รายการ`,
+      url: '/reports/expiring',
+      lineTemplate,
+      targetUserIds: users.map((u) => u.id),
+    })
+
+    return NextResponse.json({
+      success: true,
+      itemCount: items.length,
+      deliveries: result.deliveries.length,
+      errors: result.errors.length,
+    })
   } catch (error) {
     console.error('Cron expiring stock alert error:', error)
     return NextResponse.json(

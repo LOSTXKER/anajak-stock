@@ -5,14 +5,9 @@ import { getSession } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { PRStatus } from '@/generated/prisma'
 import type { ActionResult, PaginatedResult, PRWithRelations } from '@/types'
-import { createNotification, sendPRApprovalRequest, sendPRApprovalEmail } from '@/actions/notifications'
-import { sendLinePRPendingAlert, sendLineNotificationToUser } from '@/actions/line-notifications'
-import { 
-  shouldNotifyUser, 
-  getUserEnabledChannels,
-  getUserLineId,
-  type NotificationTypeKey 
-} from '@/actions/user-notification-preferences'
+import { dispatchNotification } from '@/lib/notification-dispatcher'
+import { NOTIFICATION_TEMPLATES } from '@/lib/notification-templates'
+import { prApprovalRequestEmail } from '@/lib/email'
 
 interface PRLineInput {
   productId: string
@@ -491,150 +486,85 @@ export async function updatePR(id: string, data: UpdatePRInput): Promise<ActionR
 // ============================================
 
 /**
- * Send notifications to all approvers when a PR is submitted
- * Respects user notification preferences for each channel
+ * Send notifications to all approvers when a PR is submitted.
+ * Uses the unified dispatcher -- single path, always checks preferences.
  */
 async function notifyPRSubmitted(prId: string, prNumber: string, requesterName: string) {
-  // Get all approvers (ADMIN and APPROVER roles)
   const approvers = await prisma.user.findMany({
-    where: {
-      active: true,
-      deletedAt: null,
-      role: { in: ['ADMIN', 'APPROVER'] },
-    },
-    select: { id: true, email: true },
+    where: { active: true, deletedAt: null, role: { in: ['ADMIN', 'APPROVER'] } },
+    select: { id: true },
   })
 
-  const notificationType: NotificationTypeKey = 'prPending'
-
-  // Send notifications based on each user's preferences
-  const notificationPromises = approvers.map(async (approver) => {
-    const channels = await getUserEnabledChannels(approver.id, notificationType)
-    const tasks: Promise<unknown>[] = []
-
-    // Web notification
-    if (channels.web) {
-      tasks.push(
-        createNotification({
-          userId: approver.id,
-          type: 'pr_pending',
-          title: `PR ใหม่รออนุมัติ: ${prNumber}`,
-          message: `${requesterName} ส่งใบขอซื้อ ${prNumber} รออนุมัติ`,
-          url: `/pr/${prId}`,
-        })
-      )
-    }
-
-    // Email notification
-    if (channels.email && approver.email) {
-      tasks.push(sendPRApprovalEmail(prId, approver.email))
-    }
-
-    // LINE notification
-    if (channels.line) {
-      const lineUserId = await getUserLineId(approver.id)
-      if (lineUserId) {
-        tasks.push(sendLineNotificationToUser(lineUserId, 'prPending', {
-          prId,
-          prNumber,
-          requesterName,
-        }))
-      }
-    }
-
-    return Promise.allSettled(tasks)
+  const pr = await prisma.pR.findUnique({
+    where: { id: prId },
+    include: { _count: { select: { lines: true } } },
   })
 
-  // Also send LINE to global recipients (for admins who may not have individual LINE ID)
-  const linePromise = sendLinePRPendingAlert(prId)
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const lineTemplate = NOTIFICATION_TEMPLATES.prPending({ prId, prNumber, requesterName }, appUrl)
 
-  await Promise.allSettled([...notificationPromises, linePromise])
+  await dispatchNotification({
+    type: 'prPending',
+    webType: 'pr_pending',
+    title: `PR ใหม่รออนุมัติ: ${prNumber}`,
+    message: `${requesterName} ส่งใบขอซื้อ ${prNumber} รออนุมัติ`,
+    url: `/pr/${prId}`,
+    lineTemplate,
+    emailSubject: `[รออนุมัติ] ใบขอซื้อ ${prNumber}`,
+    emailHtml: prApprovalRequestEmail({
+      prNumber,
+      requesterName,
+      itemCount: pr?._count.lines || 0,
+      url: `${appUrl}/pr/${prId}`,
+    }),
+    targetUserIds: approvers.map((a) => a.id),
+  })
 }
 
 /**
- * Send notification when a PR is approved
- * Respects user notification preferences
+ * Send notification when a PR is approved.
+ * Uses the unified dispatcher -- single path, always checks preferences.
  */
 async function notifyPRApproved(prId: string, prNumber: string, requesterId: string, approverName: string) {
-  const notificationType: NotificationTypeKey = 'prApproved'
-  const channels = await getUserEnabledChannels(requesterId, notificationType)
-  const tasks: Promise<unknown>[] = []
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const lineTemplate = NOTIFICATION_TEMPLATES.prApproved({ prId, prNumber, approverName }, appUrl)
 
-  // Web notification
-  if (channels.web) {
-    tasks.push(
-      createNotification({
-        userId: requesterId,
-        type: 'pr_pending',
-        title: `PR ${prNumber} อนุมัติแล้ว`,
-        message: `ใบขอซื้อ ${prNumber} ได้รับการอนุมัติโดย ${approverName}`,
-        url: `/pr/${prId}`,
-      })
-    )
-  }
-
-  // LINE notification
-  if (channels.line) {
-    const lineUserId = await getUserLineId(requesterId)
-    if (lineUserId) {
-      tasks.push(sendLineNotificationToUser(lineUserId, 'prApproved', {
-        prId,
-        prNumber,
-        approverName,
-      }))
-    }
-  }
-
-  // Email notification (if implemented)
-  // if (channels.email) { ... }
-
-  await Promise.allSettled(tasks)
+  await dispatchNotification({
+    type: 'prApproved',
+    webType: 'pr_pending',
+    title: `PR ${prNumber} อนุมัติแล้ว`,
+    message: `ใบขอซื้อ ${prNumber} ได้รับการอนุมัติโดย ${approverName}`,
+    url: `/pr/${prId}`,
+    lineTemplate,
+    targetUserIds: [requesterId],
+  })
 }
 
 /**
- * Send notification when a PR is rejected
- * Respects user notification preferences
+ * Send notification when a PR is rejected.
+ * Uses the unified dispatcher -- single path, always checks preferences.
  */
 async function notifyPRRejected(
-  prId: string, 
-  prNumber: string, 
-  requesterId: string, 
+  prId: string,
+  prNumber: string,
+  requesterId: string,
   approverName: string,
   reason?: string
 ) {
-  const notificationType: NotificationTypeKey = 'prRejected'
-  const channels = await getUserEnabledChannels(requesterId, notificationType)
-  const tasks: Promise<unknown>[] = []
-
   const message = reason
     ? `ใบขอซื้อ ${prNumber} ถูกปฏิเสธโดย ${approverName}: ${reason}`
     : `ใบขอซื้อ ${prNumber} ถูกปฏิเสธโดย ${approverName}`
 
-  // Web notification
-  if (channels.web) {
-    tasks.push(
-      createNotification({
-        userId: requesterId,
-        type: 'pr_pending',
-        title: `PR ${prNumber} ถูกปฏิเสธ`,
-        message,
-        url: `/pr/${prId}`,
-      })
-    )
-  }
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const lineTemplate = NOTIFICATION_TEMPLATES.prRejected({ prId, prNumber, approverName, reason }, appUrl)
 
-  // LINE notification
-  if (channels.line) {
-    const lineUserId = await getUserLineId(requesterId)
-    if (lineUserId) {
-      tasks.push(sendLineNotificationToUser(lineUserId, 'prRejected', {
-        prId,
-        prNumber,
-        approverName,
-        reason,
-      }))
-    }
-  }
-
-  await Promise.allSettled(tasks)
+  await dispatchNotification({
+    type: 'prRejected',
+    webType: 'pr_pending',
+    title: `PR ${prNumber} ถูกปฏิเสธ`,
+    message,
+    url: `/pr/${prId}`,
+    lineTemplate,
+    targetUserIds: [requesterId],
+  })
 }

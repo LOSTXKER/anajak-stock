@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sendLowStockAlert } from '@/actions/notifications'
-import { sendLineLowStockAlert } from '@/actions/line-notifications'
-
-// This endpoint can be called by a cron job (e.g., Vercel Cron, GitHub Actions)
-// to send daily low stock alerts via Email and LINE
+import { prisma } from '@/lib/prisma'
+import { dispatchNotification } from '@/lib/notification-dispatcher'
+import { getLowStockItems } from '@/actions/line-notifications'
+import { NOTIFICATION_TEMPLATES } from '@/lib/notification-templates'
+import { lowStockAlertEmail } from '@/lib/email'
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret to prevent unauthorized access
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
@@ -15,16 +14,47 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Send alerts via both Email and LINE in parallel
-    const [emailResult, lineResult] = await Promise.allSettled([
-      sendLowStockAlert(),
-      sendLineLowStockAlert(),
-    ])
+    const lowStockItems = await getLowStockItems()
+
+    if (lowStockItems.length === 0) {
+      return NextResponse.json({ success: true, message: 'No low stock items' })
+    }
+
+    // Get all eligible users (admins, approvers, inventory)
+    const users = await prisma.user.findMany({
+      where: { active: true, deletedAt: null, role: { in: ['ADMIN', 'APPROVER', 'INVENTORY'] } },
+      select: { id: true },
+    })
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const lineTemplate = NOTIFICATION_TEMPLATES.lowStock({ lowStockItems }, appUrl)
+
+    const emailHtml = lowStockAlertEmail(
+      lowStockItems.map((item) => ({
+        name: item.name,
+        sku: item.sku,
+        qty: item.qty,
+        reorderPoint: item.rop,
+      }))
+    )
+
+    const result = await dispatchNotification({
+      type: 'lowStock',
+      webType: 'low_stock',
+      title: `สินค้าใกล้หมด ${lowStockItems.length} รายการ`,
+      message: `มีสินค้าที่ต่ำกว่า Reorder Point ${lowStockItems.length} รายการ`,
+      url: '/reports/low-stock',
+      lineTemplate,
+      emailSubject: `[แจ้งเตือน] สินค้าใกล้หมด ${lowStockItems.length} รายการ`,
+      emailHtml,
+      targetUserIds: users.map((u) => u.id),
+    })
 
     return NextResponse.json({
       success: true,
-      email: emailResult.status === 'fulfilled' ? emailResult.value : { error: 'Failed' },
-      line: lineResult.status === 'fulfilled' ? lineResult.value : { error: 'Failed' },
+      itemCount: lowStockItems.length,
+      deliveries: result.deliveries.length,
+      errors: result.errors.length,
     })
   } catch (error) {
     console.error('Cron low stock alert error:', error)

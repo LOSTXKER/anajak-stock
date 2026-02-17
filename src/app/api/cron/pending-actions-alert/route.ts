@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sendLinePendingActionsAlert } from '@/actions/line-notifications'
-import { getPendingActionsForCron } from '@/actions/pending-actions'
 import { prisma } from '@/lib/prisma'
-
-// This endpoint can be called by a cron job (e.g., Vercel Cron, GitHub Actions)
-// to send daily pending actions alerts via LINE
-// Recommended: Run at 8:00 AM every weekday
+import { dispatchNotification } from '@/lib/notification-dispatcher'
+import { getPendingActionsForCron } from '@/actions/pending-actions'
+import { FlexTemplates } from '@/lib/integrations/line'
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret to prevent unauthorized access
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
@@ -17,9 +13,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Get pending actions summary
     const pendingResult = await getPendingActionsForCron()
-    
+
     if (!pendingResult.success) {
       return NextResponse.json(
         { success: false, error: pendingResult.error },
@@ -28,8 +23,7 @@ export async function GET(request: NextRequest) {
     }
 
     const pending = pendingResult.data
-    
-    // Only send alert if there are pending actions
+
     if (!pending || pending.total === 0) {
       return NextResponse.json({
         success: true,
@@ -46,21 +40,41 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Send LINE notification
-    const lineResult = await sendLinePendingActionsAlert()
+    // Build summary for notification
+    const summaryLines: string[] = []
+    if (pending.grnDraft > 0) summaryLines.push(`GRN รอบันทึก: ${pending.grnDraft}`)
+    if (pending.poApproved > 0) summaryLines.push(`PO รอส่ง Supplier: ${pending.poApproved}`)
+    if (pending.poSent > 0) summaryLines.push(`PO เลย ETA: ${pending.poSent}`)
+    if (pending.prSubmitted > 0) summaryLines.push(`PR รออนุมัติ: ${pending.prSubmitted}`)
+    if (pending.movementApproved > 0) summaryLines.push(`Movement รอบันทึก: ${pending.movementApproved}`)
+    if (pending.stockTakeCompleted > 0) summaryLines.push(`ตรวจนับรออนุมัติ: ${pending.stockTakeCompleted}`)
 
-    // Create in-app notification for all users with pending actions
-    if (pending.total > 0) {
-      await prisma.notification.create({
-        data: {
-          type: 'system',
-          title: '⚡ งานค้างที่ต้องดำเนินการ',
-          message: `มีงานค้าง ${pending.total} รายการที่ต้องดำเนินการ`,
-          url: '/dashboard',
-          // userId null = broadcast to all users
-        },
-      })
+    // Get all eligible users (admins, approvers, inventory)
+    const users = await prisma.user.findMany({
+      where: { active: true, deletedAt: null, role: { in: ['ADMIN', 'APPROVER', 'INVENTORY'] } },
+      select: { id: true },
+    })
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const lineTemplate = {
+      altText: `⚡ งานค้าง ${pending.total} รายการ`,
+      flex: FlexTemplates.customCard(
+        `⚡ งานค้าง ${pending.total} รายการ`,
+        summaryLines.join('\n'),
+        'ดูรายละเอียด',
+        `${appUrl}/dashboard`,
+      ),
     }
+
+    const result = await dispatchNotification({
+      type: 'poPending',
+      webType: 'system',
+      title: '⚡ งานค้างที่ต้องดำเนินการ',
+      message: `มีงานค้าง ${pending.total} รายการที่ต้องดำเนินการ`,
+      url: '/dashboard',
+      lineTemplate,
+      targetUserIds: users.map((u) => u.id),
+    })
 
     return NextResponse.json({
       success: true,
@@ -73,9 +87,8 @@ export async function GET(request: NextRequest) {
         movementApproved: pending.movementApproved,
         stockTakeCompleted: pending.stockTakeCompleted,
       },
-      line: lineResult.success 
-        ? { sent: lineResult.data?.sent, count: lineResult.data?.count }
-        : { error: lineResult.error },
+      deliveries: result.deliveries.length,
+      errors: result.errors.length,
     })
   } catch (error) {
     console.error('Cron pending actions alert error:', error)
