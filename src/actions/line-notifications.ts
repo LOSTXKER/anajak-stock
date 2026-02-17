@@ -7,6 +7,7 @@ import {
   getLineClient, 
   createLineClient,
 } from '@/lib/integrations/line'
+import { getUserLineId } from '@/actions/user-notification-preferences'
 import type { ActionResult } from '@/types'
 import { revalidatePath } from 'next/cache'
 
@@ -233,8 +234,15 @@ export async function sendLineTextMessage(text: string): Promise<ActionResult<vo
     const client = getLineClientFromSettings(settingsResult.data)
     if (!client) return { success: false, error: 'LINE not configured' }
 
-    const recipientIds = settingsResult.data.recipientUserIds || []
-    if (recipientIds.length === 0) return { success: false, error: 'No recipients configured' }
+    const recipientIds = [...(settingsResult.data.recipientUserIds || [])]
+
+    // Also include the caller's own LINE User ID
+    const myLineId = await getUserLineId(session.id)
+    if (myLineId && !recipientIds.includes(myLineId)) {
+      recipientIds.push(myLineId)
+    }
+
+    if (recipientIds.length === 0) return { success: false, error: 'ไม่มีผู้รับ กรุณากรอก LINE User ID หรือเพิ่มผู้รับทั้งระบบ' }
 
     const result = await client.sendText(recipientIds, text)
 

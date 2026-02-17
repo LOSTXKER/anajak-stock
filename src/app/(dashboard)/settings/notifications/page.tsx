@@ -886,7 +886,7 @@ export default function NotificationSettingsPage() {
               <div className="flex flex-wrap gap-2">
                 <Dialog open={testMessageOpen} onOpenChange={setTestMessageOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" disabled={!lineSettings?.enabled || lineSettings?.recipientUserIds.length === 0}>
+                    <Button variant="outline" disabled={!lineSettings?.enabled || (lineSettings?.recipientUserIds.length === 0 && !userPrefs?.lineUserId)}>
                       <MessageSquare className="w-4 h-4 mr-2" />
                       ส่งข้อความ
                     </Button>
@@ -915,16 +915,16 @@ export default function NotificationSettingsPage() {
                 <Button 
                   variant="outline" 
                   onClick={handleTestLowStockAlert}
-                  disabled={!lineSettings?.enabled || lineSettings?.recipientUserIds.length === 0}
+                  disabled={!lineSettings?.enabled || (lineSettings?.recipientUserIds.length === 0 && !userPrefs?.lineUserId)}
                 >
                   <AlertTriangle className="w-4 h-4 mr-2" />
                   ทดสอบแจ้งเตือนสต๊อคใกล้หมด
                 </Button>
               </div>
 
-              {(!lineSettings?.enabled || lineSettings?.recipientUserIds.length === 0) && (
+              {(!lineSettings?.enabled || (lineSettings?.recipientUserIds.length === 0 && !userPrefs?.lineUserId)) && (
                 <p className="text-xs text-[var(--text-muted)] mt-3">
-                  * เปิดใช้งาน LINE และเพิ่มผู้รับการแจ้งเตือนก่อนทดสอบ
+                  * เปิดใช้งาน LINE และกรอก LINE User ID ของฉัน หรือเพิ่มผู้รับการแจ้งเตือนก่อนทดสอบ
                 </p>
               )}
             </CardContent>
