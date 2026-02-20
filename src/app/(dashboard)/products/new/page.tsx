@@ -454,7 +454,7 @@ export default function NewProductPage() {
                     type="number"
                     min="0"
                     step="0.01"
-                    defaultValue="0"
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">
@@ -463,7 +463,7 @@ export default function NewProductPage() {
                     name="reorderPoint"
                     type="number"
                     min="0"
-                    defaultValue="0"
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">
@@ -472,7 +472,7 @@ export default function NewProductPage() {
                     name="minQty"
                     type="number"
                     min="0"
-                    defaultValue="0"
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">
@@ -481,7 +481,7 @@ export default function NewProductPage() {
                     name="maxQty"
                     type="number"
                     min="0"
-                    defaultValue="0"
+                    placeholder="0"
                   />
                 </div>
               </div>

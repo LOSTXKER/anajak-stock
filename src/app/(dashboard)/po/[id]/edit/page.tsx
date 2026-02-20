@@ -62,8 +62,8 @@ interface POLine {
   variantId?: string
   productName?: string
   variantLabel?: string
-  qty: number
-  unitPrice: number
+  qty: number | ''
+  unitPrice: number | ''
   note?: string
 }
 
@@ -261,8 +261,8 @@ export default function EditPOPage(props: PageProps) {
       {
         id: `new-${Math.random().toString(36).substr(2, 9)}`,
         productId: '',
-        qty: 1,
-        unitPrice: 0,
+        qty: '',
+        unitPrice: '',
       },
     ])
   }
@@ -286,7 +286,7 @@ export default function EditPOPage(props: PageProps) {
     const updates: Partial<POLine> = {
       productId,
       productName: product.name,
-      unitPrice: Number(product.lastCost || product.standardCost || 0),
+      unitPrice: Number(product.lastCost || product.standardCost) || '',
       variantId: undefined,
       variantLabel: undefined,
     }
@@ -319,7 +319,7 @@ export default function EditPOPage(props: PageProps) {
       variantId: sel.variantId,
       productName: sel.productName,
       variantLabel: sel.variantLabel,
-      qty: 1,
+      qty: '',
       unitPrice: sel.unitCost,
     }))
     
@@ -337,7 +337,7 @@ export default function EditPOPage(props: PageProps) {
   }
 
   // Calculate totals
-  const subtotal = lines.reduce((sum, line) => sum + (line.qty * line.unitPrice), 0)
+  const subtotal = lines.reduce((sum, line) => sum + (Number(line.qty) * Number(line.unitPrice)), 0)
   const vatAmount = vatType === 'INCLUDED' || vatType === 'EXCLUDED' 
     ? subtotal * (vatRate / 100) 
     : 0
@@ -362,7 +362,7 @@ export default function EditPOPage(props: PageProps) {
         toast.error(`กรุณาเลือกตัวเลือก (สี/ไซส์) สำหรับ "${product.name}"`)
         return
       }
-      if (line.qty <= 0) {
+      if (Number(line.qty) <= 0) {
         toast.error('จำนวนต้องมากกว่า 0')
         return
       }
@@ -381,8 +381,8 @@ export default function EditPOPage(props: PageProps) {
         id: line.id.startsWith('new-') ? undefined : line.id,
         productId: line.productId,
         variantId: line.variantId,
-        qty: line.qty,
-        unitPrice: line.unitPrice,
+        qty: Number(line.qty) || 0,
+        unitPrice: Number(line.unitPrice) || 0,
         note: line.note,
       })),
     })
@@ -638,7 +638,7 @@ export default function EditPOPage(props: PageProps) {
                               type="number"
                               min="1"
                               value={line.qty}
-                              onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
+                              onChange={(e) => updateLine(line.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
                               className="w-20"
                             />
                           </TableCell>
@@ -650,13 +650,13 @@ export default function EditPOPage(props: PageProps) {
                                 min="0"
                                 step="0.01"
                                 value={line.unitPrice}
-                                onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value) })}
+                                onChange={(e) => updateLine(line.id, { unitPrice: e.target.value === '' ? '' : Number(e.target.value) })}
                                 className="w-24 rounded-l-none"
                               />
                             </div>
                           </TableCell>
                           <TableCell className="font-mono text-right">
-                            ฿{(line.qty * line.unitPrice).toLocaleString()}
+                            ฿{(Number(line.qty) * Number(line.unitPrice)).toLocaleString()}
                           </TableCell>
                           <TableCell>
                             <Button

@@ -66,8 +66,8 @@ interface MovementLine {
   variantLabel?: string
   fromLocationId?: string
   toLocationId?: string
-  qty: number
-  unitCost: number
+  qty: number | ''
+  unitCost: number | ''
   note?: string
   orderRef?: string // เลขออเดอร์จาก ERP (for ISSUE)
 }
@@ -241,7 +241,7 @@ export default function EditMovementPage(props: PageProps) {
       variantId: sel.variantId,
       productName: sel.productName,
       variantLabel: sel.variantLabel,
-      qty: 1,
+      qty: '',
       unitCost: sel.unitCost,
     }))
     
@@ -295,8 +295,8 @@ export default function EditMovementPage(props: PageProps) {
       {
         id: `new-${Math.random().toString(36).substr(2, 9)}`,
         productId: '',
-        qty: 1,
-        unitCost: 0,
+        qty: '',
+        unitCost: '',
       },
     ])
   }
@@ -351,11 +351,11 @@ export default function EditMovementPage(props: PageProps) {
         toast.error(`กรุณาเลือก variant สำหรับ ${product.name}`)
         return
       }
-      if (type !== MovementType.ADJUST && line.qty <= 0) {
+      if (type !== MovementType.ADJUST && Number(line.qty) <= 0) {
         toast.error('จำนวนต้องมากกว่า 0')
         return
       }
-      if (line.qty === 0) {
+      if (Number(line.qty) === 0) {
         toast.error('จำนวนต้องไม่เป็น 0')
         return
       }
@@ -373,8 +373,8 @@ export default function EditMovementPage(props: PageProps) {
         variantId: line.variantId,
         fromLocationId: line.fromLocationId,
         toLocationId: line.toLocationId,
-        qty: line.qty,
-        unitCost: line.unitCost,
+        qty: Number(line.qty) || 0,
+        unitCost: Number(line.unitCost) || 0,
         note: line.note,
         orderRef: line.orderRef, // เลขออเดอร์จาก ERP (for ISSUE)
       })),
@@ -652,12 +652,12 @@ export default function EditMovementPage(props: PageProps) {
                               type="number"
                               min={type === 'ADJUST' ? undefined : 1}
                               value={line.qty}
-                              onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
+                              onChange={(e) => updateLine(line.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
                               className="w-20"
                             />
                             {type === 'ADJUST' && (
                               <span className="text-xs text-[var(--text-muted)] mt-1">
-                                {line.qty >= 0 ? '+เพิ่ม' : '-ลด'}
+                                {Number(line.qty) >= 0 ? '+เพิ่ม' : '-ลด'}
                               </span>
                             )}
                           </TableCell>
@@ -669,8 +669,8 @@ export default function EditMovementPage(props: PageProps) {
                                   type="number"
                                   min="0"
                                   step="0.01"
-                                  value={line.unitCost || ''}
-                                  onChange={(e) => updateLine(line.id, { unitCost: Number(e.target.value) })}
+                                  value={line.unitCost}
+                                  onChange={(e) => updateLine(line.id, { unitCost: e.target.value === '' ? '' : Number(e.target.value) })}
                                   className="w-24 rounded-l-none"
                                 />
                               </div>

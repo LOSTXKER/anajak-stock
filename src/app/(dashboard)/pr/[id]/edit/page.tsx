@@ -62,7 +62,7 @@ interface PRLine {
   variantId?: string
   productName?: string
   variantLabel?: string
-  qty: number
+  qty: number | ''
   note?: string
 }
 
@@ -300,7 +300,7 @@ export default function EditPRPage(props: PageProps) {
       {
         id: `new-${Math.random().toString(36).substr(2, 9)}`,
         productId: '',
-        qty: 1,
+        qty: '',
       },
     ])
   }
@@ -356,7 +356,7 @@ export default function EditPRPage(props: PageProps) {
       variantId: sel.variantId,
       productName: sel.productName,
       variantLabel: sel.variantLabel,
-      qty: 1,
+      qty: '',
     }))
     
     setLines(prev => [...prev, ...newLines])
@@ -391,7 +391,7 @@ export default function EditPRPage(props: PageProps) {
         toast.error(`กรุณาเลือกตัวเลือก (สี/ไซส์) สำหรับ "${product.name}"`)
         return
       }
-      if (line.qty <= 0) {
+      if (Number(line.qty) <= 0) {
         toast.error('จำนวนต้องมากกว่า 0')
         return
       }
@@ -407,7 +407,7 @@ export default function EditPRPage(props: PageProps) {
         id: line.id.startsWith('new-') ? undefined : line.id,
         productId: line.productId,
         variantId: line.variantId,
-        qty: line.qty,
+        qty: Number(line.qty) || 0,
         note: line.note,
       })),
     })
@@ -634,7 +634,7 @@ export default function EditPRPage(props: PageProps) {
                               type="number"
                               min="1"
                               value={line.qty}
-                              onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
+                              onChange={(e) => updateLine(line.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
                               className="w-24"
                             />
                           </TableCell>

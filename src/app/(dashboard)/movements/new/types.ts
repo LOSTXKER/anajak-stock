@@ -27,8 +27,8 @@ export interface MovementLine {
   variantLabel?: string
   fromLocationId?: string
   toLocationId?: string
-  qty: number
-  unitCost: number
+  qty: number | ''
+  unitCost: number | ''
   note?: string
   lotId?: string
   lotNumber?: string

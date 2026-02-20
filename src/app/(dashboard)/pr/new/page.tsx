@@ -58,7 +58,7 @@ interface PRLine {
   variantId?: string
   productName?: string
   variantLabel?: string
-  qty: number
+  qty: number | ''
   note?: string
 }
 
@@ -193,7 +193,7 @@ export default function NewPRPage() {
       variantId: sel.variantId,
       productName: sel.productName,
       variantLabel: sel.variantLabel,
-      qty: 1,
+      qty: '',
     }))
     
     setLines(prev => [...prev, ...newLines])
@@ -215,7 +215,7 @@ export default function NewPRPage() {
       {
         id: Math.random().toString(36).substr(2, 9),
         productId: '',
-        qty: 1,
+        qty: '',
       },
     ])
   }
@@ -269,7 +269,7 @@ export default function NewPRPage() {
       return
     }
 
-    const validLines = lines.filter((line) => line.productId && line.qty > 0)
+    const validLines = lines.filter((line) => line.productId && Number(line.qty) > 0)
     if (validLines.length === 0) {
       toast.error('กรุณาเลือกสินค้าและระบุจำนวน')
       return
@@ -293,7 +293,7 @@ export default function NewPRPage() {
       lines: validLines.map((line) => ({
         productId: line.productId,
         variantId: line.variantId,
-        qty: line.qty,
+        qty: Number(line.qty) || 0,
         note: line.note,
       })),
     })
@@ -514,7 +514,7 @@ export default function NewPRPage() {
                               type="number"
                               min="1"
                               value={line.qty}
-                              onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
+                              onChange={(e) => updateLine(line.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
                               className="w-20"
                             />
                           </TableCell>

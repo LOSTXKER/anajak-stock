@@ -122,36 +122,22 @@ export default function NewMovementPage(props: PageProps) {
         return
       }
 
-      const existingLine = lines.find(l => 
-        l.productId === result.product.id && !l.variantId
-      )
-
-      if (existingLine && !result.product.hasVariants) {
-        // Increment quantity if product already exists (and no variants)
-        setLines(prev => prev.map(l => 
-          l.id === existingLine.id 
-            ? { ...l, qty: l.qty + 1 }
-            : l
-        ))
-        toast.success(`เพิ่มจำนวน: ${result.product.name}`)
-      } else {
-        // Add new line
-        const newLine: MovementLine = {
-          id: Math.random().toString(36).substr(2, 9),
-          productId: result.product.id,
-          productName: result.product.name,
-          qty: 1,
-          unitCost: Number(result.product.lastCost || result.product.standardCost || 0),
-        }
-        setLines(prev => [...prev, newLine])
-        
-        // Load variants if needed (loadVariantsForProduct handles caching)
-        if (result.product.hasVariants) {
-          await loadVariantsForProduct(result.product.id)
-        }
-        
-        toast.success(`เพิ่มสินค้า: ${result.product.name}`)
+      // Always add a new line (allow duplicates)
+      const newLine: MovementLine = {
+        id: Math.random().toString(36).substr(2, 9),
+        productId: result.product.id,
+        productName: result.product.name,
+        qty: '',
+        unitCost: Number(result.product.lastCost || result.product.standardCost || 0),
       }
+      setLines(prev => [...prev, newLine])
+      
+      // Load variants if needed (loadVariantsForProduct handles caching)
+      if (result.product.hasVariants) {
+        await loadVariantsForProduct(result.product.id)
+      }
+      
+      toast.success(`เพิ่มสินค้า: ${result.product.name}`)
     } catch (error) {
       console.error('Scan error:', error)
       toast.error('เกิดข้อผิดพลาดในการสแกน')
@@ -391,8 +377,8 @@ export default function NewMovementPage(props: PageProps) {
       {
         id: Math.random().toString(36).substr(2, 9),
         productId: '',
-        qty: 1,
-        unitCost: 0,
+        qty: '',
+        unitCost: '',
       },
     ])
   }
@@ -419,7 +405,7 @@ export default function NewMovementPage(props: PageProps) {
       variantId: sel.variantId,
       productName: sel.productName,
       variantLabel: sel.variantLabel,
-      qty: 1,
+      qty: '',
       unitCost: sel.unitCost,
     }))
     
@@ -532,17 +518,17 @@ export default function NewMovementPage(props: PageProps) {
         }
       } else if (type === MovementType.RETURN) {
         // For RETURN, qty must be > 0 and <= remainingQty
-        if (line.qty <= 0) {
+        if (Number(line.qty) <= 0) {
           toast.error('จำนวนคืนต้องมากกว่า 0')
           return
         }
-        if (line.remainingQty !== undefined && line.qty > line.remainingQty) {
+        if (line.remainingQty !== undefined && Number(line.qty) > line.remainingQty) {
           toast.error(`${product?.name || 'สินค้า'}: จำนวนคืนเกินจำนวนที่คืนได้ (${line.remainingQty})`)
           return
         }
       } else {
         // For other types, qty must be > 0
-        if (line.qty <= 0) {
+        if (Number(line.qty) <= 0) {
           toast.error('จำนวนต้องมากกว่า 0')
           return
         }
@@ -551,7 +537,7 @@ export default function NewMovementPage(props: PageProps) {
       // Validate TRANSFER has enough stock
       if (type === MovementType.TRANSFER && line.fromLocationId) {
         const fromStock = getStockFromCache(line.productId, line.variantId, line.fromLocationId) ?? 0
-        if (line.qty > fromStock) {
+        if (Number(line.qty) > fromStock) {
           toast.error(`${product?.name || 'สินค้า'}: สต๊อคต้นทางไม่เพียงพอ (มี ${fromStock})`)
           return
         }
@@ -562,7 +548,7 @@ export default function NewMovementPage(props: PageProps) {
 
     // Prepare lines with calculated qty for ADJUST mode
     const processedLines = lines.map((line) => {
-      let qty = line.qty
+      let qty: number = Number(line.qty) || 0
       
       // For ADJUST, calculate the diff from current stock
       if (type === MovementType.ADJUST && line.toLocationId) {
@@ -577,7 +563,7 @@ export default function NewMovementPage(props: PageProps) {
         fromLocationId: line.fromLocationId,
         toLocationId: line.toLocationId,
         qty,
-        unitCost: line.unitCost,
+        unitCost: Number(line.unitCost) || 0,
         note: line.note,
         lotId: line.lotId,
         newLotNumber: line.newLotNumber,
@@ -1232,7 +1218,7 @@ export default function NewMovementPage(props: PageProps) {
                                 min={1}
                                 max={type === 'RETURN' ? (line.remainingQty ?? undefined) : undefined}
                                 value={line.qty}
-                                onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) })}
+                                onChange={(e) => updateLine(line.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
                                 className="w-20"
                               />
                             </TableCell>
@@ -1248,8 +1234,8 @@ export default function NewMovementPage(props: PageProps) {
                                   if (fromStock === undefined || toStock === undefined) {
                                     return <span className="text-[var(--text-muted)]">-</span>
                                   }
-                                  const afterFrom = fromStock - line.qty
-                                  const afterTo = toStock + line.qty
+                                  const afterFrom = fromStock - Number(line.qty)
+                                  const afterTo = toStock + Number(line.qty)
                                   return (
                                     <div className="flex flex-col text-xs">
                                       <span className={afterFrom < 0 ? 'text-[var(--status-error)]' : ''}>
@@ -1276,7 +1262,7 @@ export default function NewMovementPage(props: PageProps) {
                                   if (currentStock === undefined) {
                                     return <span className="text-[var(--text-muted)]">-</span>
                                   }
-                                  const afterReturn = currentStock + line.qty
+                                  const afterReturn = currentStock + Number(line.qty)
                                   return (
                                     <div className="flex flex-col text-xs">
                                       <span className="text-[var(--status-success)]">
@@ -1300,8 +1286,8 @@ export default function NewMovementPage(props: PageProps) {
                                   type="number"
                                   min="0"
                                   step="0.01"
-                                  value={line.unitCost || ''}
-                                  onChange={(e) => updateLine(line.id, { unitCost: Number(e.target.value) })}
+                                  value={line.unitCost}
+                                  onChange={(e) => updateLine(line.id, { unitCost: e.target.value === '' ? '' : Number(e.target.value) })}
                                   className="w-24 rounded-l-none"
                                 />
                               </div>

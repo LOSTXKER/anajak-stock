@@ -149,11 +149,9 @@ export function BulkAddModal({
         // Deselect all variants
         variants.forEach(v => newSet.delete(`${productId}:${v.id}`))
       } else {
-        // Select all variants that aren't already added
+        // Select all variants
         variants.forEach(v => {
-          if (!existingVariantIds.has(v.id)) {
-            newSet.add(`${productId}:${v.id}`)
-          }
+          newSet.add(`${productId}:${v.id}`)
         })
       }
       return newSet
@@ -170,9 +168,7 @@ export function BulkAddModal({
         allNonVariantProducts.forEach(p => newSet.delete(p.id))
       } else {
         allNonVariantProducts.forEach(p => {
-          if (!existingProductIds.has(p.id)) {
-            newSet.add(p.id)
-          }
+          newSet.add(p.id)
         })
       }
       return newSet
@@ -306,7 +302,6 @@ export function BulkAddModal({
               </div>
             ) : (
               filteredProducts.map((product) => {
-                const isExisting = existingProductIds.has(product.id)
                 const hasVariants = product.hasVariants && showVariants
                 const isExpanded = expandedProducts.has(product.id)
                 const isLoadingVars = loadingVariants.has(product.id)
@@ -321,7 +316,7 @@ export function BulkAddModal({
                         isSelected 
                           ? 'bg-[var(--accent-light)] border border-[var(--accent-primary)]' 
                           : 'hover:bg-[var(--bg-secondary)] border border-transparent'
-                      } ${isExisting && !hasVariants ? 'opacity-50' : ''}`}
+                      }`}
                     >
                       {/* Expand button for products with variants */}
                       {hasVariants ? (
@@ -342,7 +337,6 @@ export function BulkAddModal({
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => handleToggleSelect(product.id)}
-                          disabled={isExisting}
                         />
                       )}
                       
@@ -356,9 +350,6 @@ export function BulkAddModal({
                             <Badge variant="secondary" className="text-xs shrink-0">
                               {variants.length > 0 ? `${variants.length} ตัวเลือก` : 'Variants'}
                             </Badge>
-                          )}
-                          {isExisting && !hasVariants && (
-                            <Badge variant="outline" className="text-xs shrink-0">เพิ่มแล้ว</Badge>
                           )}
                         </div>
                         <div className="text-xs text-[var(--text-muted)] font-mono">{product.sku}</div>
@@ -395,7 +386,6 @@ export function BulkAddModal({
                             {variants.map((variant) => {
                               const variantKey = `${product.id}:${variant.id}`
                               const isVariantSelected = selectedItems.has(variantKey)
-                              const isVariantExisting = existingVariantIds.has(variant.id)
                               const variantLabel = variant.options?.map(o => o.value).join(' / ') || variant.name || variant.sku
                               
                               return (
@@ -405,12 +395,11 @@ export function BulkAddModal({
                                     isVariantSelected 
                                       ? 'bg-[var(--accent-light)] border border-[var(--accent-primary)]' 
                                       : 'hover:bg-[var(--bg-secondary)] border border-transparent'
-                                  } ${isVariantExisting ? 'opacity-50' : ''}`}
+                                  }`}
                                 >
                                   <Checkbox
                                     checked={isVariantSelected}
                                     onCheckedChange={() => handleToggleSelect(product.id, variant.id)}
-                                    disabled={isVariantExisting}
                                   />
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
@@ -422,9 +411,6 @@ export function BulkAddModal({
                                         >
                                           สต๊อค: {variant.stock}
                                         </Badge>
-                                      )}
-                                      {isVariantExisting && (
-                                        <Badge variant="outline" className="text-xs shrink-0">เพิ่มแล้ว</Badge>
                                       )}
                                     </div>
                                     <div className="text-xs text-[var(--text-muted)] font-mono">{variant.sku}</div>
