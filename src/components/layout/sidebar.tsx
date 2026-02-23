@@ -134,6 +134,7 @@ const reportsGroup: MenuGroup = {
     { title: 'รอบเวลา PR → PO', href: '/reports/cycle-time', icon: Calendar, permission: 'reports:read' },
     { title: 'พยากรณ์การใช้', href: '/reports/forecast', icon: TrendingUp, permission: 'reports:read' },
     { title: 'Movement Ledger', href: '/reports/ledger', icon: ArrowLeftRight, permission: 'reports:read' },
+    { title: 'สต็อคสิ้นเดือน', href: '/reports/month-end', icon: Calendar, permission: 'reports:read' },
   ],
 }
 
