@@ -59,6 +59,15 @@ export interface TrendDataPoint {
   skuCount: number
 }
 
+export interface MovementSummaryByType {
+  receive:     { qty: number; value: number }
+  issue:       { qty: number; value: number }
+  transferIn:  { qty: number; value: number }
+  transferOut: { qty: number; value: number }
+  adjust:      { qty: number; value: number }
+  return:      { qty: number; value: number }
+}
+
 // ===== Helpers =====
 
 const THAI_MONTHS = [
@@ -221,6 +230,109 @@ async function getStockSummaryAtDate(cutoffDate: Date): Promise<MonthEndSummary>
   }
 }
 
+interface RawMovementRow {
+  movementType: string
+  direction: string
+  totalQty: unknown
+  totalValue: unknown
+}
+
+async function getMovementSummaryByType(
+  monthStart: Date,
+  monthEnd: Date
+): Promise<MovementSummaryByType> {
+  const sql = `
+    SELECT
+      sm.type        AS "movementType",
+      'STANDARD'     AS direction,
+      COALESCE(SUM(ml.qty), 0) AS "totalQty",
+      COALESCE(SUM(ml.qty * COALESCE(pv."costPrice", p."standardCost", 0)), 0) AS "totalValue"
+    FROM movement_lines ml
+    JOIN stock_movements sm    ON ml."movementId" = sm.id
+    JOIN products p            ON ml."productId" = p.id
+    LEFT JOIN product_variants pv ON ml."variantId" = pv.id
+    WHERE sm.status = 'POSTED'
+      AND sm."postedAt" >= $1
+      AND sm."postedAt" < $2
+      AND sm.type != 'TRANSFER'
+      AND p.active = true AND p."deletedAt" IS NULL
+    GROUP BY sm.type
+
+    UNION ALL
+
+    SELECT
+      'TRANSFER'     AS "movementType",
+      'IN'           AS direction,
+      COALESCE(SUM(ml.qty), 0),
+      COALESCE(SUM(ml.qty * COALESCE(pv."costPrice", p."standardCost", 0)), 0)
+    FROM movement_lines ml
+    JOIN stock_movements sm    ON ml."movementId" = sm.id
+    JOIN products p            ON ml."productId" = p.id
+    LEFT JOIN product_variants pv ON ml."variantId" = pv.id
+    WHERE sm.status = 'POSTED'
+      AND sm."postedAt" >= $1
+      AND sm."postedAt" < $2
+      AND sm.type = 'TRANSFER'
+      AND ml."toLocationId" IS NOT NULL
+      AND p.active = true AND p."deletedAt" IS NULL
+
+    UNION ALL
+
+    SELECT
+      'TRANSFER'     AS "movementType",
+      'OUT'          AS direction,
+      COALESCE(SUM(ml.qty), 0),
+      COALESCE(SUM(ml.qty * COALESCE(pv."costPrice", p."standardCost", 0)), 0)
+    FROM movement_lines ml
+    JOIN stock_movements sm    ON ml."movementId" = sm.id
+    JOIN products p            ON ml."productId" = p.id
+    LEFT JOIN product_variants pv ON ml."variantId" = pv.id
+    WHERE sm.status = 'POSTED'
+      AND sm."postedAt" >= $1
+      AND sm."postedAt" < $2
+      AND sm.type = 'TRANSFER'
+      AND ml."fromLocationId" IS NOT NULL
+      AND p.active = true AND p."deletedAt" IS NULL
+  `
+
+  const rows = await prisma.$queryRawUnsafe<RawMovementRow[]>(sql, monthStart, monthEnd)
+
+  const zero = { qty: 0, value: 0 }
+  const result: MovementSummaryByType = {
+    receive: { ...zero },
+    issue: { ...zero },
+    transferIn: { ...zero },
+    transferOut: { ...zero },
+    adjust: { ...zero },
+    return: { ...zero },
+  }
+
+  for (const row of rows) {
+    const qty = Number(row.totalQty)
+    const value = Number(row.totalValue)
+    switch (row.movementType) {
+      case 'RECEIVE':
+        result.receive = { qty, value }
+        break
+      case 'ISSUE':
+        result.issue = { qty, value }
+        break
+      case 'RETURN':
+        result.return = { qty, value }
+        break
+      case 'ADJUST':
+        result.adjust = { qty, value }
+        break
+      case 'TRANSFER':
+        if (row.direction === 'IN') result.transferIn = { qty, value }
+        else result.transferOut = { qty, value }
+        break
+    }
+  }
+
+  return result
+}
+
 // ===== Public Server Actions =====
 
 export async function getMonthEndStock(year: number, month: number) {
@@ -236,9 +348,12 @@ export async function getMonthEndStock(year: number, month: number) {
     const prevYear = month === 1 ? year - 1 : year
     const prevCutoffDate = getMonthCutoff(prevYear, prevMonth)
 
-    const [rawRows, prevSummary, categories, warehouses] = await Promise.all([
+    const monthStart = new Date(Date.UTC(year, month - 1, 1))
+
+    const [rawRows, prevSummary, movementSummary, categories, warehouses] = await Promise.all([
       getStockDetailAtDate(cutoffDate),
       getStockSummaryAtDate(prevCutoffDate),
+      getMovementSummaryByType(monthStart, cutoffDate),
       getCachedCategories(),
       getCachedWarehouses(),
     ])
@@ -252,6 +367,7 @@ export async function getMonthEndStock(year: number, month: number) {
         items,
         summary,
         prevSummary,
+        movementSummary,
         categories,
         warehouses,
         month,
@@ -316,7 +432,18 @@ export async function exportMonthEndStockCSV(
 
   try {
     const cutoffDate = getMonthCutoff(year, month)
-    const rawRows = await getStockDetailAtDate(cutoffDate)
+    const monthStart = new Date(Date.UTC(year, month - 1, 1))
+
+    const prevMonth = month === 1 ? 12 : month - 1
+    const prevYear = month === 1 ? year - 1 : year
+    const prevCutoffDate = getMonthCutoff(prevYear, prevMonth)
+
+    const [rawRows, prevSummary, movementSummary] = await Promise.all([
+      getStockDetailAtDate(cutoffDate),
+      getStockSummaryAtDate(prevCutoffDate),
+      getMovementSummaryByType(monthStart, cutoffDate),
+    ])
+
     let items = transformRawRows(rawRows)
 
     if (filters?.search) {
@@ -336,7 +463,24 @@ export async function exportMonthEndStockCSV(
     const totalQty = items.reduce((s, i) => s + i.qtyOnHand, 0)
     const totalValue = items.reduce((s, i) => s + i.stockValue, 0)
 
+    const ms = movementSummary
+    const endQty = prevSummary.totalQty + ms.receive.qty + ms.return.qty - ms.issue.qty + ms.adjust.qty
+    const endValue = prevSummary.totalValue + ms.receive.value + ms.return.value - ms.issue.value + ms.adjust.value
+
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+
+    const reconciliationSection = [
+      `สรุปความเคลื่อนไหวประจำเดือน ${label}`,
+      'รายการ,จำนวน (ชิ้น),มูลค่า (บาท)',
+      `ยอดต้นงวด,${prevSummary.totalQty},${prevSummary.totalValue}`,
+      `"+ รับเข้า (RECEIVE)",${ms.receive.qty},${ms.receive.value}`,
+      `"+ รับคืน (RETURN)",${ms.return.qty},${ms.return.value}`,
+      `"- เบิกออก (ISSUE)",${ms.issue.qty},${ms.issue.value}`,
+      `"± โอนเข้า (TRANSFER IN)",${ms.transferIn.qty},${ms.transferIn.value}`,
+      `"± โอนออก (TRANSFER OUT)",${ms.transferOut.qty},${ms.transferOut.value}`,
+      `"± ปรับปรุง (ADJUST)",${ms.adjust.qty},${ms.adjust.value}`,
+      `ยอดปลายงวด,${endQty},${endValue}`,
+    ]
 
     const headers = [
       'SKU', 'ชื่อสินค้า', 'ตัวเลือก', 'หมวดหมู่',
@@ -353,6 +497,9 @@ export async function exportMonthEndStockCSV(
       `สต็อคคงเหลือ ณ สิ้นเดือน ${label}`,
       `วันที่ออกรายงาน,${new Date().toLocaleDateString('th-TH')}`,
       '',
+      ...reconciliationSection,
+      '',
+      'รายละเอียดสต็อคคงเหลือ',
       headers.join(','),
       ...rows.map((r) => r.join(',')),
       '',

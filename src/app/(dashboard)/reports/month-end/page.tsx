@@ -35,6 +35,9 @@ import {
   ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowLeftRight,
+  ClipboardList,
+  PieChartIcon,
 } from 'lucide-react'
 import {
   getMonthEndStock,
@@ -43,6 +46,7 @@ import {
   type MonthEndStockItem,
   type MonthEndSummary,
   type TrendDataPoint,
+  type MovementSummaryByType,
 } from '@/actions/month-end-stock'
 import { PageHeader, StatCard, EmptyState } from '@/components/common'
 import { PageSkeleton } from '@/components/ui/skeleton'
@@ -57,6 +61,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  PieChart as RechartsPie,
+  Pie,
+  Cell,
+  Legend,
 } from 'recharts'
 
 const THAI_MONTHS = [
@@ -82,6 +90,7 @@ export default function MonthEndStockPage() {
   const [data, setData] = useState<MonthEndStockItem[]>([])
   const [summary, setSummary] = useState<MonthEndSummary>({ totalSKUs: 0, totalQty: 0, totalValue: 0 })
   const [prevSummary, setPrevSummary] = useState<MonthEndSummary | null>(null)
+  const [movementSummary, setMovementSummary] = useState<MovementSummaryByType | null>(null)
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [warehouses, setWarehouses] = useState<WarehouseItem[]>([])
@@ -105,6 +114,7 @@ export default function MonthEndStockPage() {
         setData(result.data.items)
         setSummary(result.data.summary)
         setPrevSummary(result.data.prevSummary)
+        setMovementSummary(result.data.movementSummary)
         setCategories(result.data.categories)
         setWarehouses(result.data.warehouses)
       } else {
@@ -211,6 +221,25 @@ export default function MonthEndStockPage() {
   const qtyDelta = prevSummary
     ? summary.totalQty - prevSummary.totalQty
     : null
+
+  const categoryBreakdown = useMemo(() => {
+    const map = new Map<string, { category: string; qty: number; value: number }>()
+    for (const item of filteredData) {
+      const key = item.category || 'ไม่ระบุหมวดหมู่'
+      const existing = map.get(key) || { category: key, qty: 0, value: 0 }
+      existing.qty += item.qtyOnHand
+      existing.value += item.stockValue
+      map.set(key, existing)
+    }
+    const arr = Array.from(map.values()).sort((a, b) => b.value - a.value)
+    const total = arr.reduce((s, i) => s + i.value, 0)
+    return arr.map((i) => ({ ...i, pct: total > 0 ? (i.value / total) * 100 : 0 }))
+  }, [filteredData])
+
+  const PIE_COLORS = [
+    'var(--accent-primary)', 'var(--status-success)', 'var(--status-warning)',
+    'var(--status-danger)', 'var(--status-info)', '#8b5cf6', '#ec4899', '#14b8a6',
+  ]
 
   const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i)
 
@@ -366,6 +395,162 @@ export default function MonthEndStockPage() {
           )}
         </Card>
       </div>
+
+      {/* Inventory Reconciliation */}
+      {!isLoading && movementSummary && prevSummary && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ClipboardList className="w-4 h-4 text-[var(--accent-primary)]" />
+              สรุปความเคลื่อนไหวสต็อค ประจำเดือน {THAI_MONTHS_SHORT[selectedMonth - 1]} {thaiYear}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50%]">รายการ</TableHead>
+                  <TableHead className="text-right">จำนวน (ชิ้น)</TableHead>
+                  <TableHead className="text-right">มูลค่า (บาท)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow className="bg-[var(--bg-hover)]">
+                  <TableCell className="font-semibold">ยอดต้นงวด</TableCell>
+                  <TableCell className="text-right font-mono font-semibold">{prevSummary.totalQty.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono font-semibold">฿{prevSummary.totalValue.toLocaleString()}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="text-[var(--status-success)]">+ รับเข้า (RECEIVE)</TableCell>
+                  <TableCell className="text-right font-mono text-[var(--status-success)]">+{movementSummary.receive.qty.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono text-[var(--status-success)]">+฿{movementSummary.receive.value.toLocaleString()}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="text-[var(--status-success)]">+ รับคืน (RETURN)</TableCell>
+                  <TableCell className="text-right font-mono text-[var(--status-success)]">+{movementSummary.return.qty.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono text-[var(--status-success)]">+฿{movementSummary.return.value.toLocaleString()}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="text-[var(--status-danger)]">- เบิกออก (ISSUE)</TableCell>
+                  <TableCell className="text-right font-mono text-[var(--status-danger)]">-{movementSummary.issue.qty.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono text-[var(--status-danger)]">-฿{movementSummary.issue.value.toLocaleString()}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="text-[var(--text-muted)]">
+                    <span className="flex items-center gap-1.5">
+                      <ArrowLeftRight className="w-3.5 h-3.5" />
+                      โอนเข้า (TRANSFER IN)
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-[var(--text-muted)]">{movementSummary.transferIn.qty.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono text-[var(--text-muted)]">฿{movementSummary.transferIn.value.toLocaleString()}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="text-[var(--text-muted)]">
+                    <span className="flex items-center gap-1.5">
+                      <ArrowLeftRight className="w-3.5 h-3.5" />
+                      โอนออก (TRANSFER OUT)
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-[var(--text-muted)]">{movementSummary.transferOut.qty.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono text-[var(--text-muted)]">฿{movementSummary.transferOut.value.toLocaleString()}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className={movementSummary.adjust.qty >= 0 ? 'text-[var(--status-info)]' : 'text-[var(--status-warning)]'}>
+                    ± ปรับปรุง (ADJUST)
+                  </TableCell>
+                  <TableCell className={`text-right font-mono ${movementSummary.adjust.qty >= 0 ? 'text-[var(--status-info)]' : 'text-[var(--status-warning)]'}`}>
+                    {movementSummary.adjust.qty >= 0 ? '+' : ''}{movementSummary.adjust.qty.toLocaleString()}
+                  </TableCell>
+                  <TableCell className={`text-right font-mono ${movementSummary.adjust.value >= 0 ? 'text-[var(--status-info)]' : 'text-[var(--status-warning)]'}`}>
+                    {movementSummary.adjust.value >= 0 ? '+' : ''}฿{movementSummary.adjust.value.toLocaleString()}
+                  </TableCell>
+                </TableRow>
+                <TableRow className="bg-[var(--bg-hover)] border-t-2 border-[var(--border-default)]">
+                  <TableCell className="font-bold text-base">= ยอดปลายงวด</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-base">{summary.totalQty.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-base">฿{summary.totalValue.toLocaleString()}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Category Breakdown */}
+      {!isLoading && categoryBreakdown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <PieChartIcon className="w-4 h-4 text-[var(--accent-primary)]" />
+              สรุปมูลค่าตามหมวดหมู่
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPie>
+                    <Pie
+                      data={categoryBreakdown}
+                      dataKey="value"
+                      nameKey="category"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                      labelLine={true}
+                    >
+                      {categoryBreakdown.map((_, idx) => (
+                        <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: '8px',
+                      }}
+                      formatter={(value) => [`฿${Number(value).toLocaleString()}`, 'มูลค่า']}
+                    />
+                    <Legend />
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </div>
+              <div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>หมวดหมู่</TableHead>
+                      <TableHead className="text-right">จำนวน</TableHead>
+                      <TableHead className="text-right">มูลค่า</TableHead>
+                      <TableHead className="text-right">สัดส่วน</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {categoryBreakdown.map((cat, idx) => (
+                      <TableRow key={cat.category}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full shrink-0"
+                              style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
+                            />
+                            {cat.category}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">{cat.qty.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono">฿{cat.value.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-[var(--text-muted)]">{cat.pct.toFixed(1)}%</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Trend Chart */}
       <Card>
