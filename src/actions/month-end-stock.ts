@@ -174,7 +174,14 @@ async function getStockDetailAtDate(cutoffDate: Date): Promise<RawStockRow[]> {
       p.name       AS "productName",
       p."standardCost",
       pv.sku       AS "variantSku",
-      pv.name      AS "variantName",
+      COALESCE(
+        pv.name,
+        (SELECT string_agg(ov.value, ' / ' ORDER BY ot."displayOrder")
+         FROM variant_option_values vov
+         JOIN option_values ov ON vov."optionValueId" = ov.id
+         JOIN option_types ot ON ov."optionTypeId" = ot.id
+         WHERE vov."variantId" = pv.id)
+      ) AS "variantName",
       pv."costPrice" AS "variantCost",
       l.code       AS "locationCode",
       w.name       AS "warehouseName",
@@ -192,7 +199,7 @@ async function getStockDetailAtDate(cutoffDate: Date): Promise<RawStockRow[]> {
     GROUP BY
       me."productId", me."variantId", me."locationId",
       p.sku, p.name, p."standardCost",
-      pv.sku, pv.name, pv."costPrice",
+      pv.sku, pv.id, pv.name, pv."costPrice",
       l.code, w.name, w.id,
       c.name, c.id
     HAVING SUM(me.qty) != 0
