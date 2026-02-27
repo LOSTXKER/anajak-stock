@@ -26,6 +26,10 @@ export const ALL_PERMISSIONS = [
   // GRN
   { key: 'grn:read', label: 'ดูใบรับสินค้า', group: 'รับสินค้า (GRN)' },
   { key: 'grn:write', label: 'บันทึกรับสินค้า', group: 'รับสินค้า (GRN)' },
+  // Stock Take
+  { key: 'stock-take:read', label: 'ดูใบตรวจนับ', group: 'ตรวจนับสต๊อค' },
+  { key: 'stock-take:write', label: 'สร้างใบตรวจนับ', group: 'ตรวจนับสต๊อค' },
+  { key: 'stock-take:approve', label: 'อนุมัติใบตรวจนับ', group: 'ตรวจนับสต๊อค' },
   // Reports
   { key: 'reports:read', label: 'ดูรายงาน', group: 'รายงาน' },
 ] as const
@@ -57,6 +61,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
     'movements:approve',
     'grn:read',
     'grn:write',
+    'stock-take:read',
+    'stock-take:write',
   ],
   REQUESTER: [
     'products:read',
@@ -74,6 +80,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
     'pr:approve',
     'po:read',
     'po:approve',
+    'stock-take:read',
+    'stock-take:approve',
   ],
   PURCHASING: [
     'products:read',
@@ -93,6 +101,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
     'pr:read',
     'po:read',
     'reports:read',
+    'stock-take:read',
   ],
 }
 

@@ -174,7 +174,7 @@ export function BottomNav({ userRole, customPermissions = [], className }: Botto
               )}
 
               {/* Stock Take */}
-              {canAccess('stock:write') && (
+              {canAccess('stock-take:read') && (
                 <Link
                   href="/stock-take"
                   onClick={() => setIsMoreOpen(false)}

@@ -156,7 +156,7 @@ export async function createStockTake(input: { warehouseId: string; note?: strin
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
   }
-  if (!hasPermission(session.role, 'stock:write')) {
+  if (!hasPermission(session.role, 'stock-take:write', session.customPermissions)) {
     return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
@@ -213,7 +213,7 @@ export async function startStockTake(id: string) {
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
   }
-  if (!hasPermission(session.role, 'stock:write')) {
+  if (!hasPermission(session.role, 'stock-take:write', session.customPermissions)) {
     return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
@@ -251,7 +251,7 @@ export async function updateStockTakeLines(stockTakeId: string, lines: Array<{ l
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
   }
-  if (!hasPermission(session.role, 'stock:write')) {
+  if (!hasPermission(session.role, 'stock-take:write', session.customPermissions)) {
     return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
@@ -296,7 +296,7 @@ export async function completeStockTake(id: string) {
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
   }
-  if (!hasPermission(session.role, 'stock:write')) {
+  if (!hasPermission(session.role, 'stock-take:write', session.customPermissions)) {
     return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 
@@ -363,7 +363,7 @@ export async function approveStockTake(id: string) {
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
   }
-  if (!hasPermission(session.role, 'movements:approve')) {
+  if (!hasPermission(session.role, 'stock-take:approve', session.customPermissions)) {
     return { success: false as const, error: 'คุณไม่มีสิทธิ์อนุมัติรายการนี้' }
   }
 
@@ -487,7 +487,7 @@ export async function cancelStockTake(id: string) {
   if (!session) {
     return { success: false as const, error: 'กรุณาเข้าสู่ระบบ' }
   }
-  if (!hasPermission(session.role, 'stock:write')) {
+  if (!hasPermission(session.role, 'stock-take:write', session.customPermissions)) {
     return { success: false as const, error: 'คุณไม่มีสิทธิ์ดำเนินการนี้' }
   }
 

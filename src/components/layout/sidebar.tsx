@@ -98,7 +98,7 @@ const stockMenuItems: MenuItem[] = [
     title: 'ตรวจนับสต๊อค',
     href: '/stock-take',
     icon: ClipboardCheck,
-    permission: 'stock:write',
+    permission: 'stock-take:read',
   },
 ]
 
