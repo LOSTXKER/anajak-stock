@@ -142,7 +142,11 @@ export async function getStockTake(id: string) {
           minQty: line.variant.minQty !== null ? Number(line.variant.minQty) : null,
           maxQty: line.variant.maxQty !== null ? Number(line.variant.maxQty) : null,
         } : null,
-      })),
+      })).sort((a, b) => {
+        const skuA = a.variant?.sku || a.product.sku
+        const skuB = b.variant?.sku || b.product.sku
+        return skuA.localeCompare(skuB) || a.location.code.localeCompare(b.location.code)
+      }),
     }
 
     return { success: true as const, data: serializedStockTake }

@@ -98,9 +98,12 @@ function getVariantName(line: StockTakeLineData): string {
 function getSortedLines(lines: StockTakeLineData[], sortBy: SortBy): StockTakeLineData[] {
   return [...lines].sort((a, b) => {
     switch (sortBy) {
-      case 'location':
+      case 'location': {
+        const locSkuA = a.variant?.sku || a.product.sku
+        const locSkuB = b.variant?.sku || b.product.sku
         return a.location.code.localeCompare(b.location.code) ||
-          a.product.sku.localeCompare(b.product.sku)
+          locSkuA.localeCompare(locSkuB)
+      }
       case 'sku': {
         const skuA = a.variant?.sku || a.product.sku
         const skuB = b.variant?.sku || b.product.sku
