@@ -6,6 +6,7 @@ import type {
   VariantUpdateRow,
   VariantUpdateParseResult,
 } from './csv-parser'
+import { KNOWN_COLUMNS } from './constants'
 
 /**
  * Read XLSX file and convert to array of arrays
@@ -228,19 +229,6 @@ export function detectXLSXHasVariantColumns(rows: string[][]): boolean {
 /**
  * Parse XLSX for variant update
  */
-const KNOWN_COLUMNS = new Set([
-  'sku', 'variant sku', 'variantsku', 'รหัส variant',
-  'barcode',
-  'ประเภทสต๊อค', 'ประเภท', 'stocktype', 'stock type',
-  'ราคาขาย', 'sellingprice', 'selling price',
-  'ราคาทุน', 'costprice', 'cost price',
-  'reorder point', 'reorderpoint', 'reorder',
-  'min qty', 'minqty', 'min',
-  'max qty', 'maxqty', 'max',
-  'แจ้งเตือน', 'alert', 'lowstockalert',
-  // Non-editable columns (ignored)
-  'รหัสสินค้า', 'ชื่อสินค้า', 'สต๊อค', 'stock',
-])
 
 export function parseXLSXVariantUpdate(rows: string[][]): VariantUpdateParseResult {
   if (rows.length < 2) {

@@ -11,23 +11,11 @@ import {
   Cell,
 } from 'recharts'
 
+import { CHART_COLORS as COLORS } from '@/lib/constants'
+
 interface TopProductsChartProps {
   data: { name: string; qty: number }[]
 }
-
-// Modern color palette
-const COLORS = [
-  '#60a5fa', // blue
-  '#34d399', // emerald
-  '#f472b6', // pink
-  '#fbbf24', // amber
-  '#a78bfa', // violet
-  '#fb7185', // rose
-  '#38bdf8', // sky
-  '#4ade80', // green
-  '#f97316', // orange
-  '#c084fc', // purple
-]
 
 export function TopProductsChart({ data }: TopProductsChartProps) {
   return (

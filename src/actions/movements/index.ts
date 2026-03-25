@@ -1,25 +1,30 @@
 /**
- * Movement actions - re-exports all movement functions for backward compatibility.
+ * Movement actions - re-exports all movement functions.
  * 
  * Internal structure:
- * - crud.ts: CRUD operations (get, create, update, cancel, queries)
+ * - queries.ts: Read/query operations (getMovements, getMovement, etc.)
+ * - create.ts: Creation operations (createMovement)
+ * - update.ts: Mutation operations (updateMovement, cancelMovement)
  * - workflow.ts: Workflow operations (submit, approve, post, reject, reverse, return)
  * - batch.ts: Batch operations (batchApprove, batchReject, batchPost, batchCancel)
  * - shared.ts: Shared types, constants, and utilities
  */
 
-// CRUD operations
+// Query operations
 export {
   getMovements,
   getMovement,
-  createMovement,
-  updateMovement,
-  cancelMovement,
   getLinkedMovements,
   getMovementsByVariant,
   getIssuedMovements,
   getIssuedMovementForReturn,
-} from './crud'
+} from './queries'
+
+// Create operations
+export { createMovement } from './create'
+
+// Update operations
+export { updateMovement, cancelMovement } from './update'
 
 // Workflow operations
 export {

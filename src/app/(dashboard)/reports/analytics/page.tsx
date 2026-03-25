@@ -43,17 +43,7 @@ import {
   Area,
 } from 'recharts'
 import { Button } from '@/components/ui/button'
-
-const COLORS = [
-  'var(--accent-primary)',
-  'var(--status-success)',
-  'var(--status-warning)',
-  'var(--status-danger)',
-  'var(--status-info)',
-  '#8b5cf6',
-  '#ec4899',
-  '#14b8a6',
-]
+import { CHART_COLORS_SEMANTIC as COLORS } from '@/lib/constants'
 
 export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState('abc')

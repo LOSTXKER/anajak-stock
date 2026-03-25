@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Link2,
   Bell,
+  BookOpen,
 } from 'lucide-react'
 
 const settingsNavItems = [
@@ -43,6 +44,12 @@ const settingsNavItems = [
     description: 'PEAK / ERP',
     icon: Link2,
     href: '/settings/integrations',
+  },
+  {
+    title: 'API Docs',
+    description: 'เอกสาร API สำหรับเชื่อมต่อ',
+    icon: BookOpen,
+    href: '/settings/api-docs',
   },
 ]
 

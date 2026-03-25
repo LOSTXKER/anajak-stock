@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
 import { getCachedCategories, getCachedWarehouses } from '@/lib/cache'
+import { THAI_MONTHS_SHORT } from '@/lib/constants'
 
 // ===== Types =====
 
@@ -70,18 +71,13 @@ export interface MovementSummaryByType {
 
 // ===== Helpers =====
 
-const THAI_MONTHS = [
-  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
-  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
-]
-
 function getMonthCutoff(year: number, month: number): Date {
   return new Date(Date.UTC(year, month, 1))
 }
 
 function getThaiMonthLabel(year: number, month: number): string {
   const thaiYear = (year + 543) % 100
-  return `${THAI_MONTHS[month - 1]} ${thaiYear.toString().padStart(2, '0')}`
+  return `${THAI_MONTHS_SHORT[month - 1]} ${thaiYear.toString().padStart(2, '0')}`
 }
 
 function transformRawRows(rows: RawStockRow[]): MonthEndStockItem[] {

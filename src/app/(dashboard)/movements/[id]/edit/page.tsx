@@ -31,45 +31,12 @@ import { getProducts } from '@/actions/products'
 import { getLocations } from '@/actions/stock'
 import { toast } from 'sonner'
 import { MovementType } from '@/generated/prisma'
-import type { ProductWithRelations, LocationWithWarehouse } from '@/types'
+import type { VariantOption, Variant, ProductWithVariants, MovementLine, LocationWithWarehouse } from '@/types/product-form'
 import { PageHeader } from '@/components/common'
 import { CascadingVariantPicker } from '@/components/variants'
 
 interface PageProps {
   params: Promise<{ id: string }>
-}
-
-interface VariantOption {
-  optionName: string
-  value: string
-}
-
-interface Variant {
-  id: string
-  sku: string
-  name: string | null
-  options: VariantOption[]
-  stock?: number
-  costPrice?: number
-}
-
-interface ProductWithVariants extends ProductWithRelations {
-  hasVariants: boolean
-  variants?: Variant[]
-}
-
-interface MovementLine {
-  id: string
-  productId: string
-  variantId?: string
-  productName?: string
-  variantLabel?: string
-  fromLocationId?: string
-  toLocationId?: string
-  qty: number | ''
-  unitCost: number | ''
-  note?: string
-  orderRef?: string // เลขออเดอร์จาก ERP (for ISSUE)
 }
 
 const typeConfig: Record<MovementType, { label: string; icon: React.ReactNode; color: string }> = {

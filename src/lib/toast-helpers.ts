@@ -4,6 +4,7 @@
  */
 
 import { toast, type ExternalToast } from 'sonner'
+import { getErrorMessage } from './errors'
 
 // Common toast options
 const defaultOptions: ExternalToast = {
@@ -106,29 +107,6 @@ export function showAction(
     action: options.action,
     cancel: options.cancel,
   })
-}
-
-/**
- * Extract error message from various error types
- */
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (typeof error === 'string') {
-    return error
-  }
-  if (typeof error === 'object' && error !== null) {
-    // Handle action result errors
-    if ('error' in error && typeof (error as { error: unknown }).error === 'string') {
-      return (error as { error: string }).error
-    }
-    // Handle API response errors
-    if ('message' in error && typeof (error as { message: unknown }).message === 'string') {
-      return (error as { message: string }).message
-    }
-  }
-  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
 }
 
 // Pre-defined toast messages for common operations

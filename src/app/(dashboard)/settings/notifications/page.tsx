@@ -43,13 +43,11 @@ import {
   Clock,
   TestTube,
   Link as LinkIcon,
-  Eye,
   Mail,
   Info,
   Globe,
   User,
   History,
-  BarChart3,
   CheckCircle2,
   XCircle,
   RefreshCw,
@@ -68,7 +66,6 @@ import {
   updateLineSettings,
   testLineConnection,
   sendLineTextMessage,
-  sendLineCustomMessage,
   type LineSettings,
 } from '@/actions/line-notifications'
 import { getEmailStatus } from '@/actions/notifications'
@@ -79,17 +76,15 @@ import {
   getNotificationDeliveryStats,
   type UserNotificationPreferences,
   type NotificationDeliveryLogItem,
-  type NotificationChannels,
 } from '@/actions/user-notification-preferences'
 import {
   getCronSettings,
   updateCronSettings,
   runCronJobManually,
   type CronSettings,
-  type CronJobConfig,
 } from '@/actions/cron-settings'
-import { utcToThaiHour, thaiToUtcHour, formatDays } from '@/lib/cron-utils'
 import { formatDateTime } from '@/lib/date'
+import { CronJobCard, NotificationChannelSection } from '@/components/settings'
 
 interface EmailStatus {
   configured: boolean
@@ -618,7 +613,7 @@ export default function NotificationSettingsPage() {
               </div>
 
               {/* Stock Alerts */}
-              <NotificationSection
+              <NotificationChannelSection
                 title="การแจ้งเตือนสต๊อค"
                 icon={<Package className="w-4 h-4" />}
                 items={[
@@ -634,7 +629,7 @@ export default function NotificationSettingsPage() {
               />
 
               {/* Movement Alerts - Granular per type */}
-              <NotificationSection
+              <NotificationChannelSection
                 title="การเคลื่อนไหวสต๊อค - รับเข้า"
                 icon={<ArrowDownCircle className="w-4 h-4" />}
                 items={[
@@ -649,7 +644,7 @@ export default function NotificationSettingsPage() {
                 }}
               />
 
-              <NotificationSection
+              <NotificationChannelSection
                 title="การเคลื่อนไหวสต๊อค - เบิกออก"
                 icon={<ArrowUpCircle className="w-4 h-4" />}
                 items={[
@@ -664,7 +659,7 @@ export default function NotificationSettingsPage() {
                 }}
               />
 
-              <NotificationSection
+              <NotificationChannelSection
                 title="การเคลื่อนไหวสต๊อค - โอนย้าย"
                 icon={<ArrowLeftRight className="w-4 h-4" />}
                 items={[
@@ -679,7 +674,7 @@ export default function NotificationSettingsPage() {
                 }}
               />
 
-              <NotificationSection
+              <NotificationChannelSection
                 title="การเคลื่อนไหวสต๊อค - ปรับปรุง"
                 icon={<Pencil className="w-4 h-4" />}
                 items={[
@@ -694,7 +689,7 @@ export default function NotificationSettingsPage() {
                 }}
               />
 
-              <NotificationSection
+              <NotificationChannelSection
                 title="การเคลื่อนไหวสต๊อค - คืนของ"
                 icon={<CornerDownLeft className="w-4 h-4" />}
                 items={[
@@ -710,7 +705,7 @@ export default function NotificationSettingsPage() {
               />
 
               {/* PR Alerts */}
-              <NotificationSection
+              <NotificationChannelSection
                 title="ใบขอซื้อ (PR)"
                 icon={<FileText className="w-4 h-4" />}
                 items={[
@@ -727,7 +722,7 @@ export default function NotificationSettingsPage() {
               />
 
               {/* PO Alerts */}
-              <NotificationSection
+              <NotificationChannelSection
                 title="ใบสั่งซื้อ (PO)"
                 icon={<ShoppingCart className="w-4 h-4" />}
                 items={[
@@ -747,7 +742,7 @@ export default function NotificationSettingsPage() {
               />
 
               {/* GRN & Stock Take */}
-              <NotificationSection
+              <NotificationChannelSection
                 title="การรับสินค้า & ตรวจนับ"
                 icon={<Truck className="w-4 h-4" />}
                 items={[
@@ -1173,249 +1168,3 @@ export default function NotificationSettingsPage() {
   )
 }
 
-// ============================================
-// Notification Section Component
-// ============================================
-
-interface NotificationItem {
-  key: string
-  label: string
-  description: string
-  icon: React.ComponentType<{ className?: string }>
-  color: string
-}
-
-interface NotificationSectionProps {
-  title: string
-  icon: React.ReactNode
-  items: NotificationItem[]
-  userPrefs: UserNotificationPreferences | null
-  onUpdate: (key: string, channels: NotificationChannels) => void
-}
-
-function NotificationSection({ title, icon, items, userPrefs, onUpdate }: NotificationSectionProps) {
-  return (
-    <div>
-      <h3 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
-        {icon}
-        {title}
-      </h3>
-      <div className="border border-[var(--border-default)] rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-[var(--bg-secondary)]">
-              <TableHead className="w-[45%]">ประเภท</TableHead>
-              <TableHead className="text-center w-[18%]">
-                <div className="flex items-center justify-center gap-1">
-                  <Globe className="w-4 h-4 text-[var(--status-success)]" />
-                  <span className="hidden sm:inline">เว็บ</span>
-                </div>
-              </TableHead>
-              <TableHead className="text-center w-[18%]">
-                <div className="flex items-center justify-center gap-1">
-                  <MessageSquare className="w-4 h-4 text-[#00B900]" />
-                  <span className="hidden sm:inline">LINE</span>
-                </div>
-              </TableHead>
-              <TableHead className="text-center w-[18%]">
-                <div className="flex items-center justify-center gap-1">
-                  <Mail className="w-4 h-4 text-[var(--accent-primary)]" />
-                  <span className="hidden sm:inline">Email</span>
-                </div>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((item) => {
-              const channels = userPrefs?.[item.key as keyof UserNotificationPreferences] as NotificationChannels | undefined
-              const webEnabled = channels?.web ?? true
-              const lineEnabled = channels?.line ?? true
-              const emailEnabled = channels?.email ?? true
-
-              return (
-                <TableRow key={item.key} className="hover:bg-[var(--bg-secondary)]/50">
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <item.icon className={`w-5 h-5 ${item.color} shrink-0`} />
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm">{item.label}</p>
-                        <p className="text-xs text-[var(--text-muted)] truncate">{item.description}</p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex justify-center">
-                      <Switch
-                        checked={webEnabled}
-                        onCheckedChange={(checked) => onUpdate(item.key, { 
-                          web: checked, 
-                          line: lineEnabled, 
-                          email: emailEnabled 
-                        })}
-                        className="data-[state=checked]:bg-[var(--status-success)]"
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex justify-center">
-                      <Switch
-                        checked={lineEnabled}
-                        onCheckedChange={(checked) => onUpdate(item.key, { 
-                          web: webEnabled, 
-                          line: checked, 
-                          email: emailEnabled 
-                        })}
-                        className="data-[state=checked]:bg-[#00B900]"
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex justify-center">
-                      <Switch
-                        checked={emailEnabled}
-                        onCheckedChange={(checked) => onUpdate(item.key, { 
-                          web: webEnabled, 
-                          line: lineEnabled, 
-                          email: checked 
-                        })}
-                        className="data-[state=checked]:bg-[var(--accent-primary)]"
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  )
-}
-
-// ============================================
-// Cron Job Card Component
-// ============================================
-
-interface CronJobCardProps {
-  config: CronJobConfig
-  onUpdate: (config: CronJobConfig) => void
-  onRun: () => void
-  isRunning: boolean
-}
-
-const DAYS_OF_WEEK = [
-  { value: 1, label: 'จ.' },
-  { value: 2, label: 'อ.' },
-  { value: 3, label: 'พ.' },
-  { value: 4, label: 'พฤ.' },
-  { value: 5, label: 'ศ.' },
-  { value: 6, label: 'ส.' },
-  { value: 0, label: 'อา.' },
-]
-
-function CronJobCard({ config, onUpdate, onRun, isRunning }: CronJobCardProps) {
-  const thaiHour = utcToThaiHour(config.hour)
-  
-  const toggleDay = (day: number) => {
-    const newDays = config.days.includes(day)
-      ? config.days.filter(d => d !== day)
-      : [...config.days, day].sort()
-    onUpdate({ ...config, days: newDays })
-  }
-
-  return (
-    <div className={`p-4 rounded-lg border ${config.enabled ? 'border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/5' : 'border-[var(--border-default)] bg-[var(--bg-secondary)]'}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <Switch
-              checked={config.enabled}
-              onCheckedChange={(enabled) => onUpdate({ ...config, enabled })}
-            />
-            <div>
-              <h4 className="font-medium text-[var(--text-primary)]">{config.name}</h4>
-              <p className="text-xs text-[var(--text-muted)]">{config.description}</p>
-            </div>
-          </div>
-
-          {config.enabled && (
-            <div className="mt-4 space-y-3">
-              {/* Time Setting */}
-              <div className="flex items-center gap-4">
-                <Label className="text-sm w-16">เวลา</Label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={thaiHour}
-                    onChange={(e) => onUpdate({ ...config, hour: thaiToUtcHour(Number(e.target.value)) })}
-                    className="w-20 h-9 rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 text-sm"
-                  >
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>{i.toString().padStart(2, '0')}:00</option>
-                    ))}
-                  </select>
-                  <span className="text-sm text-[var(--text-muted)]">น.</span>
-                </div>
-              </div>
-
-              {/* Days Setting */}
-              <div className="flex items-center gap-4">
-                <Label className="text-sm w-16">วัน</Label>
-                <div className="flex flex-wrap gap-1">
-                  {DAYS_OF_WEEK.map(day => (
-                    <button
-                      key={day.value}
-                      type="button"
-                      onClick={() => toggleDay(day.value)}
-                      className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                        config.days.includes(day.value)
-                          ? 'bg-[var(--accent-primary)] text-white'
-                          : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
-                      }`}
-                    >
-                      {day.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Last Run Info */}
-              {config.lastRun && (
-                <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-                  <span>รันล่าสุด: {formatDateTime(new Date(config.lastRun))}</span>
-                  {config.lastStatus === 'success' && (
-                    <Badge className="bg-[var(--status-success-light)] text-[var(--status-success)] text-[10px]">
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                      สำเร็จ
-                    </Badge>
-                  )}
-                  {config.lastStatus === 'error' && (
-                    <Badge className="bg-[var(--status-error-light)] text-[var(--status-error)] text-[10px]">
-                      <XCircle className="w-3 h-3 mr-1" />
-                      ผิดพลาด
-                    </Badge>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onRun}
-          disabled={isRunning || !config.enabled}
-        >
-          {isRunning ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <>
-              <RefreshCw className="w-4 h-4 mr-1" />
-              รันทันที
-            </>
-          )}
-        </Button>
-      </div>
-    </div>
-  )
-}

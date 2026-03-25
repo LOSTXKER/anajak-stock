@@ -29,28 +29,9 @@ import { BulkAddModal, BulkAddResult, BulkAddVariant } from '@/components/bulk-a
 import { createPR, submitPR } from '@/actions/pr'
 import { getProducts } from '@/actions/products'
 import { toast } from 'sonner'
-import type { ProductWithRelations } from '@/types'
+import type { VariantOption, Variant, ProductWithVariants } from '@/types/product-form'
 import { PageHeader } from '@/components/common'
 import { CascadingVariantPicker } from '@/components/variants'
-
-interface VariantOption {
-  optionName: string
-  value: string
-}
-
-interface Variant {
-  id: string
-  sku: string
-  name: string | null
-  options: VariantOption[]
-  stock?: number
-  costPrice?: number
-}
-
-interface ProductWithVariants extends ProductWithRelations {
-  hasVariants: boolean
-  variants?: Variant[]
-}
 
 interface PRLine {
   id: string

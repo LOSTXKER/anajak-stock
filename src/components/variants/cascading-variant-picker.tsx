@@ -18,11 +18,7 @@ import {
 import { cn } from '@/lib/utils'
 import { ChevronDown, Package, Check, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-
-interface VariantOption {
-  optionName: string
-  value: string
-}
+import type { VariantOption } from '@/types/product-form'
 
 interface Variant {
   id: string

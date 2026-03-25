@@ -31,29 +31,10 @@ import { getProducts } from '@/actions/products'
 import { getPR } from '@/actions/pr'
 import { toast } from 'sonner'
 import { VatType } from '@/generated/prisma'
-import type { ProductWithRelations } from '@/types'
+import type { VariantOption, Variant, ProductWithVariants } from '@/types/product-form'
 import type { Supplier } from '@/generated/prisma'
 import { PageHeader } from '@/components/common'
 import { CascadingVariantPicker } from '@/components/variants'
-
-interface VariantOption {
-  optionName: string
-  value: string
-}
-
-interface Variant {
-  id: string
-  sku: string
-  name: string | null
-  options: VariantOption[]
-  stock?: number
-  costPrice?: number
-}
-
-interface ProductWithVariants extends ProductWithRelations {
-  hasVariants: boolean
-  variants?: Variant[]
-}
 
 interface POLine {
   id: string

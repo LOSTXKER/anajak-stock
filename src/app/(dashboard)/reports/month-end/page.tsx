@@ -53,6 +53,7 @@ import { PageSkeleton } from '@/components/ui/skeleton'
 import { useDebounce } from '@/hooks/use-debounce'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
+import { THAI_MONTHS, THAI_MONTHS_SHORT, CHART_COLORS_SEMANTIC } from '@/lib/constants'
 import {
   AreaChart,
   Area,
@@ -66,16 +67,6 @@ import {
   Cell,
   Legend,
 } from 'recharts'
-
-const THAI_MONTHS = [
-  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
-]
-
-const THAI_MONTHS_SHORT = [
-  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
-  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
-]
 
 interface Category { id: string; name: string }
 interface WarehouseItem { id: string; name: string; code: string }
@@ -235,11 +226,6 @@ export default function MonthEndStockPage() {
     const total = arr.reduce((s, i) => s + i.value, 0)
     return arr.map((i) => ({ ...i, pct: total > 0 ? (i.value / total) * 100 : 0 }))
   }, [filteredData])
-
-  const PIE_COLORS = [
-    'var(--accent-primary)', 'var(--status-success)', 'var(--status-warning)',
-    'var(--status-danger)', 'var(--status-info)', '#8b5cf6', '#ec4899', '#14b8a6',
-  ]
 
   const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i)
 
@@ -502,7 +488,7 @@ export default function MonthEndStockPage() {
                       labelLine={true}
                     >
                       {categoryBreakdown.map((_, idx) => (
-                        <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                        <Cell key={idx} fill={CHART_COLORS_SEMANTIC[idx % CHART_COLORS_SEMANTIC.length]} />
                       ))}
                     </Pie>
                     <Tooltip
@@ -534,7 +520,7 @@ export default function MonthEndStockPage() {
                           <div className="flex items-center gap-2">
                             <div
                               className="w-3 h-3 rounded-full shrink-0"
-                              style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
+                              style={{ backgroundColor: CHART_COLORS_SEMANTIC[idx % CHART_COLORS_SEMANTIC.length] }}
                             />
                             {cat.category}
                           </div>

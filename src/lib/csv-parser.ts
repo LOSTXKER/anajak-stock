@@ -1,5 +1,7 @@
 // CSV parsing utilities for client-side use
 
+import { KNOWN_COLUMNS } from './constants'
+
 export interface ProductImportRow {
   sku: string
   name: string
@@ -326,20 +328,6 @@ export interface VariantUpdateRow {
   options?: Record<string, string>
 }
 
-// Known column names that are NOT option columns
-const KNOWN_COLUMNS = new Set([
-  'sku', 'variant sku', 'variantsku', 'รหัส variant',
-  'barcode',
-  'ประเภทสต๊อค', 'ประเภท', 'stocktype', 'stock type',
-  'ราคาขาย', 'sellingprice', 'selling price',
-  'ราคาทุน', 'costprice', 'cost price',
-  'reorder point', 'reorderpoint', 'reorder',
-  'min qty', 'minqty', 'min',
-  'max qty', 'maxqty', 'max',
-  'แจ้งเตือน', 'alert', 'lowstockalert',
-  // Non-editable columns (ignored)
-  'รหัสสินค้า', 'ชื่อสินค้า', 'สต๊อค', 'stock',
-])
 
 export interface VariantUpdateParseResult {
   rows: VariantUpdateRow[]
