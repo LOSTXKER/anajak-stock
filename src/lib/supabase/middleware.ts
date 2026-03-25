@@ -40,7 +40,7 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public paths that don't require authentication
-  const publicPaths = ['/login', '/auth/callback', '/auth/confirm']
+  const publicPaths = ['/login', '/auth/callback', '/auth/confirm', '/api-docs']
   const isPublicPath = publicPaths.some((path) => pathname.startsWith(path))
 
   // API routes that need external access (webhooks, cron jobs, etc.)
