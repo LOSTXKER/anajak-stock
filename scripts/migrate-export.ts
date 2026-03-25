@@ -106,8 +106,9 @@ async function exportAuth(pool: pg.Pool) {
   return summary
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function listAllStorageFiles(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   bucket: string,
   prefix: string = ''
 ): Promise<string[]> {
