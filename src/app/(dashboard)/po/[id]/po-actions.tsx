@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Send, Truck, Loader2, CheckCircle, XCircle, Edit, SendHorizontal, Ban } from 'lucide-react'
+import { Send, Truck, Loader2, CheckCircle, XCircle, Edit, SendHorizontal, Ban, Copy } from 'lucide-react'
 import { submitPO, approvePO, rejectPO, sendPO, cancelPO } from '@/actions/po'
 import { toast } from 'sonner'
 
@@ -122,6 +122,14 @@ export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }
   return (
     <>
       <div className="flex items-center gap-2">
+        {/* Copy to create new PO (always visible) */}
+        <Button variant="outline" asChild>
+          <Link href={`/po/new?copyFromId=${poId}`}>
+            <Copy className="w-4 h-4 mr-2" />
+            คัดลอก
+          </Link>
+        </Button>
+
         {/* DRAFT: Edit + Submit for approval */}
         {poStatus === 'DRAFT' && (
           <>

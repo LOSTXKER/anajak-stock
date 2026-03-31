@@ -24,9 +24,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Calculator, FileText, ListPlus } from 'lucide-react'
+import { ShoppingCart, ArrowLeft, Loader2, Plus, Trash2, Calculator, FileText, ListPlus, Copy } from 'lucide-react'
 import { BulkAddModal, BulkAddResult, BulkAddVariant } from '@/components/bulk-add-modal'
-import { createPO, getSuppliers } from '@/actions/po'
+import { createPO, getPO, getSuppliers } from '@/actions/po'
 import { getProducts } from '@/actions/products'
 import { getPR } from '@/actions/pr'
 import { toast } from 'sonner'
@@ -57,10 +57,11 @@ export default function NewPOPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const prId = searchParams.get('prId')
+  const copyFromId = searchParams.get('copyFromId')
   const initialSupplierId = searchParams.get('supplierId')
 
   const [isLoading, setIsLoading] = useState(false)
-  const [isInitializing, setIsInitializing] = useState(!!prId)
+  const [isInitializing, setIsInitializing] = useState(!!prId || !!copyFromId)
   const [supplierId, setSupplierId] = useState(initialSupplierId || '')
   const [vatType, setVatType] = useState<VatType>(VatType.NO_VAT)
   const [vatRate, setVatRate] = useState(7)
@@ -69,6 +70,7 @@ export default function NewPOPage() {
   const [note, setNote] = useState('')
   const [lines, setLines] = useState<POLine[]>([])
   const [linkedPR, setLinkedPR] = useState<{ prNumber: string } | null>(null)
+  const [copiedFromPO, setCopiedFromPO] = useState<{ poNumber: string } | null>(null)
 
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -180,10 +182,97 @@ export default function NewPOPage() {
           setLines(prLines)
         }
         setIsInitializing(false)
+      } else if (copyFromId) {
+        const sourcePO = await getPO(copyFromId)
+        if (sourcePO) {
+          setCopiedFromPO({ poNumber: sourcePO.poNumber })
+          setSupplierId(sourcePO.supplierId)
+          setVatType(sourcePO.vatType as VatType)
+          setVatRate(Number(sourcePO.vatRate))
+          setTerms(sourcePO.terms || '')
+          setNote(`คัดลอกจาก ${sourcePO.poNumber}${sourcePO.note ? ` - ${sourcePO.note}` : ''}`)
+
+          // Collect product IDs that have variants to load
+          const productIdsWithVariants = new Set<string>()
+          sourcePO.lines.forEach((line) => {
+            const product = productsResult.items.find(p => p.id === line.productId)
+            if (product?.hasVariants) {
+              productIdsWithVariants.add(line.productId)
+            }
+          })
+
+          // Load variants for products that have variants
+          const variantsToLoad: Record<string, Variant[]> = {}
+          await Promise.all(
+            Array.from(productIdsWithVariants).map(async (productId) => {
+              try {
+                const response = await fetch(`/api/products/${productId}/variants`)
+                if (response.ok) {
+                  const data = await response.json()
+                  variantsToLoad[productId] = data.map((v: {
+                    id: string
+                    sku: string
+                    name: string | null
+                    costPrice?: number
+                    optionValues: { optionValue: { value: string; optionType: { name: string } } }[]
+                    stockBalances?: { qtyOnHand: number }[]
+                  }) => ({
+                    id: v.id,
+                    sku: v.sku,
+                    name: v.name,
+                    options: v.optionValues?.map((ov) => ({
+                      optionName: ov.optionValue.optionType.name,
+                      value: ov.optionValue.value,
+                    })) || [],
+                    stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
+                    costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+                  }))
+                }
+              } catch (error) {
+                console.error(`Failed to load variants for product ${productId}:`, error)
+              }
+            })
+          )
+
+          setLoadedVariants(variantsToLoad)
+
+          // Pre-fill lines from source PO
+          const copiedLines: POLine[] = sourcePO.lines.map((line) => {
+            const product = productsResult.items.find(p => p.id === line.productId)
+
+            let variantLabel: string | undefined
+            if (line.variantId) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const lineWithVariant = line as any
+              const poVariant = lineWithVariant.variant as { optionValues?: { optionValue: { value: string } }[] } | null
+              if (poVariant?.optionValues) {
+                variantLabel = poVariant.optionValues.map((ov: { optionValue: { value: string } }) => ov.optionValue.value).join(' / ')
+              } else {
+                const loadedVariant = variantsToLoad[line.productId]?.find(v => v.id === line.variantId)
+                if (loadedVariant) {
+                  variantLabel = loadedVariant.options.map(o => o.value).join(' / ')
+                }
+              }
+            }
+
+            return {
+              id: Math.random().toString(36).substr(2, 9),
+              productId: line.productId,
+              variantId: line.variantId || undefined,
+              productName: product?.name || line.product?.name,
+              variantLabel,
+              qty: Number(line.qty),
+              unitPrice: Number(line.unitPrice),
+              note: line.note || undefined,
+            }
+          })
+          setLines(copiedLines)
+        }
+        setIsInitializing(false)
       }
     }
     loadData()
-  }, [prId])
+  }, [prId, copyFromId])
 
   // Load variants for a product
   const loadVariantsForProduct = async (productId: string): Promise<Variant[]> => {
@@ -421,7 +510,9 @@ export default function NewPOPage() {
       <div className="flex items-center justify-center h-64">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent-primary)]" />
-          <p className="text-[var(--text-muted)]">กำลังโหลดข้อมูลจาก PR...</p>
+          <p className="text-[var(--text-muted)]">
+            {copyFromId ? 'กำลังโหลดข้อมูลจาก PO...' : 'กำลังโหลดข้อมูลจาก PR...'}
+          </p>
         </div>
       </div>
     )
@@ -432,7 +523,7 @@ export default function NewPOPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href={prId ? `/pr/${prId}` : '/purchasing'}>
+          <Link href={prId ? `/pr/${prId}` : copyFromId ? `/po/${copyFromId}` : '/purchasing'}>
             <ArrowLeft className="w-5 h-5" />
           </Link>
         </Button>
@@ -447,6 +538,12 @@ export default function NewPOPage() {
           <Badge className="bg-[var(--accent-light)] text-[var(--accent-primary)]">
             <FileText className="w-3.5 h-3.5 mr-1" />
             อ้างอิงจาก {linkedPR.prNumber}
+          </Badge>
+        )}
+        {copiedFromPO && (
+          <Badge className="bg-[var(--accent-light)] text-[var(--accent-primary)]">
+            <Copy className="w-3.5 h-3.5 mr-1" />
+            คัดลอกจาก {copiedFromPO.poNumber}
           </Badge>
         )}
       </div>
