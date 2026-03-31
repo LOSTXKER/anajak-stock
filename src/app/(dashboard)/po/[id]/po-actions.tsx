@@ -122,11 +122,11 @@ export function POActions({ poId, poStatus: initialStatus, canApprove, canEdit }
   return (
     <>
       <div className="flex items-center gap-2">
-        {/* Copy to create new PO (always visible) */}
+        {/* Duplicate as new PO (always visible) */}
         <Button variant="outline" asChild>
           <Link href={`/po/new?copyFromId=${poId}`}>
             <Copy className="w-4 h-4 mr-2" />
-            คัดลอก
+            สั่งซื้อซ้ำ
           </Link>
         </Button>
 
