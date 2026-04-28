@@ -226,7 +226,7 @@ export function BulkAddModal({
               variantId,
               productName: product.name,
               variantLabel: variant.options?.map(o => o.value).join(' / ') || variant.name || variant.sku,
-              unitCost: variant.costPrice || Number(product.lastCost || product.standardCost || 0),
+              unitCost: variant.costPrice ?? Number(product.standardCost ?? 0),
             })
           }
         } else {
@@ -236,7 +236,7 @@ export function BulkAddModal({
             selections.push({
               productId: key,
               productName: product.name,
-              unitCost: Number(product.lastCost || product.standardCost || 0),
+              unitCost: Number(product.standardCost ?? 0),
             })
           }
         }

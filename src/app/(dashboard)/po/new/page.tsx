@@ -134,7 +134,7 @@ export default function NewPOPage() {
                       value: ov.optionValue.value,
                     })) || [],
                     stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
-                    costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+                    costPrice: v.costPrice != null ? Number(v.costPrice) : 0,
                   }))
                 }
               } catch (error) {
@@ -152,6 +152,7 @@ export default function NewPOPage() {
             
             // Get variant label from PR line data or loaded variants
             let variantLabel: string | undefined
+            let variantCostPrice: number | undefined
             if (line.variantId) {
               // First try to get from PR line variant data (cast to include variant from API response)
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -166,8 +167,16 @@ export default function NewPOPage() {
                   variantLabel = loadedVariant.options.map(o => o.value).join(' / ')
                 }
               }
+
+              // Pull costPrice from loaded variants for this variantId (source of truth: หน้าสินค้า)
+              const loadedVariant = variantsToLoad[line.productId]?.find(v => v.id === line.variantId)
+              variantCostPrice = loadedVariant?.costPrice
             }
-            
+
+            const unitPrice = line.variantId
+              ? Number(variantCostPrice ?? 0)
+              : Number(product?.standardCost ?? 0)
+
             return {
               id: Math.random().toString(36).substr(2, 9),
               productId: line.productId,
@@ -175,7 +184,7 @@ export default function NewPOPage() {
               productName: product?.name || line.product?.name,
               variantLabel,
               qty: Number(line.qty),
-              unitPrice: Number(product?.lastCost || product?.standardCost || 0),
+              unitPrice,
               note: line.note || undefined,
             }
           })
@@ -225,7 +234,7 @@ export default function NewPOPage() {
                       value: ov.optionValue.value,
                     })) || [],
                     stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
-                    costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+                    costPrice: v.costPrice != null ? Number(v.costPrice) : 0,
                   }))
                 }
               } catch (error) {
@@ -302,7 +311,7 @@ export default function NewPOPage() {
             value: ov.optionValue.value,
           })) || [],
           stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
-          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+          costPrice: v.costPrice != null ? Number(v.costPrice) : 0,
         }))
         
         // Store in loadedVariants state
@@ -340,7 +349,7 @@ export default function NewPOPage() {
             value: ov.optionValue.value,
           })) || [],
           stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
-          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+          costPrice: v.costPrice != null ? Number(v.costPrice) : 0,
         }))
       }
     } catch (error) {
@@ -419,7 +428,9 @@ export default function NewPOPage() {
     const updates: Partial<POLine> = {
       productId,
       productName: product.name,
-      unitPrice: Number(product.lastCost || product.standardCost) || '',
+      // ถ้าสินค้ามี variants รอเลือก variant ก่อน (ราคาที่แท้จริงอยู่ที่ variant.costPrice)
+      // ถ้าไม่มี variant ใช้ standardCost ที่ตั้งไว้ในหน้าสินค้า
+      unitPrice: product.hasVariants ? '' : Number(product.standardCost ?? 0),
       variantId: undefined,
       variantLabel: undefined,
     }
@@ -767,7 +778,7 @@ export default function NewPOPage() {
                                           updateLine(line.id, {
                                             variantId: variant.id,
                                             variantLabel: variant.options.map(o => o.value).join(' / '),
-                                            unitPrice: variant.costPrice || line.unitPrice,
+                                            unitPrice: variant.costPrice ?? line.unitPrice,
                                           })
                                         } else {
                                           updateLine(line.id, {

@@ -177,7 +177,7 @@ export default function EditPOPage(props: PageProps) {
             value: ov.optionValue.value,
           })) || [],
           stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
-          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+          costPrice: v.costPrice != null ? Number(v.costPrice) : 0,
         }))
         
         // Store in loadedVariants state
@@ -215,7 +215,7 @@ export default function EditPOPage(props: PageProps) {
             value: ov.optionValue.value,
           })) || [],
           stock: v.stockBalances?.reduce((sum, sb) => sum + Number(sb.qtyOnHand), 0) || 0,
-          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+          costPrice: v.costPrice != null ? Number(v.costPrice) : 0,
         }))
       }
     } catch (error) {
@@ -267,7 +267,9 @@ export default function EditPOPage(props: PageProps) {
     const updates: Partial<POLine> = {
       productId,
       productName: product.name,
-      unitPrice: Number(product.lastCost || product.standardCost) || '',
+      // ถ้าสินค้ามี variants รอเลือก variant ก่อน (ราคาที่แท้จริงอยู่ที่ variant.costPrice)
+      // ถ้าไม่มี variant ใช้ standardCost ที่ตั้งไว้ในหน้าสินค้า
+      unitPrice: product.hasVariants ? '' : Number(product.standardCost ?? 0),
       variantId: undefined,
       variantLabel: undefined,
     }
@@ -597,7 +599,7 @@ export default function EditPOPage(props: PageProps) {
                                       updateLine(line.id, {
                                         variantId: variant.id,
                                         variantLabel: variant.options.map(o => o.value).join(' / '),
-                                        unitPrice: variant.costPrice || line.unitPrice,
+                                        unitPrice: variant.costPrice ?? line.unitPrice,
                                       })
                                     } else {
                                       updateLine(line.id, {
