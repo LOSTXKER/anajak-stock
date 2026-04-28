@@ -246,10 +246,13 @@ export default function NewPOPage() {
           setLoadedVariants(variantsToLoad)
 
           // Pre-fill lines from source PO
+          // Note: refresh ราคาจาก variant.costPrice / product.standardCost ปัจจุบัน
+          // ไม่ใช้ราคาที่บันทึกใน PO ต้นฉบับ (เพื่อให้ตรงกับราคาที่ตั้งในหน้าสินค้า ณ เวลาคัดลอก)
           const copiedLines: POLine[] = sourcePO.lines.map((line) => {
             const product = productsResult.items.find(p => p.id === line.productId)
 
             let variantLabel: string | undefined
+            let variantCostPrice: number | undefined
             if (line.variantId) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const lineWithVariant = line as any
@@ -262,7 +265,14 @@ export default function NewPOPage() {
                   variantLabel = loadedVariant.options.map(o => o.value).join(' / ')
                 }
               }
+
+              const loadedVariant = variantsToLoad[line.productId]?.find(v => v.id === line.variantId)
+              variantCostPrice = loadedVariant?.costPrice
             }
+
+            const unitPrice = line.variantId
+              ? Number(variantCostPrice ?? 0)
+              : Number(product?.standardCost ?? 0)
 
             return {
               id: Math.random().toString(36).substr(2, 9),
@@ -271,7 +281,7 @@ export default function NewPOPage() {
               productName: product?.name || line.product?.name,
               variantLabel,
               qty: Number(line.qty),
-              unitPrice: Number(line.unitPrice),
+              unitPrice,
               note: line.note || undefined,
             }
           })
