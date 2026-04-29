@@ -68,7 +68,14 @@ cp .env.example .env
 4. Update `.env` with your Supabase credentials:
 ```env
 # Database (Supabase PostgreSQL)
+# - Local development: direct connection (port 5432) is fine
+# - Vercel / serverless production: ALWAYS use the Transaction Pooler
+#   (port 6543) to avoid "Max client connections reached" errors.
+#   Get this URL from Supabase Dashboard -> Project Settings -> Database
+#   -> Connection Pooling -> Transaction mode.
 DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres"
+# Production example:
+# DATABASE_URL="postgresql://postgres.[YOUR-PROJECT-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true"
 
 # Supabase Auth
 NEXT_PUBLIC_SUPABASE_URL="https://[YOUR-PROJECT-REF].supabase.co"

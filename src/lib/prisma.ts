@@ -51,6 +51,10 @@ function createPrismaClient() {
     connectionTimeoutMillis: 10_000,
     statement_timeout: 30_000,
     allowExitOnIdle: true,
+    // Disable TCP keepalive on serverless so a frozen Vercel instance
+    // doesn't keep a half-open connection alive on the pgbouncer side
+    // (Supabase free tier max_client_conn = 200).
+    keepAlive: !isServerless,
   })
 
   // Store pool reference for cleanup if needed

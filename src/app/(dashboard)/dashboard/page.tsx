@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
+import { unstable_cache } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { formatDateShort, formatDateTime } from '@/lib/date'
@@ -43,7 +44,14 @@ import {
   Skeleton 
 } from '@/components/ui/skeleton'
 
-async function getDashboardStats() {
+// Cache shared dashboard data for 60s. None of these getters depend on
+// the current user's session, so a single render serves all viewers
+// during the cache window. This keeps Supabase pgbouncer client
+// connections from spiking under load.
+const DASHBOARD_CACHE_TTL = 60
+
+const getDashboardStats = unstable_cache(
+  async () => {
   const [
     totalProducts,
     totalLocations,
@@ -89,9 +97,13 @@ async function getDashboardStats() {
     todayMovements: recentMovements,
     totalStockQty: Number(stockValue._sum.qtyOnHand ?? 0),
   }
-}
+  },
+  ['dashboard:stats'],
+  { revalidate: DASHBOARD_CACHE_TTL, tags: ['dashboard'] },
+)
 
-async function getLowStockItems() {
+const getLowStockItems = unstable_cache(
+  async () => {
   const items = await prisma.stockBalance.findMany({
     where: {
       product: {
@@ -122,9 +134,13 @@ async function getLowStockItems() {
   return items.filter(
     (item) => Number(item.qtyOnHand) <= Number(item.product.reorderPoint)
   )
-}
+  },
+  ['dashboard:low-stock-items'],
+  { revalidate: DASHBOARD_CACHE_TTL, tags: ['dashboard'] },
+)
 
-async function getRecentMovements() {
+const getRecentMovements = unstable_cache(
+  async () => {
   return prisma.stockMovement.findMany({
     where: { status: 'POSTED' },
     include: {
@@ -141,9 +157,13 @@ async function getRecentMovements() {
     orderBy: { createdAt: 'desc' },
     take: 5,
   })
-}
+  },
+  ['dashboard:recent-movements'],
+  { revalidate: DASHBOARD_CACHE_TTL, tags: ['dashboard'] },
+)
 
-async function getTopMovedProducts() {
+const getTopMovedProducts = unstable_cache(
+  async () => {
   const results = await prisma.movementLine.groupBy({
     by: ['productId'],
     _sum: {
@@ -169,9 +189,13 @@ async function getTopMovedProducts() {
     name: productMap.get(r.productId) || 'Unknown',
     qty: Number(r._sum.qty) || 0,
   }))
-}
+  },
+  ['dashboard:top-moved-products'],
+  { revalidate: DASHBOARD_CACHE_TTL, tags: ['dashboard'] },
+)
 
-async function getStockByCategory() {
+const getStockByCategory = unstable_cache(
+  async () => {
   const stockData = await prisma.stockBalance.findMany({
     include: {
       product: {
@@ -193,9 +217,13 @@ async function getStockByCategory() {
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10)
-}
+  },
+  ['dashboard:stock-by-category'],
+  { revalidate: DASHBOARD_CACHE_TTL, tags: ['dashboard'] },
+)
 
-async function getStockValueTrend() {
+const getStockValueTrend = unstable_cache(
+  async () => {
   const today = new Date()
   const sevenDaysAgo = new Date(today)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
@@ -230,7 +258,7 @@ async function getStockValueTrend() {
     },
   })
   
-  let currentValue = currentStock.reduce((sum, sb) => {
+  const currentValue = currentStock.reduce((sum, sb) => {
     const cost = Number(sb.variant?.costPrice || sb.product.standardCost || 0)
     return sum + Number(sb.qtyOnHand) * cost
   }, 0)
@@ -274,7 +302,10 @@ async function getStockValueTrend() {
   }
   
   return data
-}
+  },
+  ['dashboard:stock-value-trend'],
+  { revalidate: DASHBOARD_CACHE_TTL, tags: ['dashboard'] },
+)
 
 function MovementTypeBadge({ type }: { type: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
@@ -323,7 +354,8 @@ async function StatsSection() {
 }
 
 // Get pending actions that need attention
-async function getPendingActionsData() {
+const getPendingActionsData = unstable_cache(
+  async () => {
   const [grnDrafts, poApproved, poSent, prSubmitted, movementApproved, stockTakeCompleted] = await Promise.all([
     prisma.gRN.findMany({
       where: { status: 'DRAFT' },
@@ -374,7 +406,10 @@ async function getPendingActionsData() {
     stockTakeCompleted,
     total: grnDrafts.length + poApproved.length + poSent.length + prSubmitted.length + movementApproved.length + stockTakeCompleted.length,
   }
-}
+  },
+  ['dashboard:pending-actions'],
+  { revalidate: DASHBOARD_CACHE_TTL, tags: ['dashboard'] },
+)
 
 // Async component for pending actions
 async function PendingActionsSection() {
