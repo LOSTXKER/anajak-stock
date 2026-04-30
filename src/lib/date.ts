@@ -5,6 +5,38 @@
 const THAI_TIMEZONE = 'Asia/Bangkok'
 const THAI_LOCALE = 'th-TH'
 
+const MS_PER_DAY = 1000 * 60 * 60 * 24
+
+/**
+ * Normalize a value to a `Date` object, or `null` if invalid/missing.
+ *
+ * Why this matters: Next.js `unstable_cache` serializes return values via JSON,
+ * which turns Prisma `Date` fields into ISO strings on cache hits. Always run
+ * untrusted date-like values through `toDate` before calling Date methods
+ * (`.getTime()`, `.toISOString()`, etc.) to avoid
+ * "a.getTime is not a function" type errors.
+ */
+export function toDate(value: Date | string | number | null | undefined): Date | null {
+  if (value === null || value === undefined) return null
+  const d = value instanceof Date ? value : new Date(value)
+  return isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Difference in whole days between two date-like values (`a - b`, floored).
+ * Returns `0` if either value is missing/invalid so callers never have to
+ * null-check before rendering.
+ */
+export function diffDays(
+  a: Date | string | number | null | undefined,
+  b: Date | string | number | null | undefined
+): number {
+  const da = toDate(a)
+  const db = toDate(b)
+  if (!da || !db) return 0
+  return Math.floor((da.getTime() - db.getTime()) / MS_PER_DAY)
+}
+
 /**
  * Format date to Thai locale with Thai timezone
  */

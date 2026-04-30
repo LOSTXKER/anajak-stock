@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { unstable_cache } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { formatDateShort, formatDateTime } from '@/lib/date'
+import { diffDays, formatDateShort, formatDateTime } from '@/lib/date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -36,12 +36,11 @@ const CategoryPieChart = dynamic(
   { loading: () => <div className="h-[300px] animate-pulse bg-muted rounded-lg" /> }
 )
 import { DashboardStats } from './dashboard-stats'
-import { 
-  DashboardSkeleton, 
-  StatCardsSkeleton, 
-  ChartSkeleton, 
+import {
+  StatCardsSkeleton,
+  ChartSkeleton,
   PieChartSkeleton,
-  Skeleton 
+  Skeleton,
 } from '@/components/ui/skeleton'
 
 // Cache shared dashboard data for 60s. None of these getters depend on
@@ -353,59 +352,114 @@ async function StatsSection() {
   return <DashboardStats stats={stats} />
 }
 
-// Get pending actions that need attention
+// Get pending actions that need attention.
+//
+// IMPORTANT: Everything returned from this function must be JSON-safe because
+// `unstable_cache` serializes to JSON. We pre-compute `daysOld` / `daysOverdue`
+// as numbers here so consumers never have to touch `Date` objects (which would
+// arrive as strings on cache hits and break `.getTime()` calls).
 const getPendingActionsData = unstable_cache(
   async () => {
-  const [grnDrafts, poApproved, poSent, prSubmitted, movementApproved, stockTakeCompleted] = await Promise.all([
-    prisma.gRN.findMany({
-      where: { status: 'DRAFT' },
-      include: { po: { include: { supplier: true } } },
-      take: 5,
-      orderBy: { createdAt: 'asc' },
-    }),
-    prisma.pO.findMany({
-      where: { status: 'APPROVED' },
-      include: { supplier: true },
-      take: 5,
-      orderBy: { createdAt: 'asc' },
-    }),
-    prisma.pO.findMany({
-      where: { 
-        status: 'SENT',
-        eta: { lt: new Date() }, // Overdue
-      },
-      include: { supplier: true },
-      take: 5,
-      orderBy: { eta: 'asc' },
-    }),
-    prisma.pR.findMany({
-      where: { status: 'SUBMITTED' },
-      include: { requester: true },
-      take: 5,
-      orderBy: { createdAt: 'asc' },
-    }),
-    prisma.stockMovement.findMany({
-      where: { status: 'APPROVED' },
-      take: 5,
-      orderBy: { createdAt: 'asc' },
-    }),
-    prisma.stockTake.findMany({
-      where: { status: 'COMPLETED' },
-      include: { warehouse: true },
-      take: 5,
-      orderBy: { createdAt: 'asc' },
-    }),
-  ])
+    const now = new Date()
 
-  return {
-    grnDrafts,
-    poApproved,
-    poSent,
-    prSubmitted,
-    movementApproved,
-    stockTakeCompleted,
-    total: grnDrafts.length + poApproved.length + poSent.length + prSubmitted.length + movementApproved.length + stockTakeCompleted.length,
-  }
+    const [grnDrafts, poApproved, poSent, prSubmitted, movementApproved, stockTakeCompleted] = await Promise.all([
+      prisma.gRN.findMany({
+        where: { status: 'DRAFT' },
+        include: { po: { include: { supplier: true } } },
+        take: 5,
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.pO.findMany({
+        where: { status: 'APPROVED' },
+        include: { supplier: true },
+        take: 5,
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.pO.findMany({
+        where: {
+          status: 'SENT',
+          eta: { lt: now }, // Overdue
+        },
+        include: { supplier: true },
+        take: 5,
+        orderBy: { eta: 'asc' },
+      }),
+      prisma.pR.findMany({
+        where: { status: 'SUBMITTED' },
+        include: { requester: true },
+        take: 5,
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.stockMovement.findMany({
+        where: { status: 'APPROVED' },
+        take: 5,
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.stockTake.findMany({
+        where: { status: 'COMPLETED' },
+        include: { warehouse: true },
+        take: 5,
+        orderBy: { createdAt: 'asc' },
+      }),
+    ])
+
+    const grnDraftItems = grnDrafts.map((grn) => ({
+      id: grn.id,
+      grnNumber: grn.grnNumber,
+      supplierName: grn.po.supplier.name,
+      daysOld: diffDays(now, grn.createdAt),
+    }))
+
+    const poApprovedItems = poApproved.map((po) => ({
+      id: po.id,
+      poNumber: po.poNumber,
+      supplierName: po.supplier.name,
+      daysOld: diffDays(now, po.createdAt),
+    }))
+
+    const poSentItems = poSent.map((po) => ({
+      id: po.id,
+      poNumber: po.poNumber,
+      supplierName: po.supplier.name,
+      daysOverdue: diffDays(now, po.eta),
+    }))
+
+    const prSubmittedItems = prSubmitted.map((pr) => ({
+      id: pr.id,
+      prNumber: pr.prNumber,
+      requesterName: pr.requester.name,
+      daysOld: diffDays(now, pr.createdAt),
+    }))
+
+    const movementApprovedItems = movementApproved.map((mov) => ({
+      id: mov.id,
+      docNumber: mov.docNumber,
+      type: mov.type,
+      daysOld: diffDays(now, mov.createdAt),
+    }))
+
+    const stockTakeCompletedItems = stockTakeCompleted.map((st) => ({
+      id: st.id,
+      code: st.code,
+      warehouseName: st.warehouse.name,
+      daysOld: diffDays(now, st.completedAt ?? st.createdAt),
+    }))
+
+    return {
+      grnDrafts: grnDraftItems,
+      poApproved: poApprovedItems,
+      poSent: poSentItems,
+      prSubmitted: prSubmittedItems,
+      movementApproved: movementApprovedItems,
+      stockTakeCompleted: stockTakeCompletedItems,
+      total:
+        grnDraftItems.length +
+        poApprovedItems.length +
+        poSentItems.length +
+        prSubmittedItems.length +
+        movementApprovedItems.length +
+        stockTakeCompletedItems.length,
+    }
   },
   ['dashboard:pending-actions'],
   { revalidate: DASHBOARD_CACHE_TTL, tags: ['dashboard'] },
@@ -418,9 +472,6 @@ async function PendingActionsSection() {
   if (pending.total === 0) {
     return null // Don't show if no pending actions
   }
-
-  const now = new Date()
-  const getDaysOld = (date: Date) => Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
 
   return (
     <Card className="border-[var(--status-warning)]/30 bg-[var(--status-warning)]/5">
@@ -450,12 +501,12 @@ async function PendingActionsSection() {
                   GRN {grn.grnNumber} รอบันทึกสต๊อค
                 </p>
                 <p className="text-xs text-[var(--text-muted)]">
-                  {grn.po.supplier.name}
+                  {grn.supplierName}
                 </p>
               </div>
             </div>
             <Badge variant="outline" className="text-[var(--status-warning)] border-[var(--status-warning)]">
-              {getDaysOld(grn.createdAt)} วัน
+              {grn.daysOld} วัน
             </Badge>
           </Link>
         ))}
@@ -476,12 +527,12 @@ async function PendingActionsSection() {
                   PO {po.poNumber} รอส่งให้ Supplier
                 </p>
                 <p className="text-xs text-[var(--text-muted)]">
-                  {po.supplier.name}
+                  {po.supplierName}
                 </p>
               </div>
             </div>
             <Badge variant="outline" className="text-[var(--status-warning)] border-[var(--status-warning)]">
-              {getDaysOld(po.createdAt)} วัน
+              {po.daysOld} วัน
             </Badge>
           </Link>
         ))}
@@ -502,12 +553,12 @@ async function PendingActionsSection() {
                   PO {po.poNumber} เลย ETA
                 </p>
                 <p className="text-xs text-[var(--text-muted)]">
-                  {po.supplier.name}
+                  {po.supplierName}
                 </p>
               </div>
             </div>
             <Badge className="bg-[var(--status-error-light)] text-[var(--status-error)]">
-              เลย {po.eta ? getDaysOld(po.eta) : 0} วัน
+              เลย {po.daysOverdue} วัน
             </Badge>
           </Link>
         ))}
@@ -528,12 +579,12 @@ async function PendingActionsSection() {
                   PR {pr.prNumber} รออนุมัติ
                 </p>
                 <p className="text-xs text-[var(--text-muted)]">
-                  จาก {pr.requester.name}
+                  จาก {pr.requesterName}
                 </p>
               </div>
             </div>
             <Badge variant="outline" className="text-[var(--status-info)] border-[var(--status-info)]">
-              {getDaysOld(pr.createdAt)} วัน
+              {pr.daysOld} วัน
             </Badge>
           </Link>
         ))}
@@ -559,7 +610,7 @@ async function PendingActionsSection() {
               </div>
             </div>
             <Badge variant="outline" className="text-[var(--status-warning)] border-[var(--status-warning)]">
-              {getDaysOld(mov.createdAt)} วัน
+              {mov.daysOld} วัน
             </Badge>
           </Link>
         ))}
@@ -580,12 +631,12 @@ async function PendingActionsSection() {
                   ตรวจนับ {st.code} รออนุมัติ
                 </p>
                 <p className="text-xs text-[var(--text-muted)]">
-                  {st.warehouse.name}
+                  {st.warehouseName}
                 </p>
               </div>
             </div>
             <Badge variant="outline" className="text-[var(--status-info)] border-[var(--status-info)]">
-              {getDaysOld(st.completedAt || st.createdAt)} วัน
+              {st.daysOld} วัน
             </Badge>
           </Link>
         ))}
